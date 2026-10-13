@@ -28,7 +28,7 @@
 - [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
 - [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [x] T-010 Client manufacturing linked/separate workflows (production runs, planned/actual/wastage output tracking, raw material availability check, atomic input deductions and output additions with no partial posting)
-- [ ] T-011 Departments, issues, returns and condition handling
+- [x] T-011 Departments, issues, returns and condition handling (department master, proposed change approval, issue history without separate stock balance, condition returns into Usable/Damaged/Expired buckets, Super Admin write-off)
 - [ ] T-012 Bulk CSV/document extraction and review UI
 - [ ] T-013 Notifications, low-stock and expiry alerts
 - [ ] T-014 Reports, exports and export audit

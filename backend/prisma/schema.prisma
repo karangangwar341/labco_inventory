@@ -142,6 +142,24 @@ enum ProductionStatus {
   CANCELLED
 }
 
+enum DepartmentStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+}
+
+enum DepartmentIssueStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum DepartmentReturnStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -156,6 +174,9 @@ model Client {
   stockLocation        StockLocation?
   stockRequests        StockRequest[]
   productionRuns       ProductionRun[]
+  departments          Department[]
+  departmentIssues     DepartmentIssue[]
+  departmentReturns    DepartmentReturn[]
 
   @@map("clients")
 }
@@ -248,6 +269,8 @@ model Product {
   shipmentLines     ShipmentLine[]
   productionInputs  ProductionInput[]
   productionOutputs ProductionOutput[]
+  departmentIssues  DepartmentIssue[]
+  departmentReturns DepartmentReturn[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -287,6 +310,8 @@ model ProductUnit {
   requestLines     StockRequestLine[]
   productionInputs ProductionInput[]
   productionOutputs ProductionOutput[]
+  departmentIssues  DepartmentIssue[]
+  departmentReturns DepartmentReturn[]
 
   @@index([productId])
   @@index([status])
@@ -328,6 +353,8 @@ model StockBatch {
   reservations  Reservation[]
   shipmentLines ShipmentLine[]
   productionInputs ProductionInput[]
+  departmentIssues DepartmentIssue[]
+  departmentReturns DepartmentReturn[]
 
   @@unique([productId, batchNumber])
   @@index([expiryDate])
@@ -426,6 +453,12 @@ model User {
   updatedSettings     SystemSetting[]
   submittedProductionRuns ProductionRun[]         @relation("ProductionSubmittedBy")
   approvedProductionRuns  ProductionRun[]         @relation("ProductionApprovedBy")
+  createdDepartments      Department[]            @relation("DepartmentCreatedBy")
+  approvedDepartments     Department[]            @relation("DepartmentApprovedBy")
+  issuedDepartmentIssues  DepartmentIssue[]       @relation("DepartmentIssueIssuedBy")
+  approvedDepartmentIssues DepartmentIssue[]      @relation("DepartmentIssueApprovedBy")
+  returnedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnReturnedBy")
+  approvedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnApprovedBy")
 
   @@index([clientId])
   @@index([warehouseId])
@@ -684,4 +717,105 @@ model ProductionOutput {
   @@index([productionRunId])
   @@index([productId])
   @@map("production_outputs")
+}
+
+model Department {
+  id              String           @id @default(uuid())
+  clientId        String           @map("client_id")
+  name            String
+  status          DepartmentStatus @default(PENDING_APPROVAL)
+  proposedName    String?          @map("proposed_name")
+  proposedStatus  DepartmentStatus? @map("proposed_status")
+  createdById     String?          @map("created_by_id")
+  approvedById    String?          @map("approved_by_id")
+  approvedAt      DateTime?        @map("approved_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy       User?            @relation("DepartmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy      User?            @relation("DepartmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  issues          DepartmentIssue[]
+  returns         DepartmentReturn[]
+
+  @@unique([clientId, name])
+  @@index([clientId])
+  @@index([status])
+  @@map("departments")
+}
+
+model DepartmentIssue {
+  id                       String                @id @default(uuid())
+  clientId                 String                @map("client_id")
+  departmentId             String                @map("department_id")
+  productId                String                @map("product_id")
+  batchId                  String?               @map("batch_id")
+  quantity                 Decimal               @db.Decimal(18, 4)
+  unitId                   String                @map("unit_id")
+  unitNameSnapshot         String                @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal               @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal               @map("base_quantity") @db.Decimal(18, 4)
+  status                   DepartmentIssueStatus @default(PENDING_APPROVAL)
+  notes                    String?
+  issuedById               String                @map("issued_by_id")
+  approvedById             String?               @map("approved_by_id")
+  rejectionReason          String?               @map("rejection_reason")
+  issuedAt                 DateTime?             @map("issued_at")
+  createdAt                DateTime              @default(now()) @map("created_at")
+  updatedAt                DateTime              @updatedAt @map("updated_at")
+
+  client                   Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  department               Department            @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  product                  Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch                    StockBatch?           @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  unit                     ProductUnit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  issuedBy                 User                  @relation("DepartmentIssueIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+  approvedBy               User?                 @relation("DepartmentIssueApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  returns                  DepartmentReturn[]
+
+  @@index([clientId])
+  @@index([departmentId])
+  @@index([productId])
+  @@index([status])
+  @@map("department_issues")
+}
+
+model DepartmentReturn {
+  id                       String                 @id @default(uuid())
+  clientId                 String                 @map("client_id")
+  departmentId             String?                @map("department_id")
+  departmentIssueId        String?                @map("department_issue_id")
+  productId                String                 @map("product_id")
+  batchId                  String?                @map("batch_id")
+  quantity                 Decimal                @db.Decimal(18, 4)
+  unitId                   String                 @map("unit_id")
+  unitNameSnapshot         String                 @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal                @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal                @map("base_quantity") @db.Decimal(18, 4)
+  condition                StockCondition         @default(USABLE)
+  reason                   String
+  status                   DepartmentReturnStatus @default(PENDING_APPROVAL)
+  notes                    String?
+  returnedById             String                 @map("returned_by_id")
+  approvedById             String?                @map("approved_by_id")
+  rejectionReason          String?                @map("rejection_reason")
+  approvedAt               DateTime?              @map("approved_at")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+
+  client                   Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  department               Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentIssue          DepartmentIssue?       @relation(fields: [departmentIssueId], references: [id], onDelete: SetNull)
+  product                  Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch                    StockBatch?            @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  unit                     ProductUnit            @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  returnedBy               User                   @relation("DepartmentReturnReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
+  approvedBy               User?                  @relation("DepartmentReturnApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([departmentId])
+  @@index([departmentIssueId])
+  @@index([productId])
+  @@index([status])
+  @@map("department_returns")
 }
