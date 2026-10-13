@@ -93,12 +93,17 @@ describe('Requests & Reservations Service (T-007)', () => {
       postTransaction: vi.fn(),
     };
 
+    const mockShipmentsService: any = {
+      createShipmentForApprovedDispatch: vi.fn(),
+    };
+
     reservationsService = new ReservationsService(mockPrisma as any);
     requestsService = new RequestsService(
       mockPrisma as any,
       mockAuthService as any,
       mockLedgerService as any,
       reservationsService,
+      mockShipmentsService,
     );
   });
 

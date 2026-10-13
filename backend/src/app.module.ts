@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { RequestsModule } from './requests/requests.module.js';
+import { ShipmentsModule } from './shipments/shipments.module.js';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { RequestsModule } from './requests/requests.module.js';
     CatalogModule,
     InventoryModule,
     RequestsModule,
+    ShipmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

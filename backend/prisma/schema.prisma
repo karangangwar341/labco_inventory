@@ -117,6 +117,18 @@ enum ApprovalDecision {
   REJECTED
 }
 
+enum ShipmentType {
+  DISPATCH_TO_CLIENT
+  WAREHOUSE_TRANSFER
+}
+
+enum ShipmentStatus {
+  IN_TRANSIT
+  AWAITING_RECEIPT_APPROVAL
+  COMPLETED
+  DISCREPANCY_HOLD
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -219,6 +231,7 @@ model Product {
   ledgerEntries     LedgerEntry[]
   requestLines      StockRequestLine[]
   reservations      Reservation[]
+  shipmentLines     ShipmentLine[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -276,6 +289,8 @@ model StockLocation {
   sourceRequests       StockRequest[]     @relation("SourceRequestLocation")
   destinationRequests  StockRequest[]     @relation("DestinationRequestLocation")
   reservations         Reservation[]
+  sourceShipments      Shipment[]         @relation("SourceShipments")
+  destinationShipments Shipment[]         @relation("DestinationShipments")
 
   @@map("stock_locations")
 }
@@ -293,6 +308,7 @@ model StockBatch {
   ledgerEntries LedgerEntry[]
   requestLines  StockRequestLine[]
   reservations  Reservation[]
+  shipmentLines ShipmentLine[]
 
   @@unique([productId, batchNumber])
   @@index([expiryDate])
@@ -388,6 +404,7 @@ model User {
   postedTransactions  LedgerTransaction[]
   requests            StockRequest[]              @relation("RequestRequester")
   approvals           Approval[]                  @relation("ApprovalApprover")
+  updatedSettings     SystemSetting[]
 
   @@index([clientId])
   @@index([warehouseId])
@@ -448,6 +465,7 @@ model StockRequest {
   client                Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
   lines                 StockRequestLine[]
   approvals             Approval[]
+  shipment              Shipment?
 
   @@index([status])
   @@index([requesterId])
@@ -518,4 +536,60 @@ model Approval {
   @@index([requestId])
   @@index([approverId])
   @@map("approvals")
+}
+
+model Shipment {
+  id                    String         @id @default(uuid())
+  requestId             String         @unique @map("request_id")
+  shipmentType          ShipmentType   @map("shipment_type")
+  sourceLocationId      String         @map("source_location_id")
+  destinationLocationId String         @map("destination_location_id")
+  status                ShipmentStatus @default(IN_TRANSIT)
+  notes                 String?
+  dispatchedAt          DateTime       @default(now()) @map("dispatched_at")
+  receivedAt            DateTime?      @map("received_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  request               StockRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sourceLocation        StockLocation  @relation("SourceShipments", fields: [sourceLocationId], references: [id], onDelete: Restrict)
+  destinationLocation   StockLocation  @relation("DestinationShipments", fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  lines                 ShipmentLine[]
+
+  @@index([status])
+  @@index([sourceLocationId])
+  @@index([destinationLocationId])
+  @@map("shipments")
+}
+
+model ShipmentLine {
+  id             String         @id @default(uuid())
+  shipmentId     String         @map("shipment_id")
+  productId      String         @map("product_id")
+  batchId        String?        @map("batch_id")
+  unitName       String         @map("unit_name")
+  dispatchedQty  Decimal        @map("dispatched_qty") @db.Decimal(18, 4)
+  receivedQty    Decimal?       @map("received_qty") @db.Decimal(18, 4)
+  discrepancyQty Decimal?       @map("discrepancy_qty") @db.Decimal(18, 4)
+  condition      StockCondition @default(USABLE)
+
+  shipment       Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch          StockBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([shipmentId])
+  @@index([productId])
+  @@map("shipment_lines")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  valueJson   Json     @map("value_json")
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
 }

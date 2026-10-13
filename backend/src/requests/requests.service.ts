@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthorizationService } from '../auth/authorization.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
 import { ReservationsService } from './reservations.service.js';
+import { ShipmentsService } from '../shipments/shipments.service.js';
 import {
   UserRole,
   RequestStatus,
@@ -37,6 +38,7 @@ export class RequestsService {
     private readonly authService: AuthorizationService,
     private readonly ledgerService: LedgerService,
     private readonly reservationsService: ReservationsService,
+    private readonly shipmentsService: ShipmentsService,
   ) {}
 
   /**
@@ -516,32 +518,44 @@ export class RequestsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Consume reservations if stock-out or dispatch
+      // 1. Consume reservations if stock-out, dispatch or transfer
       if (
         request.requestType === RequestType.STOCK_OUT ||
-        request.requestType === RequestType.DISPATCH
+        request.requestType === RequestType.DISPATCH ||
+        request.requestType === RequestType.TRANSFER
       ) {
         await this.reservationsService.consumeReservationsForRequest(tx, requestId);
 
-        // 2. Post ledger transaction (deduction)
-        await this.ledgerService.postTransaction(
-          {
-            transactionType: TransactionType.STOCK_OUT,
-            idempotencyKey: dto.idempotencyKey || `req-approve-${request.id}`,
-            sourceRefType: 'STOCK_REQUEST',
-            sourceRefId: request.id,
-            lines: request.lines.map((l) => ({
-              locationId: request.sourceLocationId!,
-              productId: l.productId,
-              batchId: l.batchId || undefined,
-              condition: l.condition,
-              quantity: l.quantity.toNumber(),
-              unitName: l.unitNameSnapshot,
-              direction: 'OUT' as const,
-            })),
-          },
-          user.id,
-        );
+        if (
+          request.requestType === RequestType.DISPATCH ||
+          request.requestType === RequestType.TRANSFER
+        ) {
+          await this.shipmentsService.createShipmentForApprovedDispatch(
+            tx,
+            request,
+            user.id,
+          );
+        } else {
+          // 2. Post ledger transaction (deduction)
+          await this.ledgerService.postTransaction(
+            {
+              transactionType: TransactionType.STOCK_OUT,
+              idempotencyKey: dto.idempotencyKey || `req-approve-${request.id}`,
+              sourceRefType: 'STOCK_REQUEST',
+              sourceRefId: request.id,
+              lines: request.lines.map((l) => ({
+                locationId: request.sourceLocationId!,
+                productId: l.productId,
+                batchId: l.batchId || undefined,
+                condition: l.condition,
+                quantity: l.quantity.toNumber(),
+                unitName: l.unitNameSnapshot,
+                direction: 'OUT' as const,
+              })),
+            },
+            user.id,
+          );
+        }
       } else if (request.requestType === RequestType.STOCK_IN) {
         // Post ledger transaction (addition)
         await this.ledgerService.postTransaction(

@@ -26,7 +26,7 @@
 - [x] T-006 Immutable inventory ledger and balance projection (append-only ledger entries, reversal/replacement, ACID row-locked balance updates, Physical = Usable + Damaged + Expired, Available = Usable - Reserved, idempotency keys, tenant scoping)
 - [x] T-007 Reservations, pending edit/cancel and idempotent approvals (stock requests, atomic reservation holds, pending edits with rollback safety, cancellation release, Super Admin reason-mandated rejection, idempotent approval and ledger posting)
 - [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
-- [ ] T-009 Dispatch, transfers, receipt and discrepancies
+- [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [ ] T-010 Client manufacturing linked/separate workflows
 - [ ] T-011 Departments, issues, returns and condition handling
 - [ ] T-012 Bulk CSV/document extraction and review UI
