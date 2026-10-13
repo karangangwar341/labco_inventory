@@ -22,7 +22,7 @@
 - [x] T-002 Authentication, session replacement, lockout and password policy (JWT, bcrypt, 5-attempt lockout for 15m, single active session revocation, 7-day inactivity timeout)
 - [x] T-003 Users, clients, warehouses and assignments (client & warehouse CRUD, many-to-many assignments with effective dates, role validation, session revocation on disable/reset)
 - [x] T-004 Role-scoped authorization middleware and tests (tenancy boundary enforcement, cross-client isolation, Store Admin warehouse scoping, inbound source warehouse privacy filter)
-- [ ] T-005 Product catalogs, attributes, units, conversion snapshots
+- [x] T-005 Product catalogs, attributes, units, conversion snapshots (Company vs Client scopes, deterministic duplicate key D-003, fixed-precision quantities, unit conversion validation, Super Admin product reviews)
 - [ ] T-006 Immutable inventory ledger and balance projection
 - [ ] T-007 Reservations, pending edit/cancel and idempotent approvals
 - [ ] T-008 Stock-in/out and physical corrections

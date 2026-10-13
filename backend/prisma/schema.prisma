@@ -31,6 +31,30 @@ enum LoginOutcome {
   ACCOUNT_DISABLED
 }
 
+enum CatalogScope {
+  COMPANY
+  CLIENT
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum TrackingMode {
+  NONE
+  BATCH_ONLY
+  EXPIRY_ONLY
+  BOTH
+}
+
+enum UnitStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -40,6 +64,8 @@ model Client {
 
   users                User[]
   warehouseAssignments ClientWarehouseAssignment[]
+  categories           Category[]
+  products             Product[]
 
   @@map("clients")
 }
@@ -79,6 +105,92 @@ model ClientWarehouseAssignment {
   @@map("client_warehouse_assignments")
 }
 
+model Category {
+  id          String       @id @default(uuid())
+  parentId    String?      @map("parent_id")
+  name        String
+  ownerScope  CatalogScope @default(COMPANY) @map("owner_scope")
+  clientId    String?      @map("client_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  parent      Category?    @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]   @relation("CategoryHierarchy")
+  products    Product[]
+  client      Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([name, ownerScope, clientId])
+  @@map("categories")
+}
+
+model Product {
+  id                String             @id @default(uuid())
+  ownerScope        CatalogScope       @map("owner_scope")
+  clientId          String?            @map("client_id")
+  categoryId        String             @map("category_id")
+  name              String
+  brand             String?
+  description       String?
+  imageRef          String?            @map("image_ref")
+  status            ProductStatus      @default(PENDING_APPROVAL)
+  quantityPrecision Int                @default(0) @map("quantity_precision") // 0 to 2
+  allowFractional   Boolean            @default(false) @map("allow_fractional")
+  trackingMode      TrackingMode       @default(NONE) @map("tracking_mode")
+  minQuantity       Decimal            @default(0) @map("min_quantity") @db.Decimal(18, 2)
+  duplicateKey      String             @unique @map("duplicate_key")
+  rejectionReason   String?            @map("rejection_reason")
+  approvedById      String?            @map("approved_by_id")
+  approvedAt        DateTime?          @map("approved_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  client            Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  category          Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  approvedBy        User?              @relation("ProductApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  attributes        ProductAttribute[]
+  units             ProductUnit[]
+
+  @@index([ownerScope])
+  @@index([clientId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("products")
+}
+
+model ProductAttribute {
+  id            String   @id @default(uuid())
+  productId     String   @map("product_id")
+  attributeName String   @map("attribute_name")
+  value         String
+  unit          String?
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_attributes")
+}
+
+model ProductUnit {
+  id               String     @id @default(uuid())
+  productId        String     @map("product_id")
+  unitName         String     @map("unit_name")
+  isBaseUnit       Boolean    @default(false) @map("is_base_unit")
+  conversionToBase Decimal    @default(1) @map("conversion_to_base") @db.Decimal(18, 4)
+  effectiveFrom    DateTime   @default(now()) @map("effective_from")
+  effectiveTo      DateTime?  @map("effective_to")
+  status           UnitStatus @default(ACTIVE)
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([status])
+  @@map("product_units")
+}
+
 model User {
   id                  String                      @id @default(uuid())
   username            String                      @unique
@@ -99,6 +211,7 @@ model User {
   sessions            Session[]
   loginEvents         LoginEvent[]
   assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
+  approvedProducts    Product[]                   @relation("ProductApprovedBy")
 
   @@index([clientId])
   @@index([warehouseId])
