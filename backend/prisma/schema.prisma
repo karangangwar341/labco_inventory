@@ -511,6 +511,7 @@ model User {
   importBatches           ImportBatch[]           @relation("UserImportBatches")
   approvedImportBatches   ImportBatch[]           @relation("ApprovedImportBatches")
   notifications           Notification[]
+  auditEvents             AuditEvent[]                @relation("UserAuditEvents")
 
   @@index([clientId])
   @@index([warehouseId])
@@ -973,4 +974,25 @@ model StockAlertState {
   @@unique([productId, locationId])
   @@index([isLowStock])
   @@map("stock_alert_states")
+}
+
+model AuditEvent {
+  id            String   @id @default(uuid())
+  actorUserId   String?  @map("actor_user_id")
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String?  @map("entity_id")
+  beforeJson    Json?    @map("before_json")
+  afterJson     Json?    @map("after_json")
+  reason        String?
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+  correlationId String?  @map("correlation_id")
+
+  actorUser     User?    @relation("UserAuditEvents", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([occurredAt])
+  @@map("audit_events")
 }

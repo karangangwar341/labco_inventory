@@ -14,6 +14,7 @@ import { ManufacturingModule } from './manufacturing/manufacturing.module.js';
 import { DepartmentsModule } from './departments/departments.module.js';
 import { ImportsModule } from './imports/imports.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { ReportsModule } from './reports/reports.module.js';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
     DepartmentsModule,
     ImportsModule,
     NotificationsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

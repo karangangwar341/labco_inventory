@@ -31,6 +31,6 @@
 - [x] T-011 Departments, issues, returns and condition handling (department master, proposed change approval, issue history without separate stock balance, condition returns into Usable/Damaged/Expired buckets, Super Admin write-off)
 - [x] T-012 Bulk CSV/document extraction and review UI (Gemini adapter & deterministic extraction, unapproved draft boundary, duplicate warnings without silent merge, row editing without re-upload, all-or-nothing and partial approvals, single source warehouse check, formula-injection neutralization, Next.js review grid)
 - [x] T-013 Notifications, low-stock and expiry alerts (in-app notification center, downward crossing low-stock triggers, persistent low-stock state, recovery re-crossing, configurable 90/30/7 day expiry warnings, Store Admin exclusion policy, sound disabled by default)
-- [ ] T-014 Reports, exports and export audit
+- [x] T-014 Reports, exports and export audit (authorized stock balance, ledger, expiry forecast, consumption and manufacturing reports; Store/Client tenant scoping; inbound warehouse privacy redaction; RFC 4180 CSV formula-injection neutralization; append-only audit_events logging)
 - [ ] T-015 Backups, monitoring, restore drills and runbook
 - [ ] T-016 Security, accessibility, performance, UAT and release readiness
