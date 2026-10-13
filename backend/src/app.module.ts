@@ -15,6 +15,7 @@ import { DepartmentsModule } from './departments/departments.module.js';
 import { ImportsModule } from './imports/imports.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { ReportsModule } from './reports/reports.module.js';
+import { BackupsModule } from './backups/backups.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ReportsModule } from './reports/reports.module.js';
     ImportsModule,
     NotificationsModule,
     ReportsModule,
+    BackupsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

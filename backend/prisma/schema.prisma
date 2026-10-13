@@ -205,6 +205,22 @@ enum NotificationEventType {
   SHIPMENT_DISPATCHED
   SHIPMENT_RECEIVED
   DISCREPANCY_ALERT
+  BACKUP_FAILED
+  BACKUP_RESTORED
+  RESTORE_DRILL_FAILED
+  RESTORE_DRILL_PASSED
+}
+
+enum BackupStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+enum DrillStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
 }
 
 model Client {
@@ -995,4 +1011,27 @@ model AuditEvent {
   @@index([entityType])
   @@index([occurredAt])
   @@map("audit_events")
+}
+
+model BackupRecord {
+  id               String       @id @default(uuid())
+  startedAt        DateTime     @default(now()) @map("started_at")
+  completedAt      DateTime?    @map("completed_at")
+  status           BackupStatus @default(STARTED)
+  storageReference String?      @map("storage_reference")
+  checksum         String?
+  sizeBytes        Int?         @map("size_bytes")
+  retentionUntil   DateTime     @map("retention_until")
+  retryCount       Int          @default(0) @map("retry_count")
+  errorSummary     String?      @map("error_summary")
+  drillStatus      DrillStatus? @map("drill_status")
+  drillAt          DateTime?    @map("drill_at")
+  drillNotes       String?      @map("drill_notes")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([retentionUntil])
+  @@index([drillStatus])
+  @@map("backups")
 }

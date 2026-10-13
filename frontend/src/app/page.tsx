@@ -18,7 +18,7 @@ export default function Home() {
         </header>
 
         {/* Feature Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Link
             href="/imports"
             className="group p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 hover:bg-slate-850 transition duration-200 flex flex-col justify-between shadow-lg"
@@ -39,6 +39,26 @@ export default function Home() {
             </div>
           </Link>
 
+          <Link
+            href="/backups"
+            className="group p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 hover:bg-slate-850 transition duration-200 flex flex-col justify-between shadow-lg"
+          >
+            <div className="space-y-3">
+              <span className="text-2xl p-2.5 rounded-xl bg-rose-950/80 text-rose-400 inline-block border border-rose-800/60">
+                🛡️
+              </span>
+              <h2 className="text-xl font-bold text-white group-hover:text-indigo-300 transition">
+                Backups, Monitoring & Restore Drills
+              </h2>
+              <p className="text-sm text-slate-400 leading-normal">
+                90-day retention, 3x automated retry with persistent Super Admin warnings, and isolated environment restore drills.
+              </p>
+            </div>
+            <div className="mt-6 flex items-center text-xs font-semibold text-rose-400 group-hover:text-rose-300">
+              Open Resiliency Console →
+            </div>
+          </Link>
+
           <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between shadow-lg">
             <div className="space-y-3">
               <span className="text-2xl p-2.5 rounded-xl bg-emerald-950/80 text-emerald-400 inline-block border border-emerald-800/60">
@@ -52,7 +72,7 @@ export default function Home() {
               </p>
             </div>
             <div className="mt-6 text-xs font-mono text-emerald-400">
-              Active • Enforcing Non-Negotiable Invariants
+              Active • Enforcing Invariants
             </div>
           </div>
 
@@ -65,7 +85,7 @@ export default function Home() {
                 Client Manufacturing & Departments
               </h2>
               <p className="text-sm text-slate-400 leading-normal">
-                Linked & separate production workflows, atomic input deduction, department issue/return history with condition buckets (usable, damaged, expired).
+                Linked & separate production workflows, atomic input deduction, department issue/return history with condition buckets.
               </p>
             </div>
             <div className="mt-6 text-xs font-mono text-purple-400">
