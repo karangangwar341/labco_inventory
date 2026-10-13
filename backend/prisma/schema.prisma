@@ -196,6 +196,17 @@ enum FileScanStatus {
   QUARANTINED
 }
 
+enum NotificationEventType {
+  LOW_STOCK_DOWNWARD_CROSSING
+  LOW_STOCK_RECOVERED
+  EXPIRY_WARNING
+  BATCH_EXPIRED
+  REQUEST_STATUS_CHANGED
+  SHIPMENT_DISPATCHED
+  SHIPMENT_RECEIVED
+  DISCREPANCY_ALERT
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -307,6 +318,7 @@ model Product {
   productionOutputs ProductionOutput[]
   departmentIssues  DepartmentIssue[]
   departmentReturns DepartmentReturn[]
+  alertStates       StockAlertState[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -498,6 +510,7 @@ model User {
   uploadedAttachments     Attachment[]            @relation("UploadedAttachments")
   importBatches           ImportBatch[]           @relation("UserImportBatches")
   approvedImportBatches   ImportBatch[]           @relation("ApprovedImportBatches")
+  notifications           Notification[]
 
   @@index([clientId])
   @@index([warehouseId])
@@ -924,4 +937,40 @@ model ImportRow {
   @@index([batchId])
   @@index([validationStatus])
   @@map("import_rows")
+}
+
+model Notification {
+  id              String                @id @default(uuid())
+  recipientUserId String                @map("recipient_user_id")
+  eventType       NotificationEventType @map("event_type")
+  title           String
+  message         String
+  entityType      String?               @map("entity_type")
+  entityId        String?               @map("entity_id")
+  readAt          DateTime?             @map("read_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+
+  recipient       User                  @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId])
+  @@index([eventType])
+  @@index([readAt])
+  @@map("notifications")
+}
+
+model StockAlertState {
+  id             String    @id @default(uuid())
+  productId      String    @map("product_id")
+  locationId     String?   @map("location_id")
+  isLowStock     Boolean   @default(false) @map("is_low_stock")
+  lastAlertAt    DateTime? @map("last_alert_at")
+  lastRecoveryAt DateTime? @map("last_recovery_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locationId])
+  @@index([isLowStock])
+  @@map("stock_alert_states")
 }

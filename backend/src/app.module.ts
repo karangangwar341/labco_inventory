@@ -13,6 +13,7 @@ import { ShipmentsModule } from './shipments/shipments.module.js';
 import { ManufacturingModule } from './manufacturing/manufacturing.module.js';
 import { DepartmentsModule } from './departments/departments.module.js';
 import { ImportsModule } from './imports/imports.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ImportsModule } from './imports/imports.module.js';
     ManufacturingModule,
     DepartmentsModule,
     ImportsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
