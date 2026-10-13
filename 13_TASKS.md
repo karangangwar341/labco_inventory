@@ -25,7 +25,7 @@
 - [x] T-005 Product catalogs, attributes, units, conversion snapshots (Company vs Client scopes, deterministic duplicate key D-003, fixed-precision quantities, unit conversion validation, Super Admin product reviews)
 - [x] T-006 Immutable inventory ledger and balance projection (append-only ledger entries, reversal/replacement, ACID row-locked balance updates, Physical = Usable + Damaged + Expired, Available = Usable - Reserved, idempotency keys, tenant scoping)
 - [x] T-007 Reservations, pending edit/cancel and idempotent approvals (stock requests, atomic reservation holds, pending edits with rollback safety, cancellation release, Super Admin reason-mandated rejection, idempotent approval and ledger posting)
-- [ ] T-008 Stock-in/out and physical corrections
+- [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
 - [ ] T-009 Dispatch, transfers, receipt and discrepancies
 - [ ] T-010 Client manufacturing linked/separate workflows
 - [ ] T-011 Departments, issues, returns and condition handling

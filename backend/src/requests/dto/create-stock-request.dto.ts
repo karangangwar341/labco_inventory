@@ -28,10 +28,25 @@ export class CreateStockRequestLineDto {
   @IsUUID('4')
   batchId?: string;
 
+  @ApiPropertyOptional({ example: 'LOT-2026-X1', description: 'Batch number' })
+  @IsOptional()
+  @IsString()
+  batchNumber?: string;
+
+  @ApiPropertyOptional({ example: '2027-12-31T00:00:00.000Z', description: 'Expiry date ISO string' })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
+
   @ApiProperty({ example: 10, description: 'Quantity in selected unit' })
   @IsNumber()
   @IsPositive()
   quantity!: number;
+
+  @ApiPropertyOptional({ example: 12, description: 'Physically counted quantity (for physical count adjustments)' })
+  @IsOptional()
+  @IsNumber()
+  countedQuantity?: number;
 
   @ApiProperty({ description: 'ProductUnit UUID' })
   @IsUUID('4')
@@ -48,6 +63,14 @@ export class CreateStockRequestDto {
   @ApiProperty({ enum: RequestType })
   @IsEnum(RequestType)
   requestType!: RequestType;
+
+  @ApiPropertyOptional({
+    example: 'DIRECT_PURCHASE',
+    description: 'Source type: DIRECT_PURCHASE, OPENING_STOCK, DEPARTMENT_RETURN, DONATION, CORRECTION, OTHER',
+  })
+  @IsOptional()
+  @IsString()
+  sourceType?: string;
 
   @ApiPropertyOptional({ enum: RequestPriority, default: RequestPriority.NORMAL })
   @IsOptional()

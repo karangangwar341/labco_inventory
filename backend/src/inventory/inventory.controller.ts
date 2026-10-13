@@ -65,4 +65,20 @@ export class InventoryController {
   ) {
     return this.ledgerService.reverseTransaction(id, user.id, reason);
   }
+
+  @Post('transactions/:id/correct')
+  @Roles(UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Perform historical transaction correction with replacement lines (Super Admin only)',
+    description:
+      'Compensates original transaction and posts new replacement transaction in an atomic reversal/replacement cycle.',
+  })
+  correctTransaction(
+    @Param('id') id: string,
+    @Body() dto: any,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.ledgerService.correctTransaction(id, dto, user.id);
+  }
 }

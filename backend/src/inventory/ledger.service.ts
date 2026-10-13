@@ -284,4 +284,55 @@ export class LedgerService {
       return reversalTx;
     });
   }
+
+  /**
+   * Historical transaction correction: Atomically creates reversal transaction for originalTxId,
+   * then posts replacement lines linked to originalTxId. Never modifies or deletes historical rows.
+   */
+  async correctTransaction(
+    originalTxId: string,
+    dto: {
+      reason: string;
+      idempotencyKey?: string;
+      replacementLines: Array<{
+        locationId: string;
+        productId: string;
+        batchId?: string;
+        condition: StockCondition;
+        quantity: number;
+        unitName: string;
+        direction: 'IN' | 'OUT';
+      }>;
+    },
+    actorId: string,
+  ) {
+    if (!dto.reason || dto.reason.trim() === '') {
+      throw new BadRequestException(
+        'A non-empty reason is required for historical transaction correction',
+      );
+    }
+
+    const reversal = await this.reverseTransaction(
+      originalTxId,
+      actorId,
+      dto.reason,
+    );
+
+    const replacement = await this.postTransaction(
+      {
+        transactionType: TransactionType.ADJUSTMENT,
+        idempotencyKey: dto.idempotencyKey,
+        sourceRefType: 'CORRECTION_REPLACEMENT',
+        sourceRefId: originalTxId,
+        lines: dto.replacementLines,
+      },
+      actorId,
+    );
+
+    return {
+      reversal,
+      replacement,
+    };
+  }
 }
+

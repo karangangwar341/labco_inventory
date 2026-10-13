@@ -9,6 +9,8 @@ import {
   ProductStatus,
   ReservationStatus,
   ApprovalDecision,
+  TrackingMode,
+  TransactionType,
   Prisma,
 } from '@prisma/client';
 import {
@@ -74,6 +76,10 @@ describe('Requests & Reservations Service (T-007)', () => {
         findUnique: vi.fn(),
       },
       approval: {
+        create: vi.fn(),
+      },
+      stockBatch: {
+        findUnique: vi.fn(),
         create: vi.fn(),
       },
     };
@@ -413,6 +419,166 @@ describe('Requests & Reservations Service (T-007)', () => {
       expect(res).toBe(approvedRequest);
       expect(mockLedgerService.postTransaction).not.toHaveBeenCalled();
       expect(mockPrisma.approval.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('5. Stock-In Tracking & Physical Count Adjustments (T-008)', () => {
+    it('enforces batch tracking requirement when product trackingMode is BATCH_ONLY', async () => {
+      const batchProduct = {
+        ...approvedProduct,
+        id: 'prod-batch',
+        trackingMode: TrackingMode.BATCH_ONLY,
+      };
+      mockPrisma.product.findUnique.mockResolvedValue(batchProduct);
+      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+      await expect(
+        requestsService.createDraft(storeAdminUser, {
+          requestType: RequestType.STOCK_IN,
+          sourceType: 'DIRECT_PURCHASE',
+          sourceLocationId: 'loc-1',
+          lines: [
+            {
+              productId: 'prod-batch',
+              quantity: 10,
+              unitId: 'unit-ea',
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('creates stockBatch automatically when batchNumber is specified on stock-in', async () => {
+      const batchProduct = {
+        ...approvedProduct,
+        id: 'prod-batch',
+        trackingMode: TrackingMode.BATCH_ONLY,
+      };
+      mockPrisma.product.findUnique.mockResolvedValue(batchProduct);
+      mockPrisma.stockBatch.findUnique.mockResolvedValue(null);
+      mockPrisma.stockBatch.create.mockResolvedValue({
+        id: 'batch-created-1',
+        productId: 'prod-batch',
+        batchNumber: 'LOT-999',
+      });
+      mockPrisma.stockRequest.create.mockResolvedValue({ id: 'req-batch' });
+      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+      await requestsService.createDraft(storeAdminUser, {
+        requestType: RequestType.STOCK_IN,
+        sourceType: 'DIRECT_PURCHASE',
+        sourceLocationId: 'loc-1',
+        lines: [
+          {
+            productId: 'prod-batch',
+            quantity: 10,
+            unitId: 'unit-ea',
+            batchNumber: 'LOT-999',
+          },
+        ],
+      });
+
+      expect(mockPrisma.stockBatch.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            productId: 'prod-batch',
+            batchNumber: 'LOT-999',
+          }),
+        }),
+      );
+    });
+
+    it('records system snapshot and variance for physical count adjustments', async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(approvedProduct);
+      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+      // Current system stock is 50
+      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
+        usableQty: new Prisma.Decimal(50),
+        damagedQty: new Prisma.Decimal(0),
+        expiredQty: new Prisma.Decimal(0),
+      });
+
+      mockPrisma.stockRequest.create.mockImplementation(async (args) => args.data);
+
+      // Counted quantity is 55 (variance is +5)
+      const draft = await requestsService.createDraft(storeAdminUser, {
+        requestType: RequestType.ADJUSTMENT,
+        sourceLocationId: 'loc-1',
+        lines: [
+          {
+            productId: 'prod-1',
+            quantity: 55,
+            countedQuantity: 55,
+            unitId: 'unit-ea',
+            condition: StockCondition.USABLE,
+          },
+        ],
+      });
+
+      expect(mockPrisma.stockRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestType: RequestType.ADJUSTMENT,
+            lines: {
+              create: [
+                expect.objectContaining({
+                  systemQuantitySnapshot: new Prisma.Decimal(50),
+                  countedQuantity: new Prisma.Decimal(55),
+                  varianceQuantity: new Prisma.Decimal(5),
+                }),
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('approves physical count adjustment and posts delta to ledger', async () => {
+      const adjustmentRequest = {
+        id: 'req-adj-1',
+        status: RequestStatus.PENDING_APPROVAL,
+        requestType: RequestType.ADJUSTMENT,
+        sourceLocationId: 'loc-1',
+        lines: [
+          {
+            id: 'line-adj-1',
+            productId: 'prod-1',
+            batchId: null,
+            quantity: new Prisma.Decimal(55),
+            unitNameSnapshot: 'EACH',
+            condition: StockCondition.USABLE,
+            varianceQuantity: new Prisma.Decimal(5), // +5 delta
+          },
+        ],
+      };
+      mockPrisma.stockRequest.findUnique.mockResolvedValue(adjustmentRequest);
+      mockPrisma.stockRequest.update.mockResolvedValue({
+        id: 'req-adj-1',
+        status: RequestStatus.APPROVED,
+      });
+
+      const res = await requestsService.approveRequest(superAdminUser, 'req-adj-1', {});
+      expect(res.status).toBe(RequestStatus.APPROVED);
+
+      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionType: TransactionType.ADJUSTMENT,
+          sourceRefId: 'req-adj-1',
+          lines: [
+            expect.objectContaining({
+              locationId: 'loc-1',
+              productId: 'prod-1',
+              quantity: 5,
+              direction: 'IN',
+            }),
+          ],
+        }),
+        superAdminUser.id,
+      );
     });
   });
 });

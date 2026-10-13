@@ -45,6 +45,7 @@ export class RequestsService {
   private async processLines(
     lines: CreateStockRequestLineDto[],
     tx: Prisma.TransactionClient,
+    locationId?: string | null,
   ) {
     if (!lines || lines.length === 0) {
       throw new BadRequestException('At least one request line is required');
@@ -68,6 +69,56 @@ export class RequestsService {
         );
       }
 
+      // Tracking mode validation (BATCH_ONLY, EXPIRY_ONLY, BOTH)
+      if (
+        (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH') &&
+        !line.batchId &&
+        !line.batchNumber
+      ) {
+        throw new BadRequestException(
+          `Product "${product.name}" requires batch/lot tracking. batchNumber or batchId is required.`,
+        );
+      }
+
+      if (
+        (product.trackingMode === 'EXPIRY_ONLY' || product.trackingMode === 'BOTH') &&
+        !line.batchId &&
+        !line.expiryDate
+      ) {
+        throw new BadRequestException(
+          `Product "${product.name}" requires expiry tracking. expiryDate is required.`,
+        );
+      }
+
+      let batchId = line.batchId || null;
+      let batchNumber = line.batchNumber || null;
+      let expiryDate = line.expiryDate ? new Date(line.expiryDate) : null;
+
+      if (line.batchNumber) {
+        let batch = await tx.stockBatch.findUnique({
+          where: {
+            productId_batchNumber: {
+              productId: product.id,
+              batchNumber: line.batchNumber.trim(),
+            },
+          },
+        });
+        if (!batch) {
+          batch = await tx.stockBatch.create({
+            data: {
+              productId: product.id,
+              batchNumber: line.batchNumber.trim(),
+              expiryDate,
+            },
+          });
+        }
+        batchId = batch.id;
+        batchNumber = batch.batchNumber;
+        if (batch.expiryDate && !expiryDate) {
+          expiryDate = batch.expiryDate;
+        }
+      }
+
       const unit = product.units.find(
         (u) => u.id === line.unitId && u.status === 'ACTIVE',
       );
@@ -87,15 +138,51 @@ export class RequestsService {
         );
       }
 
+      let systemQuantitySnapshot: Prisma.Decimal | null = null;
+      let countedQuantity: Prisma.Decimal | null = null;
+      let varianceQuantity: Prisma.Decimal | null = null;
+
+      if (line.countedQuantity !== undefined && locationId) {
+        countedQuantity = new Prisma.Decimal(line.countedQuantity);
+        const countedBase = countedQuantity.mul(conversionSnapshot);
+        const condition = line.condition || StockCondition.USABLE;
+
+        const balance = await tx.inventoryBalance.findFirst({
+          where: {
+            locationId,
+            productId: product.id,
+            batchId: batchId || null,
+          },
+        });
+
+        if (balance) {
+          systemQuantitySnapshot =
+            condition === StockCondition.USABLE
+              ? balance.usableQty
+              : condition === StockCondition.DAMAGED
+                ? balance.damagedQty
+                : balance.expiredQty;
+        } else {
+          systemQuantitySnapshot = new Prisma.Decimal(0);
+        }
+
+        varianceQuantity = countedBase.minus(systemQuantitySnapshot);
+      }
+
       processed.push({
         productId: line.productId,
-        batchId: line.batchId || null,
+        batchId,
+        batchNumber,
+        expiryDate,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
         conversionToBaseSnapshot: conversionSnapshot,
         baseQuantity,
         condition: line.condition || StockCondition.USABLE,
+        systemQuantitySnapshot,
+        countedQuantity,
+        varianceQuantity,
       });
     }
 
@@ -131,11 +218,13 @@ export class RequestsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const processedLines = await this.processLines(dto.lines, tx);
+      const locationId = dto.sourceLocationId || dto.destinationLocationId || null;
+      const processedLines = await this.processLines(dto.lines, tx, locationId);
 
       return tx.stockRequest.create({
         data: {
           requestType: dto.requestType,
+          sourceType: dto.sourceType || null,
           priority: dto.priority,
           requesterId: user.id,
           sourceLocationId: dto.sourceLocationId || null,
@@ -473,6 +562,49 @@ export class RequestsService {
           },
           user.id,
         );
+      } else if (request.requestType === RequestType.ADJUSTMENT) {
+        // Physical count adjustment posting
+        const adjustmentLines: any[] = [];
+        for (const l of request.lines) {
+          const delta = l.varianceQuantity
+            ? l.varianceQuantity.toNumber()
+            : l.quantity.toNumber();
+
+          if (delta > 0) {
+            adjustmentLines.push({
+              locationId: (request.sourceLocationId || request.destinationLocationId)!,
+              productId: l.productId,
+              batchId: l.batchId || undefined,
+              condition: l.condition,
+              quantity: delta,
+              unitName: l.unitNameSnapshot,
+              direction: 'IN' as const,
+            });
+          } else if (delta < 0) {
+            adjustmentLines.push({
+              locationId: (request.sourceLocationId || request.destinationLocationId)!,
+              productId: l.productId,
+              batchId: l.batchId || undefined,
+              condition: l.condition,
+              quantity: Math.abs(delta),
+              unitName: l.unitNameSnapshot,
+              direction: 'OUT' as const,
+            });
+          }
+        }
+
+        if (adjustmentLines.length > 0) {
+          await this.ledgerService.postTransaction(
+            {
+              transactionType: TransactionType.ADJUSTMENT,
+              idempotencyKey: dto.idempotencyKey || `req-approve-${request.id}`,
+              sourceRefType: 'STOCK_REQUEST',
+              sourceRefId: request.id,
+              lines: adjustmentLines,
+            },
+            user.id,
+          );
+        }
       }
 
       // 3. Record approval record

@@ -17,6 +17,27 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
   let inventoryService: InventoryService;
   let mockPrisma: any;
 
+  const mockProduct = {
+    id: 'prod-1',
+    name: 'Beaker 500ml',
+    quantityPrecision: 0,
+    trackingMode: TrackingMode.NONE,
+    units: [
+      {
+        id: 'unit-box',
+        unitName: 'BOX',
+        conversionToBase: new Prisma.Decimal(10),
+        isBaseUnit: false,
+      },
+      {
+        id: 'unit-ea',
+        unitName: 'EACH',
+        conversionToBase: new Prisma.Decimal(1),
+        isBaseUnit: true,
+      },
+    ],
+  };
+
   beforeEach(() => {
     mockPrisma = {
       $transaction: vi.fn(async (cb) => cb(mockPrisma)),
@@ -104,26 +125,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
   });
 
   describe('LedgerService.postTransaction', () => {
-    const mockProduct = {
-      id: 'prod-1',
-      name: 'Beaker 500ml',
-      quantityPrecision: 0,
-      trackingMode: TrackingMode.NONE,
-      units: [
-        {
-          id: 'unit-box',
-          unitName: 'BOX',
-          conversionToBase: new Prisma.Decimal(10),
-          isBaseUnit: false,
-        },
-        {
-          id: 'unit-ea',
-          unitName: 'EACH',
-          conversionToBase: new Prisma.Decimal(1),
-          isBaseUnit: true,
-        },
-      ],
-    };
 
     it('returns existing transaction if idempotencyKey has already been posted', async () => {
       const existingTx = {
@@ -357,6 +358,85 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       await expect(
         ledgerService.reverseTransaction('orig-tx-1', 'admin-1', 'Duplicate attempt'),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('rejects historical correction if reason is empty', async () => {
+      await expect(
+        ledgerService.correctTransaction(
+          'orig-tx-1',
+          { reason: '', replacementLines: [] },
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('atomically executes reversal and replacement for historical transaction correction', async () => {
+      const originalTx = {
+        id: 'orig-tx-1',
+        entries: [
+          {
+            id: 'entry-1',
+            locationId: 'loc-1',
+            productId: 'prod-1',
+            batchId: null,
+            condition: StockCondition.USABLE,
+            qtyDeltaBase: new Prisma.Decimal(20),
+            originalQty: new Prisma.Decimal(20),
+            unitNameSnapshot: 'EACH',
+            conversionToBaseSnapshot: new Prisma.Decimal(1),
+          },
+        ],
+      };
+      mockPrisma.ledgerTransaction.findUnique.mockResolvedValue(originalTx);
+      mockPrisma.ledgerTransaction.findFirst.mockResolvedValue(null);
+
+      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
+        id: 'bal-1',
+        usableQty: new Prisma.Decimal(30),
+        reservedQty: new Prisma.Decimal(0),
+        damagedQty: new Prisma.Decimal(0),
+        expiredQty: new Prisma.Decimal(0),
+        version: 1,
+      });
+
+      const reversalCreated = {
+        id: 'rev-tx-1',
+        transactionType: TransactionType.REVERSAL,
+        reversalOfTxId: 'orig-tx-1',
+      };
+      const replacementCreated = {
+        id: 'rep-tx-1',
+        transactionType: TransactionType.ADJUSTMENT,
+        sourceRefType: 'CORRECTION_REPLACEMENT',
+        sourceRefId: 'orig-tx-1',
+      };
+
+      mockPrisma.ledgerTransaction.create
+        .mockResolvedValueOnce(reversalCreated)
+        .mockResolvedValueOnce(replacementCreated);
+
+      mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+
+      const result = await ledgerService.correctTransaction(
+        'orig-tx-1',
+        {
+          reason: 'Count miscalculation by shift auditor',
+          replacementLines: [
+            {
+              locationId: 'loc-1',
+              productId: 'prod-1',
+              condition: StockCondition.USABLE,
+              quantity: 25,
+              direction: 'IN',
+              unitName: 'EACH',
+            },
+          ],
+        },
+        'admin-1',
+      );
+
+      expect(result.reversal).toBe(reversalCreated);
+      expect(result.replacement).toBe(replacementCreated);
     });
   });
 
