@@ -83,6 +83,40 @@ enum TransactionType {
   REVERSAL
 }
 
+enum RequestType {
+  STOCK_OUT
+  STOCK_IN
+  DISPATCH
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum RequestStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RequestPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -95,6 +129,7 @@ model Client {
   categories           Category[]
   products             Product[]
   stockLocation        StockLocation?
+  stockRequests        StockRequest[]
 
   @@map("clients")
 }
@@ -182,6 +217,8 @@ model Product {
   batches           StockBatch[]
   balances          InventoryBalance[]
   ledgerEntries     LedgerEntry[]
+  requestLines      StockRequestLine[]
+  reservations      Reservation[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -217,7 +254,8 @@ model ProductUnit {
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
-  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  requestLines     StockRequestLine[]
 
   @@index([productId])
   @@index([status])
@@ -231,10 +269,13 @@ model StockLocation {
   clientId     String?            @unique @map("client_id")
   createdAt    DateTime           @default(now()) @map("created_at")
 
-  warehouse    Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  client       Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  balances     InventoryBalance[]
-  ledgerEntries LedgerEntry[]
+  warehouse            Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  client               Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  balances             InventoryBalance[]
+  ledgerEntries        LedgerEntry[]
+  sourceRequests       StockRequest[]     @relation("SourceRequestLocation")
+  destinationRequests  StockRequest[]     @relation("DestinationRequestLocation")
+  reservations         Reservation[]
 
   @@map("stock_locations")
 }
@@ -250,6 +291,8 @@ model StockBatch {
   product       Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
   balances      InventoryBalance[]
   ledgerEntries LedgerEntry[]
+  requestLines  StockRequestLine[]
+  reservations  Reservation[]
 
   @@unique([productId, batchNumber])
   @@index([expiryDate])
@@ -343,6 +386,8 @@ model User {
   assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
   approvedProducts    Product[]                   @relation("ProductApprovedBy")
   postedTransactions  LedgerTransaction[]
+  requests            StockRequest[]              @relation("RequestRequester")
+  approvals           Approval[]                  @relation("ApprovalApprover")
 
   @@index([clientId])
   @@index([warehouseId])
@@ -379,4 +424,92 @@ model LoginEvent {
   @@index([usernameAttempted])
   @@index([occurredAt])
   @@map("login_events")
+}
+
+model StockRequest {
+  id                    String            @id @default(uuid())
+  requestType           RequestType       @map("request_type")
+  status                RequestStatus     @default(DRAFT)
+  priority              RequestPriority   @default(NORMAL)
+  requesterId           String            @map("requester_id")
+  sourceLocationId      String?           @map("source_location_id")
+  destinationLocationId String?           @map("destination_location_id")
+  clientId              String?           @map("client_id")
+  reason                String?
+  idempotencyKey        String?           @unique @map("idempotency_key")
+  submittedAt           DateTime?         @map("submitted_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+
+  requester             User              @relation("RequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  sourceLocation        StockLocation?    @relation("SourceRequestLocation", fields: [sourceLocationId], references: [id], onDelete: SetNull)
+  destinationLocation   StockLocation?    @relation("DestinationRequestLocation", fields: [destinationLocationId], references: [id], onDelete: SetNull)
+  client                Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  lines                 StockRequestLine[]
+  approvals             Approval[]
+
+  @@index([status])
+  @@index([requesterId])
+  @@index([clientId])
+  @@map("stock_requests")
+}
+
+model StockRequestLine {
+  id                       String         @id @default(uuid())
+  requestId                String         @map("request_id")
+  productId                String         @map("product_id")
+  batchId                  String?        @map("batch_id")
+  quantity                 Decimal        @db.Decimal(18, 4)
+  unitId                   String         @map("unit_id")
+  unitNameSnapshot         String         @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal        @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal        @map("base_quantity") @db.Decimal(18, 4)
+  condition                StockCondition @default(USABLE)
+
+  request                  StockRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product                  Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch                    StockBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  unit                     ProductUnit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  reservations             Reservation[]
+
+  @@index([requestId])
+  @@index([productId])
+  @@map("stock_request_lines")
+}
+
+model Reservation {
+  id            String            @id @default(uuid())
+  requestLineId String            @map("request_line_id")
+  locationId    String            @map("location_id")
+  productId     String            @map("product_id")
+  batchId       String?           @map("batch_id")
+  quantityBase  Decimal           @map("quantity_base") @db.Decimal(18, 4)
+  status        ReservationStatus @default(ACTIVE)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  releasedAt    DateTime?         @map("released_at")
+
+  requestLine   StockRequestLine  @relation(fields: [requestLineId], references: [id], onDelete: Cascade)
+  location      StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product       Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch         StockBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([locationId, productId, status])
+  @@index([requestLineId])
+  @@map("reservations")
+}
+
+model Approval {
+  id         String           @id @default(uuid())
+  requestId  String           @map("request_id")
+  decision   ApprovalDecision
+  approverId String           @map("approver_id")
+  reason     String?
+  decidedAt  DateTime         @default(now()) @map("decided_at")
+
+  request    StockRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver   User             @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@index([requestId])
+  @@index([approverId])
+  @@map("approvals")
 }

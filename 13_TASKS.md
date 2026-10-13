@@ -24,7 +24,7 @@
 - [x] T-004 Role-scoped authorization middleware and tests (tenancy boundary enforcement, cross-client isolation, Store Admin warehouse scoping, inbound source warehouse privacy filter)
 - [x] T-005 Product catalogs, attributes, units, conversion snapshots (Company vs Client scopes, deterministic duplicate key D-003, fixed-precision quantities, unit conversion validation, Super Admin product reviews)
 - [x] T-006 Immutable inventory ledger and balance projection (append-only ledger entries, reversal/replacement, ACID row-locked balance updates, Physical = Usable + Damaged + Expired, Available = Usable - Reserved, idempotency keys, tenant scoping)
-- [ ] T-007 Reservations, pending edit/cancel and idempotent approvals
+- [x] T-007 Reservations, pending edit/cancel and idempotent approvals (stock requests, atomic reservation holds, pending edits with rollback safety, cancellation release, Super Admin reason-mandated rejection, idempotent approval and ledger posting)
 - [ ] T-008 Stock-in/out and physical corrections
 - [ ] T-009 Dispatch, transfers, receipt and discrepancies
 - [ ] T-010 Client manufacturing linked/separate workflows
