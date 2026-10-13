@@ -1,0 +1,278 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AuthService } from './auth.service.js';
+import { UserStatus, UserRole, LoginOutcome } from '@prisma/client';
+import { UnauthorizedException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+
+describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
+  let authService: AuthService;
+  let mockPrisma: any;
+  let mockJwtService: any;
+
+  const mockUser = {
+    id: 'user-uuid-1',
+    username: 'warehouse_admin',
+    passwordHash: '',
+    role: UserRole.SUPER_ADMIN,
+    status: UserStatus.ACTIVE,
+    failedLoginAttempts: 0,
+    lockoutUntil: null,
+    lockoutCount: 0,
+    disabledAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  beforeEach(async () => {
+    // Generate valid bcrypt hash for "SecurePass123!@"
+    mockUser.passwordHash = await bcrypt.hash('SecurePass123!@', 10);
+    mockUser.failedLoginAttempts = 0;
+    mockUser.lockoutUntil = null;
+    mockUser.status = UserStatus.ACTIVE;
+
+    mockPrisma = {
+      user: {
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
+      session: {
+        updateMany: vi.fn(),
+        create: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
+      loginEvent: {
+        create: vi.fn(),
+      },
+    };
+
+    mockJwtService = {
+      sign: vi.fn().mockReturnValue('mocked.jwt.token'),
+    };
+
+    authService = new AuthService(mockPrisma as any, mockJwtService as any);
+  });
+
+  describe('validateUserCredentials', () => {
+    it('authenticates valid credentials and resets failed attempts', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        failedLoginAttempts: 2,
+      });
+      mockPrisma.user.update.mockResolvedValue(mockUser);
+
+      const result = await authService.validateUserCredentials('warehouse_admin', 'SecurePass123!@');
+
+      expect(result.id).toBe(mockUser.id);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { failedLoginAttempts: 0, lockoutUntil: null },
+      });
+      expect(mockPrisma.loginEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ outcome: LoginOutcome.SUCCESS }),
+      });
+    });
+
+    it('rejects nonexistent user with generic invalid credentials', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        authService.validateUserCredentials('nonexistent', 'SecurePass123!@'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockPrisma.loginEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ outcome: LoginOutcome.INVALID_CREDENTIALS }),
+      });
+    });
+
+    it('rejects disabled account with 403 Forbidden', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        status: UserStatus.DISABLED,
+      });
+
+      await expect(
+        authService.validateUserCredentials('warehouse_admin', 'SecurePass123!@'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockPrisma.loginEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ outcome: LoginOutcome.ACCOUNT_DISABLED }),
+      });
+    });
+
+    it('increments failedLoginAttempts on invalid password (attempts 1 to 4)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        failedLoginAttempts: 2,
+      });
+
+      await expect(
+        authService.validateUserCredentials('warehouse_admin', 'WrongPassword123!'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { failedLoginAttempts: 3 },
+      });
+    });
+
+    it('locks account for 15 minutes upon reaching 5 consecutive failed logins', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        failedLoginAttempts: 4,
+        lockoutCount: 0,
+      });
+
+      try {
+        await authService.validateUserCredentials('warehouse_admin', 'WrongPassword123!');
+        expect.unreachable();
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect(err.getStatus()).toBe(HttpStatus.LOCKED); // 423
+      }
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: expect.objectContaining({
+          failedLoginAttempts: 5,
+          lockoutCount: 1,
+          lockoutUntil: expect.any(Date),
+        }),
+      });
+
+      expect(mockPrisma.loginEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ outcome: LoginOutcome.LOCKED_OUT }),
+      });
+    });
+
+    it('blocks login attempt while lockout is active', async () => {
+      const futureLockout = new Date(Date.now() + 10 * 60 * 1000); // 10 mins remaining
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        lockoutUntil: futureLockout,
+      });
+
+      try {
+        await authService.validateUserCredentials('warehouse_admin', 'SecurePass123!@');
+        expect.unreachable();
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect(err.getStatus()).toBe(HttpStatus.LOCKED);
+      }
+    });
+  });
+
+  describe('login (Single Active Session Policy)', () => {
+    it('revokes prior active sessions when a new login occurs', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.session.create.mockResolvedValue({
+        id: 'new-session-uuid',
+        userId: mockUser.id,
+        tokenHash: 'hashed_token',
+        isRevoked: false,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+
+      const response = await authService.login(mockUser as any);
+
+      // Verify prior active sessions were invalidated
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: mockUser.id,
+          isRevoked: false,
+        },
+        data: expect.objectContaining({
+          isRevoked: true,
+          revokedAt: expect.any(Date),
+        }),
+      });
+
+      expect(response.accessToken).toBe('mocked.jwt.token');
+      expect(response.expiresIn).toBe(900); // 15 mins
+      expect(response.user.username).toBe(mockUser.username);
+    });
+  });
+
+  describe('validateSession (7-Day Inactivity & Revocation)', () => {
+    it('returns user and refreshes lastActivityAt for valid active session', async () => {
+      const activeSession = {
+        id: 'session-uuid',
+        userId: mockUser.id,
+        isRevoked: false,
+        lastActivityAt: new Date(),
+        expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        user: mockUser,
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(activeSession);
+      mockPrisma.session.update.mockResolvedValue(activeSession);
+
+      const user = await authService.validateSession(mockUser.id, 'session-uuid');
+
+      expect(user).not.toBeNull();
+      expect(user?.id).toBe(mockUser.id);
+      expect(mockPrisma.session.update).toHaveBeenCalledWith({
+        where: { id: 'session-uuid' },
+        data: { lastActivityAt: expect.any(Date) },
+      });
+    });
+
+    it('rejects and revokes session if inactive for more than 7 days', async () => {
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+      const expiredSession = {
+        id: 'old-session-uuid',
+        userId: mockUser.id,
+        isRevoked: false,
+        lastActivityAt: eightDaysAgo,
+        expiresAt: new Date(Date.now() + 1000),
+        user: mockUser,
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(expiredSession);
+
+      const user = await authService.validateSession(mockUser.id, 'old-session-uuid');
+
+      expect(user).toBeNull();
+      expect(mockPrisma.session.update).toHaveBeenCalledWith({
+        where: { id: 'old-session-uuid' },
+        data: expect.objectContaining({
+          isRevoked: true,
+          revokedAt: expect.any(Date),
+        }),
+      });
+    });
+
+    it('rejects already revoked session', async () => {
+      mockPrisma.session.findUnique.mockResolvedValue({
+        id: 'revoked-session',
+        userId: mockUser.id,
+        isRevoked: true,
+        user: mockUser,
+      });
+
+      const user = await authService.validateSession(mockUser.id, 'revoked-session');
+      expect(user).toBeNull();
+    });
+  });
+
+  describe('logout', () => {
+    it('marks session as revoked', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
+
+      const res = await authService.logout(mockUser.id, 'session-123');
+
+      expect(res.success).toBe(true);
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'session-123',
+          userId: mockUser.id,
+          isRevoked: false,
+        },
+        data: expect.objectContaining({
+          isRevoked: true,
+          revokedAt: expect.any(Date),
+        }),
+      });
+    });
+  });
+});
