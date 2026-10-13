@@ -55,6 +55,34 @@ enum UnitStatus {
   SUPERSEDED
 }
 
+enum LocationType {
+  WAREHOUSE
+  CLIENT
+}
+
+enum StockCondition {
+  USABLE
+  DAMAGED
+  EXPIRED
+}
+
+enum BatchStatus {
+  ACTIVE
+  EXPIRED
+  DEPLETED
+}
+
+enum TransactionType {
+  STOCK_IN
+  STOCK_OUT
+  TRANSFER_DISPATCH
+  TRANSFER_RECEIPT
+  MANUFACTURING_OUTPUT
+  MANUFACTURING_INPUT
+  ADJUSTMENT
+  REVERSAL
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -66,6 +94,7 @@ model Client {
   warehouseAssignments ClientWarehouseAssignment[]
   categories           Category[]
   products             Product[]
+  stockLocation        StockLocation?
 
   @@map("clients")
 }
@@ -80,6 +109,7 @@ model Warehouse {
 
   users               User[]
   clientAssignments   ClientWarehouseAssignment[]
+  stockLocation       StockLocation?
 
   @@map("warehouses")
 }
@@ -149,6 +179,9 @@ model Product {
   approvedBy        User?              @relation("ProductApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   attributes        ProductAttribute[]
   units             ProductUnit[]
+  batches           StockBatch[]
+  balances          InventoryBalance[]
+  ledgerEntries     LedgerEntry[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -191,6 +224,103 @@ model ProductUnit {
   @@map("product_units")
 }
 
+model StockLocation {
+  id           String             @id @default(uuid())
+  locationType LocationType       @map("location_type")
+  warehouseId  String?            @unique @map("warehouse_id")
+  clientId     String?            @unique @map("client_id")
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  warehouse    Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  client       Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  balances     InventoryBalance[]
+  ledgerEntries LedgerEntry[]
+
+  @@map("stock_locations")
+}
+
+model StockBatch {
+  id            String             @id @default(uuid())
+  productId     String             @map("product_id")
+  batchNumber   String?            @map("batch_number")
+  expiryDate    DateTime?          @map("expiry_date")
+  status        BatchStatus        @default(ACTIVE)
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  product       Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  balances      InventoryBalance[]
+  ledgerEntries LedgerEntry[]
+
+  @@unique([productId, batchNumber])
+  @@index([expiryDate])
+  @@map("stock_batches")
+}
+
+model InventoryBalance {
+  id          String        @id @default(uuid())
+  locationId  String        @map("location_id")
+  productId   String        @map("product_id")
+  batchId     String?       @map("batch_id")
+  usableQty   Decimal       @default(0) @map("usable_qty") @db.Decimal(18, 4)
+  reservedQty Decimal       @default(0) @map("reserved_qty") @db.Decimal(18, 4)
+  damagedQty  Decimal       @default(0) @map("damaged_qty") @db.Decimal(18, 4)
+  expiredQty  Decimal       @default(0) @map("expired_qty") @db.Decimal(18, 4)
+  version     Int           @default(0)
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  location    StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch       StockBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@unique([locationId, productId, batchId])
+  @@index([locationId])
+  @@index([productId])
+  @@map("inventory_balances")
+}
+
+model LedgerTransaction {
+  id             String          @id @default(uuid())
+  transactionType TransactionType @map("transaction_type")
+  sourceRefType  String?         @map("source_ref_type")
+  sourceRefId    String?         @map("source_ref_id")
+  idempotencyKey String?         @unique @map("idempotency_key")
+  reversalOfTxId String?         @map("reversal_of_tx_id")
+  postedById     String          @map("posted_by_id")
+  postedAt       DateTime        @default(now()) @map("posted_at")
+
+  postedBy       User            @relation(fields: [postedById], references: [id], onDelete: Restrict)
+  entries        LedgerEntry[]
+
+  @@index([postedAt])
+  @@index([transactionType])
+  @@map("ledger_transactions")
+}
+
+model LedgerEntry {
+  id                       String         @id @default(uuid())
+  transactionId            String         @map("transaction_id")
+  locationId               String         @map("location_id")
+  productId                String         @map("product_id")
+  batchId                  String?        @map("batch_id")
+  condition                StockCondition @default(USABLE)
+  qtyDeltaBase             Decimal        @map("qty_delta_base") @db.Decimal(18, 4)
+  originalQty              Decimal        @map("original_qty") @db.Decimal(18, 4)
+  unitNameSnapshot         String         @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal        @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  reversalOfEntryId        String?        @map("reversal_of_entry_id")
+  createdAt                DateTime       @default(now()) @map("created_at")
+
+  transaction              LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  location                 StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product                  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch                    StockBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([locationId])
+  @@index([productId])
+  @@index([transactionId])
+  @@map("ledger_entries")
+}
+
 model User {
   id                  String                      @id @default(uuid())
   username            String                      @unique
@@ -212,6 +342,7 @@ model User {
   loginEvents         LoginEvent[]
   assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
   approvedProducts    Product[]                   @relation("ProductApprovedBy")
+  postedTransactions  LedgerTransaction[]
 
   @@index([clientId])
   @@index([warehouseId])
