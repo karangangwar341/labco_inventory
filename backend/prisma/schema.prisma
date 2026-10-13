@@ -160,6 +160,42 @@ enum DepartmentReturnStatus {
   REJECTED
 }
 
+enum ImportType {
+  STOCK_IN
+  STOCK_OUT
+  PRODUCT_CATALOG
+  PHYSICAL_COUNT
+}
+
+enum ImportBatchStatus {
+  DRAFT
+  VALIDATED
+  SUBMITTED
+  PARTIALLY_APPROVED
+  APPROVED
+  REJECTED
+}
+
+enum ImportApprovalMode {
+  ALL_OR_NOTHING
+  PARTIAL
+}
+
+enum ImportRowStatus {
+  PENDING
+  VALID
+  INVALID
+  APPROVED
+  REJECTED
+  POSTED
+}
+
+enum FileScanStatus {
+  PENDING
+  CLEAN
+  QUARANTINED
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -459,6 +495,9 @@ model User {
   approvedDepartmentIssues DepartmentIssue[]      @relation("DepartmentIssueApprovedBy")
   returnedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnReturnedBy")
   approvedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnApprovedBy")
+  uploadedAttachments     Attachment[]            @relation("UploadedAttachments")
+  importBatches           ImportBatch[]           @relation("UserImportBatches")
+  approvedImportBatches   ImportBatch[]           @relation("ApprovedImportBatches")
 
   @@index([clientId])
   @@index([warehouseId])
@@ -818,4 +857,71 @@ model DepartmentReturn {
   @@index([productId])
   @@index([status])
   @@map("department_returns")
+}
+
+model Attachment {
+  id           String         @id @default(uuid())
+  storageKey   String         @unique @map("storage_key")
+  originalName String         @map("original_name")
+  mimeType     String         @map("mime_type")
+  sizeBytes    Int            @map("size_bytes")
+  checksum     String?
+  scanStatus   FileScanStatus @default(CLEAN) @map("scan_status")
+  uploadedById String         @map("uploaded_by_id")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  uploadedBy   User           @relation("UploadedAttachments", fields: [uploadedById], references: [id], onDelete: Restrict)
+  importBatches ImportBatch[]
+
+  @@map("attachments")
+}
+
+model ImportBatch {
+  id                String             @id @default(uuid())
+  importType        ImportType         @map("import_type")
+  sourceFilename    String             @map("source_filename")
+  attachmentId      String?            @map("attachment_id")
+  uploadedById      String             @map("uploaded_by_id")
+  status            ImportBatchStatus  @default(DRAFT)
+  approvalMode      ImportApprovalMode @default(PARTIAL) @map("approval_mode")
+  rawExtractionJson Json?              @map("raw_extraction_json")
+  errorSummary      String?            @map("error_summary")
+  approvedById      String?            @map("approved_by_id")
+  approvedAt        DateTime?          @map("approved_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  uploadedBy        User               @relation("UserImportBatches", fields: [uploadedById], references: [id], onDelete: Restrict)
+  approvedBy        User?              @relation("ApprovedImportBatches", fields: [approvedById], references: [id], onDelete: SetNull)
+  attachment        Attachment?        @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
+  rows              ImportRow[]
+
+  @@index([uploadedById])
+  @@index([status])
+  @@index([importType])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id                     String          @id @default(uuid())
+  batchId                String          @map("batch_id")
+  rowNumber              Int             @map("row_number")
+  rawDataJson            Json            @map("raw_data_json")
+  normalizedDataJson     Json            @map("normalized_data_json")
+  validationStatus       ImportRowStatus @default(PENDING) @map("validation_status")
+  confidenceScore        Decimal?        @map("confidence_score") @db.Decimal(5, 4)
+  hasDuplicateWarning    Boolean         @default(false) @map("has_duplicate_warning")
+  duplicateWarningReason String?         @map("duplicate_warning_reason")
+  validationErrors       Json?           @map("validation_errors")
+  editedAfterExtraction  Boolean         @default(false) @map("edited_after_extraction")
+  requestLineId          String?         @map("request_line_id")
+  ledgerTransactionId    String?         @map("ledger_transaction_id")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
+
+  batch                  ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([validationStatus])
+  @@map("import_rows")
 }

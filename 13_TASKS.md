@@ -29,7 +29,7 @@
 - [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [x] T-010 Client manufacturing linked/separate workflows (production runs, planned/actual/wastage output tracking, raw material availability check, atomic input deductions and output additions with no partial posting)
 - [x] T-011 Departments, issues, returns and condition handling (department master, proposed change approval, issue history without separate stock balance, condition returns into Usable/Damaged/Expired buckets, Super Admin write-off)
-- [ ] T-012 Bulk CSV/document extraction and review UI
+- [x] T-012 Bulk CSV/document extraction and review UI (Gemini adapter & deterministic extraction, unapproved draft boundary, duplicate warnings without silent merge, row editing without re-upload, all-or-nothing and partial approvals, single source warehouse check, formula-injection neutralization, Next.js review grid)
 - [ ] T-013 Notifications, low-stock and expiry alerts
 - [ ] T-014 Reports, exports and export audit
 - [ ] T-015 Backups, monitoring, restore drills and runbook

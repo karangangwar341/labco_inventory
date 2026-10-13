@@ -12,6 +12,7 @@ import { RequestsModule } from './requests/requests.module.js';
 import { ShipmentsModule } from './shipments/shipments.module.js';
 import { ManufacturingModule } from './manufacturing/manufacturing.module.js';
 import { DepartmentsModule } from './departments/departments.module.js';
+import { ImportsModule } from './imports/imports.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { DepartmentsModule } from './departments/departments.module.js';
     ShipmentsModule,
     ManufacturingModule,
     DepartmentsModule,
+    ImportsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

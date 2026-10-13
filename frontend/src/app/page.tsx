@@ -1,69 +1,108 @@
-import Image from "next/image";
+import Link from 'next/link';
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans">
+      <main className="max-w-6xl mx-auto px-6 py-16 w-full space-y-12">
+        <header className="space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-700/50 text-indigo-300 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Warehouse & Manufacturing AI Operations Platform
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white">
+            Labco Warehouse & Inventory Management
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="max-w-2xl text-slate-400 text-base leading-relaxed">
+            End-to-end ACID inventory ledger, multi-tenant client manufacturing, department traceability, and AI-assisted document ingestion with row-locking concurrency control.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        </header>
+
+        {/* Feature Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Link
+            href="/imports"
+            className="group p-6 rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 hover:bg-slate-850 transition duration-200 flex flex-col justify-between shadow-lg"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="space-y-3">
+              <span className="text-2xl p-2.5 rounded-xl bg-indigo-950/80 text-indigo-400 inline-block border border-indigo-800/60">
+                📄
+              </span>
+              <h2 className="text-xl font-bold text-white group-hover:text-indigo-300 transition">
+                Bulk AI Document Import & Review
+              </h2>
+              <p className="text-sm text-slate-400 leading-normal">
+                Multimodal AI extraction, field mapping, confidence scoring, duplicate warnings, and all-or-nothing/partial Super Admin posting.
+              </p>
+            </div>
+            <div className="mt-6 flex items-center text-xs font-semibold text-indigo-400 group-hover:text-indigo-300">
+              Open Review Console →
+            </div>
+          </Link>
+
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between shadow-lg">
+            <div className="space-y-3">
+              <span className="text-2xl p-2.5 rounded-xl bg-emerald-950/80 text-emerald-400 inline-block border border-emerald-800/60">
+                ⚖️
+              </span>
+              <h2 className="text-xl font-bold text-white">
+                Immutable Stock Ledger & Balance
+              </h2>
+              <p className="text-sm text-slate-400 leading-normal">
+                ACID row-locking balance projection: Physical = Usable + Damaged + Expired. Reservations guarantee Available = Usable - Reserved ≥ 0.
+              </p>
+            </div>
+            <div className="mt-6 text-xs font-mono text-emerald-400">
+              Active • Enforcing Non-Negotiable Invariants
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col justify-between shadow-lg">
+            <div className="space-y-3">
+              <span className="text-2xl p-2.5 rounded-xl bg-purple-950/80 text-purple-400 inline-block border border-purple-800/60">
+                🏭
+              </span>
+              <h2 className="text-xl font-bold text-white">
+                Client Manufacturing & Departments
+              </h2>
+              <p className="text-sm text-slate-400 leading-normal">
+                Linked & separate production workflows, atomic input deduction, department issue/return history with condition buckets (usable, damaged, expired).
+              </p>
+            </div>
+            <div className="mt-6 text-xs font-mono text-purple-400">
+              Active • Client Tenancy Scoped
+            </div>
+          </div>
         </div>
+
+        {/* System Architecture Invariants Strip */}
+        <section className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-4">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            Non-Negotiable System Invariants
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-300">
+            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+              <strong className="text-white block mb-1">Untrusted AI Data</strong>
+              No autonomous approvals or duplicate merging.
+            </div>
+            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+              <strong className="text-white block mb-1">Zero Negative Stock</strong>
+              Available = Usable - Reserved ≥ 0 enforced on commit.
+            </div>
+            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+              <strong className="text-white block mb-1">Tenant Privacy</strong>
+              Inbound shipments conceal source warehouse identity.
+            </div>
+            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800">
+              <strong className="text-white block mb-1">Append-Only Ledger</strong>
+              Corrections via linked reversal/replacement pairs only.
+            </div>
+          </div>
+        </section>
       </main>
+
+      <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
+        Labco Instruments Warehouse & Client Inventory Platform • Phase 8 Complete
+      </footer>
     </div>
   );
 }
