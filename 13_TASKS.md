@@ -20,7 +20,7 @@
 ## Implementation tasks
 - [x] T-001 Repository, CI, lint, tests, dependency/secret scanning (monorepo layout, NestJS backend, Next.js frontend, Prisma, CI workflows, secret hygiene)
 - [x] T-002 Authentication, session replacement, lockout and password policy (JWT, bcrypt, 5-attempt lockout for 15m, single active session revocation, 7-day inactivity timeout)
-- [ ] T-003 Users, clients, warehouses and assignments
+- [x] T-003 Users, clients, warehouses and assignments (client & warehouse CRUD, many-to-many assignments with effective dates, role validation, session revocation on disable/reset)
 - [ ] T-004 Role-scoped authorization middleware and tests
 - [ ] T-005 Product catalogs, attributes, units, conversion snapshots
 - [ ] T-006 Immutable inventory ledger and balance projection

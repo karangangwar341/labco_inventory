@@ -19,6 +19,11 @@ enum UserStatus {
   LOCKED
 }
 
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum LoginOutcome {
   SUCCESS
   INVALID_CREDENTIALS
@@ -26,22 +31,77 @@ enum LoginOutcome {
   ACCOUNT_DISABLED
 }
 
-model User {
-  id                  String       @id @default(uuid())
-  username            String       @unique
-  passwordHash        String       @map("password_hash")
-  role                UserRole
-  status              UserStatus   @default(ACTIVE)
-  failedLoginAttempts Int          @default(0) @map("failed_login_attempts")
-  lockoutUntil        DateTime?    @map("lockout_until")
-  lockoutCount        Int          @default(0) @map("lockout_count")
-  disabledAt          DateTime?    @map("disabled_at")
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+model Client {
+  id                   String                      @id @default(uuid())
+  name                 String                      @unique
+  status               OrganizationStatus          @default(ACTIVE)
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  updatedAt            DateTime                    @updatedAt @map("updated_at")
 
+  users                User[]
+  warehouseAssignments ClientWarehouseAssignment[]
+
+  @@map("clients")
+}
+
+model Warehouse {
+  id                  String                      @id @default(uuid())
+  name                String                      @unique
+  locationDescription String?                     @map("location_description")
+  status              OrganizationStatus          @default(ACTIVE)
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+
+  users               User[]
+  clientAssignments   ClientWarehouseAssignment[]
+
+  @@map("warehouses")
+}
+
+model ClientWarehouseAssignment {
+  id           String    @id @default(uuid())
+  clientId     String    @map("client_id")
+  warehouseId  String    @map("warehouse_id")
+  isActive     Boolean   @default(true) @map("is_active")
+  activeFrom   DateTime  @default(now()) @map("active_from")
+  inactiveFrom DateTime? @map("inactive_from")
+  changedById  String?   @map("changed_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  changedBy    User?     @relation(name: "AssignmentChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([warehouseId])
+  @@index([isActive])
+  @@map("client_warehouse_assignments")
+}
+
+model User {
+  id                  String                      @id @default(uuid())
+  username            String                      @unique
+  passwordHash        String                      @map("password_hash")
+  role                UserRole
+  status              UserStatus                  @default(ACTIVE)
+  clientId            String?                     @map("client_id")
+  warehouseId         String?                     @map("warehouse_id")
+  failedLoginAttempts Int                         @default(0) @map("failed_login_attempts")
+  lockoutUntil        DateTime?                   @map("lockout_until")
+  lockoutCount        Int                         @default(0) @map("lockout_count")
+  disabledAt          DateTime?                   @map("disabled_at")
+  createdAt           DateTime                    @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+
+  client              Client?                     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  warehouse           Warehouse?                  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   sessions            Session[]
   loginEvents         LoginEvent[]
+  assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
 
+  @@index([clientId])
+  @@index([warehouseId])
   @@map("users")
 }
 
