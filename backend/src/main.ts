@@ -11,6 +11,19 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Secure HTTP Headers (Runbook Section 7 & Security Baseline)
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=()',
+    );
+    next();
+  });
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(
