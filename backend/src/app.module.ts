@@ -10,6 +10,7 @@ import { CatalogModule } from './catalog/catalog.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { RequestsModule } from './requests/requests.module.js';
 import { ShipmentsModule } from './shipments/shipments.module.js';
+import { ManufacturingModule } from './manufacturing/manufacturing.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ShipmentsModule } from './shipments/shipments.module.js';
     InventoryModule,
     RequestsModule,
     ShipmentsModule,
+    ManufacturingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

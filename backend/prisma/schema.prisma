@@ -129,6 +129,19 @@ enum ShipmentStatus {
   DISCREPANCY_HOLD
 }
 
+enum ProductionMode {
+  LINKED
+  SEPARATE
+}
+
+enum ProductionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model Client {
   id                   String                      @id @default(uuid())
   name                 String                      @unique
@@ -142,6 +155,7 @@ model Client {
   products             Product[]
   stockLocation        StockLocation?
   stockRequests        StockRequest[]
+  productionRuns       ProductionRun[]
 
   @@map("clients")
 }
@@ -232,6 +246,8 @@ model Product {
   requestLines      StockRequestLine[]
   reservations      Reservation[]
   shipmentLines     ShipmentLine[]
+  productionInputs  ProductionInput[]
+  productionOutputs ProductionOutput[]
 
   @@index([ownerScope])
   @@index([clientId])
@@ -269,6 +285,8 @@ model ProductUnit {
 
   product          Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
   requestLines     StockRequestLine[]
+  productionInputs ProductionInput[]
+  productionOutputs ProductionOutput[]
 
   @@index([productId])
   @@index([status])
@@ -309,6 +327,7 @@ model StockBatch {
   requestLines  StockRequestLine[]
   reservations  Reservation[]
   shipmentLines ShipmentLine[]
+  productionInputs ProductionInput[]
 
   @@unique([productId, batchNumber])
   @@index([expiryDate])
@@ -405,6 +424,8 @@ model User {
   requests            StockRequest[]              @relation("RequestRequester")
   approvals           Approval[]                  @relation("ApprovalApprover")
   updatedSettings     SystemSetting[]
+  submittedProductionRuns ProductionRun[]         @relation("ProductionSubmittedBy")
+  approvedProductionRuns  ProductionRun[]         @relation("ProductionApprovedBy")
 
   @@index([clientId])
   @@index([warehouseId])
@@ -592,4 +613,75 @@ model SystemSetting {
   updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("system_settings")
+}
+
+model ProductionRun {
+  id                  String           @id @default(uuid())
+  clientId            String           @map("client_id")
+  mode                ProductionMode   @default(LINKED)
+  status              ProductionStatus @default(DRAFT)
+  productionReference String?          @map("production_reference")
+  plannedOutput       Decimal?         @map("planned_output") @db.Decimal(18, 4)
+  actualOutput        Decimal?         @map("actual_output") @db.Decimal(18, 4)
+  wastage             Decimal?         @map("wastage") @db.Decimal(18, 4)
+  notes               String?
+  submittedById       String           @map("submitted_by_id")
+  approvedById        String?          @map("approved_by_id")
+  submittedAt         DateTime?        @map("submitted_at")
+  approvedAt          DateTime?        @map("approved_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  client              Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  submittedBy         User             @relation("ProductionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  approvedBy          User?            @relation("ProductionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  inputs              ProductionInput[]
+  outputs             ProductionOutput[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([productionReference])
+  @@map("production_runs")
+}
+
+model ProductionInput {
+  id                       String       @id @default(uuid())
+  productionRunId          String       @map("production_run_id")
+  productId                String       @map("product_id")
+  batchId                  String?      @map("batch_id")
+  quantity                 Decimal      @db.Decimal(18, 4)
+  unitId                   String       @map("unit_id")
+  unitNameSnapshot         String       @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal      @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal      @map("base_quantity") @db.Decimal(18, 4)
+
+  productionRun            ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  product                  Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  batch                    StockBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  unit                     ProductUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([productionRunId])
+  @@index([productId])
+  @@map("production_inputs")
+}
+
+model ProductionOutput {
+  id                       String       @id @default(uuid())
+  productionRunId          String       @map("production_run_id")
+  productId                String       @map("product_id")
+  batchNumber              String?      @map("batch_number")
+  expiryDate               DateTime?    @map("expiry_date")
+  quantity                 Decimal      @db.Decimal(18, 4)
+  unitId                   String       @map("unit_id")
+  unitNameSnapshot         String       @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal      @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal      @map("base_quantity") @db.Decimal(18, 4)
+
+  productionRun            ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  product                  Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit                     ProductUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([productionRunId])
+  @@index([productId])
+  @@map("production_outputs")
 }
