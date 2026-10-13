@@ -3,10 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service.js';
+import { AuthorizationService } from './authorization.service.js';
 import { AuthController, MeController } from './auth.controller.js';
 import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { RolesGuard } from './guards/roles.guard.js';
+import { ShipmentPrivacyInterceptor } from './interceptors/shipment-privacy.interceptor.js';
 
 @Module({
   imports: [
@@ -23,7 +25,21 @@ import { RolesGuard } from './guards/roles.guard.js';
     }),
   ],
   controllers: [AuthController, MeController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard],
-  exports: [AuthService, JwtAuthGuard, RolesGuard, JwtModule],
+  providers: [
+    AuthService,
+    AuthorizationService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    ShipmentPrivacyInterceptor,
+  ],
+  exports: [
+    AuthService,
+    AuthorizationService,
+    JwtAuthGuard,
+    RolesGuard,
+    ShipmentPrivacyInterceptor,
+    JwtModule,
+  ],
 })
 export class AuthModule {}
