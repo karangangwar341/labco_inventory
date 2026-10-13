@@ -1,0 +1,49 @@
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module.js';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+
+  app.setGlobalPrefix('api/v1');
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle('Warehouse, Client Manufacturing & Inventory Management API')
+    .setDescription('REST API for Warehouse, Client Manufacturing & Inventory Management System')
+    .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Enter JWT token',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/v1/docs', app, document);
+
+  const port = process.env.PORT ?? 4000;
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}/api/v1`);
+  console.log(`Swagger documentation: http://localhost:${port}/api/v1/docs`);
+}
+await bootstrap();

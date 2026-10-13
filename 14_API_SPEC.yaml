@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: Warehouse and Client Inventory API
+  version: 0.1.0
+  description: Draft endpoint inventory only. Request/response schemas must be completed before implementation.
+servers:
+  - url: /api/v1
+security:
+  - sessionAuth: []
+components:
+  securitySchemes:
+    sessionAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+            request_id: { type: string }
+paths:
+  /auth/login:
+    post:
+      security: []
+      summary: Authenticate a user; enforce lockout and single active session.
+      responses:
+        "200": { description: Authenticated }
+        "401": { description: Invalid credentials }
+        "423": { description: Account temporarily locked }
+  /auth/logout:
+    post:
+      summary: Revoke current session.
+      responses:
+        "204": { description: Session revoked }
+  /me:
+    get:
+      summary: Return current user role and authorized scope.
+      responses:
+        "200": { description: Current user }
+  /clients:
+    get:
+      summary: List clients within caller scope.
+      responses:
+        "200": { description: Client list }
+    post:
+      summary: Create a client; Super Admin only.
+      responses:
+        "201": { description: Client created }
+  /warehouses:
+    get:
+      summary: List warehouses within caller scope.
+      responses:
+        "200": { description: Warehouse list }
+    post:
+      summary: Create a warehouse; Super Admin only.
+      responses:
+        "201": { description: Warehouse created }
+  /products:
+    get:
+      summary: List catalog products within caller scope.
+      responses:
+        "200": { description: Product list }
+    post:
+      summary: Create a product draft within caller's permitted catalog.
+      responses:
+        "201": { description: Product draft created }
+  /stock-requests:
+    get:
+      summary: List requests within caller scope.
+      responses:
+        "200": { description: Request list }
+    post:
+      summary: Create a stock request draft.
+      responses:
+        "201": { description: Draft created }
+  /stock-requests/{requestId}/submit:
+    post:
+      summary: Validate and submit request; reserve stock when applicable.
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Submitted }
+        "409": { description: State conflict or insufficient stock }
+  /stock-requests/{requestId}/approve:
+    post:
+      summary: Super Admin approves and atomically posts eligible request.
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Approved and posted }
+        "403": { description: Not authorized }
+        "409": { description: State or stock conflict }
+  /stock-requests/{requestId}/reject:
+    post:
+      summary: Super Admin rejects request and releases reservation.
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Rejected }
+  /import-batches:
+    post:
+      summary: Create a private import draft; must not post inventory.
+      responses:
+        "201": { description: Import draft created }
+  /import-batches/{batchId}/validate:
+    post:
+      summary: Validate imported draft rows.
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Validation results }
+  /reports/{reportType}:
+    get:
+      summary: Generate an authorized report; audit exports/downloads.
+      parameters:
+        - in: path
+          name: reportType
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Report output }

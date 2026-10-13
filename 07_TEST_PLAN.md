@@ -1,0 +1,70 @@
+# Test Plan & Release Acceptance Criteria
+**Version:** 1.0
+
+## 1. Release-blocking invariants
+- No negative usable stock.
+- No stock change from upload, draft or pending request.
+- No unauthorized approval or cross-client/warehouse data access.
+- No duplicate ledger posting on retries or repeated clicks.
+- No silent modification/deletion of posted ledger entries.
+- Reservation and balance changes are atomic.
+- Historical transactions preserve original unit/conversion snapshots.
+
+## 2. Functional scenarios
+1. Super Admin creates and disables a user; disabled user cannot log in and active sessions are revoked.
+2. Password reset revokes all sessions for the account.
+3. Store Admin cannot create products/categories, even through direct API calls.
+4. Client Admin cannot see another client's data or source warehouse identity for inbound shipments.
+5. Client-to-warehouse assignment blocks unassigned dispatch; removing assignment does not cancel existing in-transit shipments.
+6. Pending client product cannot be used in inventory transactions.
+7. Unit conversion 1 box = 12 pieces; 10 boxes converts to 120 pieces and the conversion snapshot is retained.
+8. Whole-unit product rejects 1.5; decimal-enabled product accepts only configured precision up to two decimals.
+9. Product threshold changes flag low stock but do not alter quantity.
+10. Batch/expiry fields are required only when tracking is enabled.
+11. Expired stock is excluded from usable stock and blocked from routine issue/dispatch.
+12. Damaged/expired stock is excluded from usable quantity; write-off requires approval.
+13. Physical count adjustment and historical correction follow separate workflows.
+14. Linked manufacturing posts all inputs/outputs atomically; simulated failure posts none.
+15. Department issue reduces central client stock only after approval; no department balance is created.
+16. Usable return restores central stock after approval; damaged/expired return remains unavailable.
+17. Low-stock alert triggers on downward crossing, persists while low, and triggers again only after recovery and a new crossing.
+18. Backup failure retries, alerts Super Admin and clears persistent warning only after successful backup.
+
+## 3. Reservation and concurrency tests
+1. 100 available; submit request for 90 → reserved 90, available 10.
+2. Submit another request for 20 → rejected for insufficient available stock.
+3. Reject first request → its 90 reservation releases; second request can be retried.
+4. Two concurrent requests whose total exceeds availability: at most the available total can reserve.
+5. Pending stock-in does not increase available stock; approved/posted stock-in does.
+6. Edit request from 90 to 95 with only 10 free: fail and preserve original reservation.
+7. Reduce request from 90 to 60: release 30.
+8. Change product: reserve replacement product before releasing original; failed replacement leaves original intact.
+9. Cancelled request cannot later be approved.
+10. Repeat approval call / retry with same idempotency key → one posting only.
+
+## 4. Bulk import tests
+- Unsupported file type/oversize/malicious file rejected safely.
+- Low-confidence extraction and missing required fields flagged.
+- Correcting a row does not require re-upload and does not change stock.
+- Duplicate rows are flagged and never silently merged.
+- All-or-nothing batch with one invalid row posts zero rows.
+- Partial batch posts only approved rows and preserves rejected/pending row states.
+- Stock-out batch with mixed source warehouses is rejected.
+- Raw file and extracted content are access-controlled and retention-managed.
+
+## 5. Security tests
+- Five consecutive failed logins → 15-minute lockout; successful login resets consecutive-failure count.
+- Repeated lockouts require Super Admin intervention.
+- Session inactivity limit is seven days; a new login invalidates the prior active session.
+- Direct API attempts to bypass role/tenant scope fail.
+- Attachment URLs cannot be guessed or accessed without authorization.
+- CSV export formula injection is neutralized.
+- Audit logs do not include passwords, tokens or secrets.
+- SQL injection, XSS, CSRF (where applicable), IDOR and unsafe file-upload tests pass.
+- Rate limits and password strength/common/compromised-password checks work.
+
+## 6. Performance/recovery tests to define before production
+- Define expected user count, data volume, p95 response-time targets and import sizes.
+- Restore a backup into an isolated environment and verify ledger/balance consistency.
+- Define and test RPO/RTO before production.
+- Verify migrations can be rolled back or safely forward-fixed.

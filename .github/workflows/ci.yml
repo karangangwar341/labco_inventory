@@ -1,0 +1,63 @@
+name: Continuous Integration & Quality Gate
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  lint-and-test:
+    name: Lint, Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: warehouse_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Verify Secret Hygiene
+        run: |
+          echo "Verifying no tracked .env or private key files..."
+          if git ls-files | grep -E '\.env$|\.key$|\.pem$'; then
+            echo "ERROR: Sensitive file committed to Git!"
+            exit 1
+          fi
+          echo "Secret hygiene check passed."
+
+      - name: Install Monorepo Root Dependencies
+        run: npm ci || npm install
+
+      - name: Run Backend Tests
+        if: hashFiles('backend/package.json') != ''
+        run: |
+          cd backend
+          npm ci || npm install
+          npm run test --if-present
+
+      - name: Run Frontend Tests
+        if: hashFiles('frontend/package.json') != ''
+        run: |
+          cd frontend
+          npm ci || npm install
+          npm run test --if-present

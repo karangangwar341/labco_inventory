@@ -1,0 +1,65 @@
+# Decision Register & Open Questions
+**Version:** 1.0 | Use this file as the single source of truth for decisions not yet finalized.
+
+## Confirmed baseline decisions & architecture
+- Design baseline approved; Phase 1 implementation authorized by owner.
+- Online-only; no offline mode.
+- No barcode scanning.
+- No purchase/selling prices, currency or inventory valuation.
+- Super Admin approves all inventory-affecting requests.
+- Company product catalog is managed by Super Admin; client catalog by Client Admin with approval before transactions.
+- Client-to-warehouse assignment is many-to-many and Super-Admin-controlled.
+- No product SKU/code field.
+- Quantity precision configurable per product, maximum two decimal places.
+- Pending stock-out reserves available stock; no auto-expiry; reject/cancel releases reservation.
+- Posted ledger immutable; corrections use reversal/corrected entries.
+- Pending requests editable only with atomic revalidation and reservation recalculation.
+- One active session per account; new login invalidates prior session; seven-day inactivity timeout.
+- Five consecutive failed logins → 15-minute lockout; repeated lockouts require Super Admin intervention.
+- Password minimum 12 characters and strength/compromised-password checks.
+- Daily backups retained 90 days; failures retry and alert Super Admin persistently.
+- Continuous transaction-log protection / Point-in-Time Recovery (PITR) requirement: target near-zero data loss for confirmed transactions (daily backups alone are insufficient for inter-day failure protection).
+- Strict atomic database transactions: every approved inventory movement must commit atomically; partial updates are strictly prohibited.
+- Backup isolation: independent backup copies protected from accidental deletion, unauthorized access, and primary database failures.
+- Backup verification & restoration: automated backup-integrity checks and scheduled restoration tests; backups are not considered reliable until restoration has been tested.
+- Inventory integrity: immutable stock ledger, automated reconciliation checks, and complete audit history.
+- In-app notifications and persistent request bar; sound off by default. No email/SMS/push.
+- Expiry warning defaults 90/30/7 days; expired stock excluded from usable stock and routine issue/dispatch.
+- Linked and separate manufacturing workflows both supported.
+- Department tracking is issue/return history only, with no department stock balance.
+- Store Admin does not create products/categories and does not receive low-stock alerts under current policy.
+- AI only extracts/classifies/maps uploaded documents/images for human review; no AI duplicate decision or transaction execution.
+- Bulk duplicates are flagged and never silently merged.
+- Priority default Normal; requester can suggest, Super Admin controls final priority.
+
+### Finalized Technology Stack (Approved)
+- **Backend:** Node.js + TypeScript + NestJS (modular architecture, dependency injection, guards, validation pipes).
+- **Frontend:** Next.js + React + TypeScript (modern responsive UI, accessible, themeable).
+- **Database:** PostgreSQL (ACID transactions, row-level locking `FOR UPDATE` for reservation and ledger concurrency, continuous WAL).
+- **ORM / Data Access:** Prisma ORM, supplemented with explicit raw SQL for pessimistic row locking and serializable ledger transactions.
+- **Authentication & Authorization:** Short-lived JWT access tokens with secure refresh, session invalidation on login/password reset, and NestJS RBAC guards + service-level authorization.
+- **AI Document Extraction:** Google Gemini API, abstracted behind a provider-independent adapter (multimodal extraction & field mapping only).
+- **File Storage:** Private local disk storage during development; private S3-compatible object storage for production (provider deferred).
+- **API Standard:** REST API with OpenAPI (Swagger) documentation under `/api/v1`.
+- **Hosting / Cloud Vendor:** Deferred until full system design and core implementation are completed.
+
+### Finalized Business Rules & Gates
+- **D-001 (Receipt confirmation disabled):** When disabled, on Super Admin dispatch approval, warehouse stock decreases and client stock increases atomically in the same database transaction. In-transit tracking is bypassed.
+- **D-002 (Shipment discrepancies):** When receiving with discrepancies (e.g., 100 dispatched, 95 received), the received quantity (95) enters client usable stock only upon Super Admin receipt approval. Discrepancy quantity (5) enters `DISCREPANCY_HOLD`; write-offs or adjustments require separate Super Admin approval.
+- **D-003 (Product duplicate detection):** Deterministic normalized key: `catalog_scope` + `client_id` (if client product) + `normalized(name)` + `category_id` + `brand` + `canonicalized_attributes`. Exact duplicates blocked; similar products trigger warnings. AI never resolves duplicates autonomously.
+- **D-004 (Inventory condition & balance model):** Mutually exclusive condition buckets: Usable, Damaged, Expired.
+  $$\text{Physical Qty} = \text{Usable} + \text{Damaged} + \text{Expired}$$
+  $$\text{Available Qty} = \text{Usable} - \text{Reserved} \ge 0$$
+  Reservations are an active hold on usable stock, avoiding double-counting.
+- **D-008 (Client account model):** One shared account per client organization initially (password reset on staff turnover). Schema designed to cleanly support named individual accounts (`client_users`) in the future. Audit trail accurately identifies the account.
+- **D-013 & D-014 (Conversion and specification changes):** Historical transactions permanently preserve the snapshot conversion ratio and specification version at transaction time. Material changes require a new version, effective date, and Super Admin approval before applying to future transactions. Never silently recalculate history.
+
+## Deferred / Open during development
+**D-005 / D-006 Batch approval semantics:** Support selective approval with bulk "Approve All Valid" option; batch rejection and all-or-nothing rollback enforced for atomic production runs and all-or-nothing import batches.
+**D-007 Client Admin permissions:** Scoped strictly to client's own inventory, reports, and import drafts.
+**D-009 / D-010 Cloud hosting & deployment:** Provider, region, and production infrastructure targets deferred.
+**D-011 Data retention & legal review:** Configure default retention schedules for audit logs, drafts, and attachments.
+**D-015 Source types & file constraints:** Configure initial source types and upload constraints (MIME, size limits).
+
+## Change control
+Any new business rule must be recorded with ID, decision, rationale, date, owner and impacted documents. Update all affected documents together. The coding agent must not invent a value for an open decision; it should flag/block affected implementation until resolved.
