@@ -536,7 +536,7 @@ export class RequestsService {
             user.id,
           );
         } else {
-          // 2. Post ledger transaction (deduction)
+          // 2. Post ledger transaction (deduction) in shared atomic transaction
           await this.ledgerService.postTransaction(
             {
               transactionType: TransactionType.STOCK_OUT,
@@ -554,10 +554,11 @@ export class RequestsService {
               })),
             },
             user.id,
+            tx,
           );
         }
       } else if (request.requestType === RequestType.STOCK_IN) {
-        // Post ledger transaction (addition)
+        // Post ledger transaction (addition) in shared atomic transaction
         await this.ledgerService.postTransaction(
           {
             transactionType: TransactionType.STOCK_IN,
@@ -575,9 +576,10 @@ export class RequestsService {
             })),
           },
           user.id,
+          tx,
         );
       } else if (request.requestType === RequestType.ADJUSTMENT) {
-        // Physical count adjustment posting
+        // Physical count adjustment posting in shared atomic transaction
         const adjustmentLines: any[] = [];
         for (const l of request.lines) {
           const delta = l.varianceQuantity
@@ -617,6 +619,7 @@ export class RequestsService {
               lines: adjustmentLines,
             },
             user.id,
+            tx,
           );
         }
       }
@@ -646,7 +649,11 @@ export class RequestsService {
   /**
    * List requests scoped to caller's role.
    */
-  async getRequests(user: AuthenticatedUser, status?: RequestStatus) {
+  async getRequests(
+    user: AuthenticatedUser,
+    status?: RequestStatus,
+    pagination?: { limit?: number; page?: number },
+  ) {
     const where: Prisma.StockRequestWhereInput = {};
     if (status) {
       where.status = status;
@@ -669,9 +676,14 @@ export class RequestsService {
       where.clientId = dbUser.clientId;
     }
 
+    const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
+    const pageNumber = pagination?.page ? Math.max(Number(pagination.page), 1) : 1;
+
     return this.prisma.stockRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      take: pageSize,
+      skip: (pageNumber - 1) * pageSize,
       include: {
         lines: true,
         approvals: true,

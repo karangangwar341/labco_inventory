@@ -9,7 +9,7 @@ import {
   UseInterceptors,
   Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -33,11 +33,19 @@ export class ShipmentsController {
   @ApiOperation({
     summary: 'List shipments within caller scope; redacts source warehouse identity for Client Admins',
   })
+  @ApiQuery({ name: 'status', required: false, enum: ShipmentStatus })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
   async getShipments(
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: ShipmentStatus,
+    @Query('limit') limit?: number,
+    @Query('page') page?: number,
   ) {
-    return this.shipmentsService.getShipments(user, status);
+    return this.shipmentsService.getShipments(user, status, {
+      limit: limit ? Number(limit) : undefined,
+      page: page ? Number(page) : undefined,
+    });
   }
 
   @Get(':id')

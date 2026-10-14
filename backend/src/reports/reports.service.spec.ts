@@ -129,7 +129,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
             postedAt: new Date('2026-05-01'),
             transactionType: TransactionType.TRANSFER_DISPATCH,
             sourceRefType: 'SHIPMENT',
-            postedBy: { email: 'operator@labco.com' },
+            postedBy: { username: 'operator' },
           },
           product: { name: 'Reagent Alpha' },
           location: {

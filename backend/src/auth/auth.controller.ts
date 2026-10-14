@@ -19,6 +19,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { AuthResponseDto } from './dto/auth-response.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser, type AuthenticatedUser } from './decorators/current-user.decorator.js';
+import { LoginRateLimiterGuard } from './guards/login-rate-limiter.guard.js';
 import type { Request } from 'express';
 
 @ApiTags('Authentication')
@@ -27,11 +28,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @UseGuards(LoginRateLimiterGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Authenticate user with username and password',
     description:
-      'Enforces single active session policy (prior sessions are revoked), 5-failed attempt lockout for 15 minutes, and minimum 12-char password.',
+      'Enforces IP rate limiting, single active session policy (prior sessions revoked), 5-failed attempt lockout for 15 minutes, and minimum 12-char password.',
   })
   @ApiResponse({ status: 200, type: AuthResponseDto, description: 'Authentication successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })

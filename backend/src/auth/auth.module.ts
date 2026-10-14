@@ -16,12 +16,20 @@ import { ShipmentPrivacyInterceptor } from './interceptors/shipment-privacy.inte
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'super_secret_jwt_signing_key_change_in_production',
-        signOptions: {
-          expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          throw new Error(
+            'FATAL: JWT_SECRET environment variable is missing. The application cannot start without an explicitly configured JWT signing secret.',
+          );
+        }
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController, MeController],

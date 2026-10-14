@@ -262,6 +262,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           ],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
 
       // 2. Finished good addition posted in same execution
@@ -278,6 +279,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           ],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
     });
 

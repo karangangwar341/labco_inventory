@@ -47,7 +47,7 @@ export class ShipmentsService {
         ? ShipmentType.DISPATCH_TO_CLIENT
         : ShipmentType.WAREHOUSE_TRANSFER;
 
-    // Deduct source location stock
+    // Deduct source location stock in shared atomic transaction
     await this.ledgerService.postTransaction(
       {
         transactionType: TransactionType.TRANSFER_DISPATCH,
@@ -65,6 +65,7 @@ export class ShipmentsService {
         })),
       },
       actorId,
+      tx,
     );
 
     if (!receiptConfirmationEnabled) {
@@ -86,6 +87,7 @@ export class ShipmentsService {
           })),
         },
         actorId,
+        tx,
       );
 
       return tx.shipment.create({
@@ -174,6 +176,18 @@ export class ShipmentsService {
       }
     }
 
+    // Finding #4: Validate that all shipment lines are reported and no duplicates
+    if (!dto.lines || dto.lines.length !== shipment.lines.length) {
+      throw new BadRequestException(
+        `Receipt submission must report all ${shipment.lines.length} shipment line(s)`,
+      );
+    }
+
+    const reportedLineIds = new Set(dto.lines.map((l) => l.shipmentLineId));
+    if (reportedLineIds.size !== shipment.lines.length) {
+      throw new BadRequestException('Duplicate shipment lines detected in receipt submission');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       let hasDiscrepancy = false;
 
@@ -186,6 +200,19 @@ export class ShipmentsService {
         }
 
         const receivedQtyDec = new Prisma.Decimal(lineDto.receivedQty);
+
+        // Finding #4: Non-negative and capped at dispatched quantity
+        if (receivedQtyDec.isNegative()) {
+          throw new BadRequestException(
+            `Received quantity cannot be negative for line ${line.id}`,
+          );
+        }
+        if (receivedQtyDec.greaterThan(line.dispatchedQty)) {
+          throw new BadRequestException(
+            `Received quantity (${receivedQtyDec}) cannot exceed dispatched quantity (${line.dispatchedQty}) for line ${line.id}`,
+          );
+        }
+
         const discrepancyQtyDec = line.dispatchedQty.minus(receivedQtyDec);
 
         if (!discrepancyQtyDec.isZero()) {
@@ -253,7 +280,7 @@ export class ShipmentsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Post approved received quantities to destination usable stock
+      // 1. Post approved received quantities to destination usable stock in shared atomic transaction
       const linesToCredit = shipment.lines
         .filter((l) => l.receivedQty && !l.receivedQty.isZero())
         .map((l) => ({
@@ -276,6 +303,7 @@ export class ShipmentsService {
             lines: linesToCredit,
           },
           user.id,
+          tx,
         );
       }
 
@@ -302,7 +330,11 @@ export class ShipmentsService {
   /**
    * List shipments within caller scope.
    */
-  async getShipments(user: AuthenticatedUser, status?: ShipmentStatus) {
+  async getShipments(
+    user: AuthenticatedUser,
+    status?: ShipmentStatus,
+    pagination?: { limit?: number; page?: number },
+  ) {
     const where: Prisma.ShipmentWhereInput = {};
     if (status) {
       where.status = status;
@@ -329,9 +361,14 @@ export class ShipmentsService {
       where.destinationLocationId = location.id;
     }
 
+    const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
+    const pageNumber = pagination?.page ? Math.max(Number(pagination.page), 1) : 1;
+
     return this.prisma.shipment.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      take: pageSize,
+      skip: (pageNumber - 1) * pageSize,
       include: {
         lines: {
           include: { product: { select: { id: true, name: true } } },

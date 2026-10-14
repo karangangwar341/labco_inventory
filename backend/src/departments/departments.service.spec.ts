@@ -377,6 +377,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           ],
         }),
         'sa-1',
+        expect.anything(),
       );
 
       // Invariant verification: Ledger deducted client stock; status updated; no department balance table accessed
@@ -464,6 +465,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           ],
         }),
         'sa-1',
+        expect.anything(),
       );
     });
 
@@ -504,6 +506,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           ],
         }),
         'sa-1',
+        expect.anything(),
       );
     });
   });

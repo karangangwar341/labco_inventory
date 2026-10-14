@@ -97,6 +97,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           lines: [expect.objectContaining({ locationId: 'loc-wh-1', direction: 'OUT', quantity: 100 })],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
       // Immediately credits client stock in same transaction
       expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(
@@ -105,6 +106,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           lines: [expect.objectContaining({ locationId: 'loc-client-1', direction: 'IN', quantity: 100 })],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
     });
 
@@ -133,6 +135,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           transactionType: TransactionType.TRANSFER_DISPATCH,
         }),
         superAdminUser.id,
+        expect.anything(),
       );
       // Does NOT credit destination stock yet
       expect(mockLedgerService.postTransaction).toHaveBeenCalledTimes(1);
@@ -249,6 +252,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           ],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
       // Status updated to DISCREPANCY_HOLD
       expect(mockPrisma.shipment.update).toHaveBeenCalledWith(

@@ -343,6 +343,7 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
           ],
         }),
         'sa-1',
+        expect.anything(),
       );
 
       expect(mockPrisma.importRow.update).toHaveBeenCalledWith(

@@ -117,8 +117,8 @@ export class DepartmentsService {
       orderBy: { name: 'asc' },
       include: {
         client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        createdBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
       },
     });
   }
@@ -132,8 +132,8 @@ export class DepartmentsService {
       where: { id },
       include: {
         client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        createdBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
       },
     });
 
@@ -416,8 +416,8 @@ export class DepartmentsService {
         department: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },
         unit: { select: { id: true, unitName: true } },
-        issuedBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        issuedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
       },
     });
   }
@@ -433,8 +433,8 @@ export class DepartmentsService {
         department: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },
         unit: { select: { id: true, unitName: true } },
-        issuedBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        issuedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
         returns: true,
       },
     });
@@ -479,42 +479,45 @@ export class DepartmentsService {
 
     const clientLocation = await this.inventoryService.getOrCreateLocationForClient(issue.clientId);
 
-    // Atomic transaction: deduct central client usable stock and update issue status
-    // 1. Post ledger transaction for stock out from client central stock
-    await this.ledgerService.postTransaction(
-      {
-        transactionType: TransactionType.STOCK_OUT,
-        sourceRefType: 'DEPARTMENT_ISSUE',
-        sourceRefId: issue.id,
-        idempotencyKey: dto.idempotencyKey ?? `dept-issue-approve-${issue.id}`,
-        lines: [
-          {
-            locationId: clientLocation.id,
-            productId: issue.productId,
-            batchId: issue.batchId || undefined,
-            quantity: issue.quantity.toNumber(),
-            unitName: issue.unitNameSnapshot,
-            condition: StockCondition.USABLE,
-            direction: 'OUT',
-          },
-        ],
-      },
-      user.id,
-    );
+    // Atomic transaction: deduct central client usable stock and update issue status in single transaction
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Post ledger transaction for stock out from client central stock
+      await this.ledgerService.postTransaction(
+        {
+          transactionType: TransactionType.STOCK_OUT,
+          sourceRefType: 'DEPARTMENT_ISSUE',
+          sourceRefId: issue.id,
+          idempotencyKey: dto.idempotencyKey ?? `dept-issue-approve-${issue.id}`,
+          lines: [
+            {
+              locationId: clientLocation.id,
+              productId: issue.productId,
+              batchId: issue.batchId || undefined,
+              quantity: issue.quantity.toNumber(),
+              unitName: issue.unitNameSnapshot,
+              condition: StockCondition.USABLE,
+              direction: 'OUT',
+            },
+          ],
+        },
+        user.id,
+        tx,
+      );
 
-    // Invariant: No department stock balance is created! Department tracking is issue/return history only.
-    return this.prisma.departmentIssue.update({
-      where: { id: issue.id },
-      data: {
-        status: DepartmentIssueStatus.APPROVED,
-        approvedById: user.id,
-        issuedAt: new Date(),
-      },
-      include: {
-        department: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-        unit: { select: { id: true, unitName: true } },
-      },
+      // Invariant: No department stock balance is created! Department tracking is issue/return history only.
+      return tx.departmentIssue.update({
+        where: { id: issue.id },
+        data: {
+          status: DepartmentIssueStatus.APPROVED,
+          approvedById: user.id,
+          issuedAt: new Date(),
+        },
+        include: {
+          department: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true } },
+          unit: { select: { id: true, unitName: true } },
+        },
+      });
     });
   }
 
@@ -695,8 +698,8 @@ export class DepartmentsService {
         department: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },
         unit: { select: { id: true, unitName: true } },
-        returnedBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        returnedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
       },
     });
   }
@@ -712,8 +715,8 @@ export class DepartmentsService {
         department: { select: { id: true, name: true } },
         product: { select: { id: true, name: true } },
         unit: { select: { id: true, unitName: true } },
-        returnedBy: { select: { id: true, email: true, fullName: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        returnedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
         departmentIssue: true,
       },
     });
@@ -758,40 +761,43 @@ export class DepartmentsService {
 
     const clientLocation = await this.inventoryService.getOrCreateLocationForClient(ret.clientId);
 
-    // Credit central client stock in designated condition bucket and update return status
-    await this.ledgerService.postTransaction(
-      {
-        transactionType: TransactionType.STOCK_IN,
-        sourceRefType: 'DEPARTMENT_RETURN',
-        sourceRefId: ret.id,
-        idempotencyKey: dto.idempotencyKey ?? `dept-return-approve-${ret.id}`,
-        lines: [
-          {
-            locationId: clientLocation.id,
-            productId: ret.productId,
-            batchId: ret.batchId || undefined,
-            quantity: ret.quantity.toNumber(),
-            unitName: ret.unitNameSnapshot,
-            condition: ret.condition, // USABLE, DAMAGED, or EXPIRED
-            direction: 'IN',
-          },
-        ],
-      },
-      user.id,
-    );
+    // Credit central client stock in designated condition bucket and update return status in single atomic transaction
+    return this.prisma.$transaction(async (tx) => {
+      await this.ledgerService.postTransaction(
+        {
+          transactionType: TransactionType.STOCK_IN,
+          sourceRefType: 'DEPARTMENT_RETURN',
+          sourceRefId: ret.id,
+          idempotencyKey: dto.idempotencyKey ?? `dept-return-approve-${ret.id}`,
+          lines: [
+            {
+              locationId: clientLocation.id,
+              productId: ret.productId,
+              batchId: ret.batchId || undefined,
+              quantity: ret.quantity.toNumber(),
+              unitName: ret.unitNameSnapshot,
+              condition: ret.condition, // USABLE, DAMAGED, or EXPIRED
+              direction: 'IN',
+            },
+          ],
+        },
+        user.id,
+        tx,
+      );
 
-    return this.prisma.departmentReturn.update({
-      where: { id: ret.id },
-      data: {
-        status: DepartmentReturnStatus.APPROVED,
-        approvedById: user.id,
-        approvedAt: new Date(),
-      },
-      include: {
-        department: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true } },
-        unit: { select: { id: true, unitName: true } },
-      },
+      return tx.departmentReturn.update({
+        where: { id: ret.id },
+        data: {
+          status: DepartmentReturnStatus.APPROVED,
+          approvedById: user.id,
+          approvedAt: new Date(),
+        },
+        include: {
+          department: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true } },
+          unit: { select: { id: true, unitName: true } },
+        },
+      });
     });
   }
 

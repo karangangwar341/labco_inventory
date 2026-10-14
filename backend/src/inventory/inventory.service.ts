@@ -44,7 +44,7 @@ export class InventoryService {
 
   async getBalances(
     user: AuthenticatedUser,
-    filters?: { locationId?: string; productId?: string },
+    filters?: { locationId?: string; productId?: string; limit?: number; page?: number },
   ): Promise<CalculatedBalanceView[]> {
     const where: Prisma.InventoryBalanceWhereInput = {};
 
@@ -72,6 +72,9 @@ export class InventoryService {
       where.locationId = loc.id;
     }
 
+    const pageSize = filters?.limit ? Math.min(Number(filters.limit), 500) : 100;
+    const pageNumber = filters?.page ? Math.max(Number(filters.page), 1) : 1;
+
     const rawBalances = await this.prisma.inventoryBalance.findMany({
       where,
       include: {
@@ -80,6 +83,8 @@ export class InventoryService {
         location: true,
       },
       orderBy: { updatedAt: 'desc' },
+      take: pageSize,
+      skip: (pageNumber - 1) * pageSize,
     });
 
     return rawBalances.map((b) => {
@@ -88,7 +93,9 @@ export class InventoryService {
         id: b.id,
         locationId: b.locationId,
         productId: b.productId,
+        productName: (b as any).product?.name || b.productId,
         batchId: b.batchId,
+        batchNumber: (b as any).batch?.batchNumber,
         usableQty: b.usableQty,
         reservedQty: b.reservedQty,
         damagedQty: b.damagedQty,

@@ -407,6 +407,7 @@ describe('Requests & Reservations Service (T-007)', () => {
           ],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
     });
 
@@ -583,6 +584,7 @@ describe('Requests & Reservations Service (T-007)', () => {
           ],
         }),
         superAdminUser.id,
+        expect.anything(),
       );
     });
   });

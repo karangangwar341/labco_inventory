@@ -17,6 +17,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser, type AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { UserRole } from '@prisma/client';
+import { CorrectTransactionDto } from './dto/correct-transaction.dto.js';
 
 @ApiTags('Inventory Balances & Ledger')
 @ApiBearerAuth('JWT-auth')
@@ -36,12 +37,21 @@ export class InventoryController {
   })
   @ApiQuery({ name: 'locationId', required: false })
   @ApiQuery({ name: 'productId', required: false })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
   getBalances(
     @CurrentUser() user: AuthenticatedUser,
     @Query('locationId') locationId?: string,
     @Query('productId') productId?: string,
+    @Query('limit') limit?: number,
+    @Query('page') page?: number,
   ) {
-    return this.inventoryService.getBalances(user, { locationId, productId });
+    return this.inventoryService.getBalances(user, {
+      locationId,
+      productId,
+      limit: limit ? Number(limit) : undefined,
+      page: page ? Number(page) : undefined,
+    });
   }
 
   @Get('transactions')
@@ -76,7 +86,7 @@ export class InventoryController {
   })
   correctTransaction(
     @Param('id') id: string,
-    @Body() dto: any,
+    @Body() dto: CorrectTransactionDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.ledgerService.correctTransaction(id, dto, user.id);

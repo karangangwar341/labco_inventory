@@ -319,7 +319,7 @@ export class ManufacturingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // 1. Post raw material deductions (MANUFACTURING_INPUT)
+      // 1. Post raw material deductions (MANUFACTURING_INPUT) in shared atomic transaction
       await this.ledgerService.postTransaction(
         {
           transactionType: TransactionType.MANUFACTURING_INPUT,
@@ -337,6 +337,7 @@ export class ManufacturingService {
           })),
         },
         user.id,
+        tx,
       );
 
       // 2. Resolve or create batches for outputs if batchNumber specified
@@ -377,7 +378,7 @@ export class ManufacturingService {
         });
       }
 
-      // 3. Post finished goods additions (MANUFACTURING_OUTPUT) in the SAME transaction!
+      // 3. Post finished goods additions (MANUFACTURING_OUTPUT) in the SAME atomic transaction!
       await this.ledgerService.postTransaction(
         {
           transactionType: TransactionType.MANUFACTURING_OUTPUT,
@@ -387,6 +388,7 @@ export class ManufacturingService {
           lines: outputLinesForPosting,
         },
         user.id,
+        tx,
       );
 
       // 4. Update production run status to APPROVED

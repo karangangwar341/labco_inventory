@@ -9,7 +9,7 @@ import {
   UseGuards,
   Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -42,11 +42,19 @@ export class RequestsController {
 
   @Get()
   @ApiOperation({ summary: 'List stock requests within caller scope' })
+  @ApiQuery({ name: 'status', required: false, enum: RequestStatus })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
   async getRequests(
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: RequestStatus,
+    @Query('limit') limit?: number,
+    @Query('page') page?: number,
   ) {
-    return this.requestsService.getRequests(user, status);
+    return this.requestsService.getRequests(user, status, {
+      limit: limit ? Number(limit) : undefined,
+      page: page ? Number(page) : undefined,
+    });
   }
 
   @Get(':id')

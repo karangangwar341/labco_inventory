@@ -176,8 +176,8 @@ export class ImportsService {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        uploadedBy: { select: { id: true, email: true, fullName: true, role: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        uploadedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
         _count: { select: { rows: true } },
       },
     });
@@ -187,8 +187,8 @@ export class ImportsService {
     const batch = await this.prisma.importBatch.findUnique({
       where: { id },
       include: {
-        uploadedBy: { select: { id: true, email: true, fullName: true, role: true } },
-        approvedBy: { select: { id: true, email: true, fullName: true } },
+        uploadedBy: { select: { id: true, username: true, role: true } },
+        approvedBy: { select: { id: true, username: true, role: true } },
         attachment: true,
         rows: {
           orderBy: { rowNumber: 'asc' },
@@ -428,9 +428,16 @@ export class ImportsService {
     }
 
     // Atomic stock posting if inventory-affecting (STOCK_IN, STOCK_OUT, PHYSICAL_COUNT)
+    const lines: Array<{
+      locationId: string;
+      productId: string;
+      batchId?: string;
+      quantity: number;
+      unitName: string;
+      condition: StockCondition;
+      direction: 'IN' | 'OUT';
+    }> = [];
     if (batch.importType === ImportType.STOCK_IN || batch.importType === ImportType.STOCK_OUT) {
-      const lines = [];
-
       for (const row of eligibleRows) {
         const data = row.normalizedDataJson as Record<string, any>;
         const product = await this.prisma.product.findFirst({
@@ -459,7 +466,9 @@ export class ImportsService {
           direction: batch.importType === ImportType.STOCK_IN ? ('IN' as const) : ('OUT' as const),
         });
       }
+    }
 
+    return this.prisma.$transaction(async (tx) => {
       if (lines.length > 0) {
         await this.ledgerService.postTransaction(
           {
@@ -473,33 +482,34 @@ export class ImportsService {
             lines,
           },
           user.id,
+          tx,
         );
       }
-    }
 
-    // Mark eligible rows POSTED / APPROVED
-    for (const row of eligibleRows) {
-      await this.prisma.importRow.update({
-        where: { id: row.id },
-        data: { validationStatus: ImportRowStatus.POSTED },
+      // Mark eligible rows POSTED / APPROVED
+      for (const row of eligibleRows) {
+        await tx.importRow.update({
+          where: { id: row.id },
+          data: { validationStatus: ImportRowStatus.POSTED },
+        });
+      }
+
+      const finalBatchStatus =
+        invalidRows.length > 0
+          ? ImportBatchStatus.PARTIALLY_APPROVED
+          : ImportBatchStatus.APPROVED;
+
+      return tx.importBatch.update({
+        where: { id: batch.id },
+        data: {
+          status: finalBatchStatus,
+          approvedById: user.id,
+          approvedAt: new Date(),
+        },
+        include: {
+          rows: { orderBy: { rowNumber: 'asc' } },
+        },
       });
-    }
-
-    const finalBatchStatus =
-      invalidRows.length > 0
-        ? ImportBatchStatus.PARTIALLY_APPROVED
-        : ImportBatchStatus.APPROVED;
-
-    return this.prisma.importBatch.update({
-      where: { id: batch.id },
-      data: {
-        status: finalBatchStatus,
-        approvedById: user.id,
-        approvedAt: new Date(),
-      },
-      include: {
-        rows: { orderBy: { rowNumber: 'asc' } },
-      },
     });
   }
 

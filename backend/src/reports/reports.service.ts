@@ -236,7 +236,7 @@ export class ReportsService {
             transactionType: true,
             sourceRefType: true,
             postedAt: true,
-            postedBy: { select: { id: true, email: true, fullName: true } },
+            postedBy: { select: { id: true, username: true, role: true } },
           },
         },
         product: { select: { id: true, name: true } },
@@ -277,7 +277,7 @@ export class ReportsService {
         baseDelta: e.qtyDeltaBase.toNumber(),
         direction: e.qtyDeltaBase.gte(0) ? 'IN' : 'OUT',
         locationName,
-        postedBy: e.transaction.postedBy.fullName || e.transaction.postedBy.email,
+        postedBy: e.transaction.postedBy.username,
       };
     });
   }
@@ -540,7 +540,7 @@ export class ReportsService {
       orderBy: { occurredAt: 'desc' },
       take: 100,
       include: {
-        actorUser: { select: { id: true, email: true, fullName: true, role: true } },
+        actorUser: { select: { id: true, username: true, role: true } },
       },
     });
   }
