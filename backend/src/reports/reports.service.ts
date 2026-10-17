@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   UserRole,
+  ProductKind,
   Prisma,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
@@ -85,12 +86,19 @@ export class ReportsService {
     query: QueryReportDto,
     user: AuthenticatedUser,
   ) {
+    if (
+      user.role === UserRole.STORE_ADMIN &&
+      (reportType === ReportType.CLIENT_CONSUMPTION || reportType === ReportType.PRODUCTION_RUNS)
+    ) {
+      throw new ForbiddenException('Store Admin cannot view client-side activity reports');
+    }
+
     const scopedLocationIds = await this.getScopedLocations(user, query);
     let rows: Record<string, any>[] = [];
 
     switch (reportType) {
       case ReportType.STOCK_BALANCE:
-        rows = await this.generateStockBalanceReport(scopedLocationIds, query);
+        rows = await this.generateStockBalanceReport(scopedLocationIds, query, user);
         break;
 
       case ReportType.INVENTORY_LEDGER:
@@ -98,7 +106,7 @@ export class ReportsService {
         break;
 
       case ReportType.BATCH_EXPIRY:
-        rows = await this.generateBatchExpiryReport(scopedLocationIds, query);
+        rows = await this.generateBatchExpiryReport(scopedLocationIds, query, user);
         break;
 
       case ReportType.CLIENT_CONSUMPTION:
@@ -144,6 +152,7 @@ export class ReportsService {
   private async generateStockBalanceReport(
     scopedLocationIds: string[] | undefined,
     query: QueryReportDto,
+    user: AuthenticatedUser,
   ): Promise<Record<string, any>[]> {
     const where: Prisma.InventoryBalanceWhereInput = {};
     if (scopedLocationIds) {
@@ -151,6 +160,9 @@ export class ReportsService {
     }
     if (query.productId) {
       where.productId = query.productId;
+    }
+    if (user.role === UserRole.STORE_ADMIN) {
+      where.product = { kind: ProductKind.RAW_MATERIAL };
     }
 
     const balances = await this.prisma.inventoryBalance.findMany({
@@ -184,6 +196,7 @@ export class ReportsService {
           : b.location.client?.name ?? 'Client';
 
       return {
+        productId: b.product.id,
         productName: b.product.name,
         locationName,
         locationType: b.location.locationType,
@@ -217,6 +230,9 @@ export class ReportsService {
     if (query.productId) {
       where.productId = query.productId;
     }
+    if (user.role === UserRole.STORE_ADMIN) {
+      where.product = { kind: ProductKind.RAW_MATERIAL };
+    }
 
     if (query.startDate || query.endDate) {
       const dateFilter: Prisma.DateTimeFilter = {};
@@ -235,6 +251,7 @@ export class ReportsService {
             id: true,
             transactionType: true,
             sourceRefType: true,
+            sourceRefId: true,
             postedAt: true,
             postedBy: { select: { id: true, username: true, role: true } },
           },
@@ -269,6 +286,7 @@ export class ReportsService {
         timestamp: e.transaction.postedAt.toISOString(),
         transactionType: e.transaction.transactionType,
         sourceRefType: e.transaction.sourceRefType || 'DIRECT',
+        sourceRefId: e.transaction.sourceRefId || null,
         productName: e.product.name,
         batchNumber: e.batch?.batchNumber || 'NONE',
         condition: e.condition,
@@ -289,12 +307,16 @@ export class ReportsService {
   private async generateBatchExpiryReport(
     scopedLocationIds: string[] | undefined,
     query: QueryReportDto,
+    user: AuthenticatedUser,
   ): Promise<Record<string, any>[]> {
     const where: Prisma.StockBatchWhereInput = {
       expiryDate: { not: null },
     };
     if (query.productId) {
       where.productId = query.productId;
+    }
+    if (user.role === UserRole.STORE_ADMIN) {
+      where.product = { kind: ProductKind.RAW_MATERIAL };
     }
 
     const batches = await this.prisma.stockBatch.findMany({

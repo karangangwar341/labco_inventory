@@ -12,6 +12,7 @@ export type RequestStatus =
 export type ShipmentStatus =
   | 'PENDING'
   | 'IN_TRANSIT'
+  | 'AWAITING_RECEIPT_APPROVAL'
   | 'COMPLETED'
   | 'DISCREPANCY_HOLD';
 
@@ -36,11 +37,12 @@ export type DepartmentIssueStatus =
 export type ImportBatchStatus =
   | 'DRAFT'
   | 'VALIDATED'
+  | 'SUBMITTED'
   | 'APPROVED'
   | 'PARTIALLY_APPROVED'
   | 'REJECTED';
 
-export type ImportType = 'INVENTORY_COUNT' | 'STOCK_IN' | 'STOCK_OUT';
+export type ImportType = 'STOCK_IN' | 'STOCK_OUT' | 'PRODUCT_CATALOG' | 'PHYSICAL_COUNT';
 
 export interface PaginationParams {
   page?: number;

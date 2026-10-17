@@ -19,6 +19,7 @@ import { UserRole, ImportType, ImportBatchStatus } from '@prisma/client';
 import { ImportsService } from './imports.service.js';
 import { CreateImportBatchDto } from './dto/create-import-batch.dto.js';
 import { UpdateImportRowDto } from './dto/update-import-row.dto.js';
+import { SubmitImportBatchDto } from './dto/submit-import-batch.dto.js';
 import {
   ApproveImportBatchDto,
   RejectImportBatchDto,
@@ -70,6 +71,17 @@ export class ImportsController {
     @Param('id') id: string,
   ) {
     return this.importsService.validateBatch(id, user);
+  }
+
+  @Post(':id/submit')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'Submit a validated import batch for Super Admin review; no inventory changes occur' })
+  async submitBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SubmitImportBatchDto,
+  ) {
+    return this.importsService.submitBatch(id, dto, user);
   }
 
   @Patch(':batchId/rows/:rowId')

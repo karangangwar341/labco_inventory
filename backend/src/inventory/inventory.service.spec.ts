@@ -67,6 +67,11 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       stockLocation: {
         findUnique: vi.fn(),
         create: vi.fn(),
+        upsert: vi.fn(async (args) => ({
+          id: 'loc-wh-1',
+          locationType: 'WAREHOUSE',
+          warehouseId: args?.where?.warehouseId || 'wh-1',
+        })),
       },
       user: {
         findUnique: vi.fn(),
@@ -466,7 +471,10 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       expect(balances[0].physicalQty.toString()).toBe('105');
       expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { locationId: 'loc-wh-1' },
+          where: {
+            locationId: 'loc-wh-1',
+            product: { kind: 'RAW_MATERIAL' },
+          },
         }),
       );
     });

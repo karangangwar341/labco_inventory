@@ -4,20 +4,28 @@ export interface ShipmentLineDto {
   id: string;
   productId: string;
   productName?: string;
+  product?: { id: string; name: string };
   dispatchedQty: number;
-  receivedQty: number;
-  discrepancyQty: number;
+  receivedQty?: number | null;
+  discrepancyQty?: number | null;
   condition: StockCondition;
   batchNumber?: string;
 }
 
 export interface ShipmentDto {
   id: string;
-  shipmentNumber: string;
+  shipmentNumber?: string;
+  requestId?: string;
   sourceLocationId?: string;
   sourceWarehouseName?: string;
   destinationLocationId: string;
   destinationName?: string;
+  sourceLocation?: { warehouse?: { id: string; name: string } | null };
+  destinationLocation?: {
+    client?: { id: string; name: string } | null;
+    warehouse?: { id: string; name: string } | null;
+  };
+  sourceDescription?: string;
   status: ShipmentStatus;
   dispatchedAt: string;
   receivedAt?: string;
@@ -27,7 +35,7 @@ export interface ShipmentDto {
 
 export interface ReceiveShipmentDto {
   lines: Array<{
-    lineId: string;
+    shipmentLineId: string;
     receivedQty: number;
     discrepancyReason?: string;
   }>;

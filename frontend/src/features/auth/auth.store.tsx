@@ -1,10 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { UserSessionProfile, LoginCredentials } from './auth.types';
 import { authService } from './auth.service';
 import { getSessionToken, clearSessionToken } from '../../lib/auth/session';
+import { clearPersistedCache } from '../../lib/query/persistence';
 import { UserRole } from '../../types/api';
+import { queryKeys } from '../../lib/query/query-keys';
+import type { AppBootstrap } from '../../types/api';
 
 interface AuthContextType {
   user: UserSessionProfile | null;
@@ -19,9 +23,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getInitialUser(): UserSessionProfile | null {
+  if (typeof window === 'undefined') return null;
+  const token = getSessionToken();
+  if (!token) return null;
+  try {
+    const raw = localStorage.getItem('user_session');
+    if (raw) return JSON.parse(raw) as UserSessionProfile;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserSessionProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [user, setUser] = useState<UserSessionProfile | null>(getInitialUser);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const token = getSessionToken();
+    if (!token) return false;
+    // If token exists and we already have cached session profile, don't stall the UI
+    const cached = getInitialUser();
+    return !cached;
+  });
   const [sessionReplaced, setSessionReplaced] = useState(false);
 
   useEffect(() => {
@@ -29,22 +54,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = getSessionToken();
 
     if (token) {
-      // Direct backend validation against GET /me as authoritative truth
+      // Revalidate in background against GET /me as authoritative truth
       authService
-        .getCurrentSession()
-        .then((profile) => {
+        .getBootstrap()
+        .then((bootstrap) => {
           if (!isMounted) return;
+          const profile = bootstrap?.user;
           if (profile && profile.id) {
             setUser(profile);
+            queryClient.setQueryData<AppBootstrap>(queryKeys.session.bootstrap(profile.id), bootstrap);
+            try {
+              localStorage.setItem('user_session', JSON.stringify(profile));
+            } catch {
+              // Ignore storage quotas
+            }
           } else {
             // Token was invalid or expired
             clearSessionToken();
+            clearPersistedCache();
             setUser(null);
           }
         })
         .catch(() => {
           if (!isMounted) return;
           clearSessionToken();
+          clearPersistedCache();
           setUser(null);
         })
         .finally(() => {
@@ -62,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSessionReplaced(true);
       }
       clearSessionToken();
+      clearPersistedCache();
       setUser(null);
     };
 
@@ -70,26 +105,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
       window.removeEventListener('session_unauthorized', handleUnauthorized);
     };
-  }, []);
+  }, [queryClient]);
 
   const login = async (credentials: LoginCredentials) => {
     const res = await authService.login(credentials);
     if (res.user) {
+      // A new login can belong to another account in the same browser.
+      queryClient.clear();
+      clearPersistedCache();
       // Backend returned authoritative user summary
-      setUser({
+      const profile: UserSessionProfile = {
         id: res.user.id,
         username: res.user.username,
         role: res.user.role,
         status: res.user.status,
         clientId: res.user.clientId,
         assignedWarehouseIds: res.user.assignedWarehouseIds,
-      });
+      };
+      setUser(profile);
+      if (res.bootstrap) {
+        queryClient.setQueryData<AppBootstrap>(queryKeys.session.bootstrap(profile.id), res.bootstrap);
+      }
+      try {
+        localStorage.setItem('user_session', JSON.stringify(profile));
+      } catch {
+        // Ignore
+      }
     }
   };
 
   const logout = () => {
     setUser(null);
+    clearSessionToken();
+    clearPersistedCache();
     authService.logout();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('session_unauthorized', { detail: { isReplaced: false } }),
+      );
+    }
   };
 
   const dismissSessionReplaced = () => {

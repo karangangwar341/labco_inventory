@@ -1,28 +1,39 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useSyncExternalStore } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/features/auth/auth.store';
 import { LoadingState } from '@/components/feedback/LoadingState';
+
+const emptySubscribe = () => () => {};
+
+function useIsHydrated() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isHydrated = useIsHydrated();
   const { user, isLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !user)) {
+    if (isHydrated && !isLoading && (!isAuthenticated || !user)) {
       const fullPath = searchParams?.toString()
         ? `${pathname}?${searchParams.toString()}`
         : pathname;
       const redirectUrl = `/login?redirect=${encodeURIComponent(fullPath || '/')}`;
       router.replace(redirectUrl);
     }
-  }, [isLoading, isAuthenticated, user, router, pathname, searchParams]);
+  }, [isHydrated, isLoading, isAuthenticated, user, router, pathname, searchParams]);
 
-  // While checking auth token against backend GET /me, do not render dashboard shell or leak UI
-  if (isLoading) {
+  // While checking auth token against backend or hydrating client, render consistent placeholder
+  if (!isHydrated || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
         <div className="w-full max-w-sm p-8 bg-white border border-[#dbe3ee] rounded-xl shadow-xs text-center space-y-3">

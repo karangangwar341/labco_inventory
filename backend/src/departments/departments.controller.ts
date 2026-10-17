@@ -67,16 +67,6 @@ export class DepartmentsController {
     return this.departmentsService.getDepartments(clientId, user);
   }
 
-  @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'Get department details by ID' })
-  async getDepartment(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
-  ) {
-    return this.departmentsService.getDepartment(id, user);
-  }
-
   @Patch(':id')
   @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
   @ApiOperation({ summary: 'Update or propose updates to a department' })
@@ -212,6 +202,16 @@ export class DepartmentsController {
     @Param('id') id: string,
   ) {
     return this.departmentsService.getReturn(id, user);
+  }
+
+  @Get(':id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'Get department details by ID' })
+  async getDepartment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.departmentsService.getDepartment(id, user);
   }
 
   @Post('returns/:id/approve')

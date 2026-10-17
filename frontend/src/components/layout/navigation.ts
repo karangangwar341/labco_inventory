@@ -13,112 +13,145 @@ export type NavIconName =
   | 'reports'
   | 'users'
   | 'settings'
-  | 'backups';
+  | 'backups'
+  | 'help';
 
-export interface NavItem {
+export interface SubNavItem {
   href: string;
   label: string;
+  roles?: UserRole[];
+  exact?: boolean;
+}
+
+export interface MainDomain {
+  id: string;
+  label: string;
+  defaultHref: string;
   iconName: NavIconName;
   roles: UserRole[];
+  matchPaths: string[];
+  subItems: SubNavItem[];
 }
 
-export interface NavGroup {
-  title: string;
-  items: NavItem[];
-}
-
-export const NAVIGATION_GROUPS: NavGroup[] = [
+/**
+ * MAIN DOMAINS (Primary Sidebar - Level 1 Navigation)
+ * Represents high-level operational modules.
+ */
+export const MAIN_DOMAINS: MainDomain[] = [
   {
-    title: 'Daily work',
-    items: [
-      {
-        href: '/',
-        label: 'Overview',
-        iconName: 'overview',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/inventory',
-        label: 'Inventory',
-        iconName: 'inventory',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/requests',
-        label: 'Stock requests',
-        iconName: 'requests',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/approvals',
-        label: 'Approvals',
-        iconName: 'approvals',
-        roles: ['SUPER_ADMIN'],
-      },
-      {
-        href: '/shipments',
-        label: 'Shipments',
-        iconName: 'shipments',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
+    id: 'operations',
+    label: 'Operations',
+    defaultHref: '/',
+    iconName: 'overview',
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    matchPaths: ['/', '/inventory', '/shipments'],
+    subItems: [
+      { href: '/', label: 'Overview', exact: true },
+      { href: '/inventory', label: 'Stock & Inventory' },
+      { href: '/shipments', label: 'Client Dispatches', roles: ['STORE_ADMIN'] },
+      { href: '/shipments', label: 'Incoming Deliveries', roles: ['CLIENT_ADMIN'] },
+      { href: '/shipments', label: 'Shipments & Deliveries', roles: ['SUPER_ADMIN'] },
     ],
   },
   {
-    title: 'Operations',
-    items: [
-      {
-        href: '/catalog',
-        label: 'Catalog',
-        iconName: 'catalog',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/manufacturing',
-        label: 'Manufacturing',
-        iconName: 'manufacturing',
-        roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/departments',
-        label: 'Departments',
-        iconName: 'departments',
-        roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/imports',
-        label: 'Imports',
-        iconName: 'imports',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
-      {
-        href: '/reports',
-        label: 'Reports',
-        iconName: 'reports',
-        roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
-      },
+    id: 'requests',
+    label: 'Stock Requests',
+    defaultHref: '/requests',
+    iconName: 'requests',
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    matchPaths: ['/requests', '/approvals'],
+    subItems: [
+      { href: '/requests', label: 'My Requests', exact: true },
+      { href: '/requests/new', label: 'New Stock Movement' },
+      { href: '/approvals', label: 'Approvals Queue', roles: ['SUPER_ADMIN'] },
     ],
   },
   {
-    title: 'Administration',
-    items: [
-      {
-        href: '/admin/users',
-        label: 'Users',
-        iconName: 'users',
-        roles: ['SUPER_ADMIN'],
-      },
-      {
-        href: '/admin/settings',
-        label: 'Settings',
-        iconName: 'settings',
-        roles: ['SUPER_ADMIN'],
-      },
-      {
-        href: '/backups',
-        label: 'Backups',
-        iconName: 'backups',
-        roles: ['SUPER_ADMIN'],
-      },
+    id: 'manufacturing',
+    label: 'Manufacturing',
+    defaultHref: '/manufacturing',
+    iconName: 'manufacturing',
+    roles: ['CLIENT_ADMIN'],
+    matchPaths: ['/manufacturing', '/departments'],
+    subItems: [
+      { href: '/manufacturing', label: 'Production Jobs' },
+      { href: '/departments', label: 'Send to Department' },
+      { href: '/staff', label: 'Staff & Work Logs' },
+    ],
+  },
+  {
+    id: 'staff',
+    label: 'Staff & HR',
+    defaultHref: '/staff',
+    iconName: 'users',
+    roles: ['CLIENT_ADMIN', 'SUPER_ADMIN'],
+    matchPaths: ['/staff'],
+    subItems: [
+      { href: '/staff', label: 'Staff Directory & Daily Logs', exact: true },
+    ],
+  },
+  {
+    id: 'catalog',
+    label: 'Items & Documents',
+    defaultHref: '/catalog',
+    iconName: 'catalog',
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    matchPaths: ['/catalog', '/imports'],
+    subItems: [
+      { href: '/catalog', label: 'Items Catalog' },
+      { href: '/imports', label: 'Scan Invoices & Bills' },
+    ],
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    defaultHref: '/reports',
+    iconName: 'reports',
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    matchPaths: ['/reports'],
+    subItems: [
+      { href: '/reports', label: 'Stock Reports & Downloads' },
+    ],
+  },
+  {
+    id: 'admin',
+    label: 'Administration',
+    defaultHref: '/admin/clients',
+    iconName: 'settings',
+    roles: ['SUPER_ADMIN'],
+    matchPaths: ['/admin', '/backups'],
+    subItems: [
+      { href: '/admin/clients', label: 'Clients' },
+      { href: '/admin/warehouses', label: 'Warehouses' },
+      { href: '/admin/users', label: 'User Accounts' },
+      { href: '/admin/settings', label: 'System Settings' },
+      { href: '/backups', label: 'Backups & Health' },
     ],
   },
 ];
+
+export const HELP_NAV_ITEM = {
+  href: '/help',
+  label: 'How to use this system',
+  iconName: 'help' as NavIconName,
+  roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'] as UserRole[],
+};
+
+/**
+ * Utility helper: Detect active Main Domain based on current URL pathname
+ */
+export function getActiveDomain(pathname: string | null): MainDomain | null {
+  if (!pathname) return MAIN_DOMAINS[0];
+  
+  for (const domain of MAIN_DOMAINS) {
+    for (const pattern of domain.matchPaths) {
+      if (pattern === '/') {
+        if (pathname === '/') return domain;
+      } else if (pathname === pattern || pathname.startsWith(`${pattern}/`)) {
+        return domain;
+      }
+    }
+  }
+
+  return MAIN_DOMAINS[0];
+}

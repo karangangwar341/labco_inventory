@@ -17,12 +17,14 @@ import {
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { ReceiveShipmentDto } from './dto/receive-shipment.dto.js';
 import { ApproveReceiptDto } from './dto/approve-receipt.dto.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
 export class ShipmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -188,7 +190,7 @@ export class ShipmentsService {
       throw new BadRequestException('Duplicate shipment lines detected in receipt submission');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const received = await this.prisma.$transaction(async (tx) => {
       let hasDiscrepancy = false;
 
       for (const lineDto of dto.lines) {
@@ -228,16 +230,47 @@ export class ShipmentsService {
         });
       }
 
-      return tx.shipment.update({
+      const updated = await tx.shipment.update({
         where: { id: shipmentId },
         data: {
           status: ShipmentStatus.AWAITING_RECEIPT_APPROVAL,
           receivedAt: new Date(),
           notes: dto.notes || shipment.notes,
         },
-        include: { lines: true },
+        include: {
+          lines: {
+            include: { product: { select: { id: true, name: true } } },
+          },
+          sourceLocation: {
+            include: { warehouse: { select: { id: true, name: true } } },
+          },
+          destinationLocation: {
+            include: {
+              client: { select: { id: true, name: true } },
+              warehouse: { select: { id: true, name: true } },
+            },
+          },
+        },
       });
+
+      return this.formatShipment(updated);
     });
+    const shpNumber = (shipment as any).shipmentNumber || `SHP-${shipment.id.slice(0, 8).toUpperCase()}`;
+    const destName = (shipment.destinationLocation as any)?.client?.name || (shipment.destinationLocation as any)?.warehouse?.name || 'Client Facility';
+    const linesSummary = shipment.lines
+      .slice(0, 2)
+      .map((l: any) => `${Number(l.dispatchedQty)} ${l.unitName || 'units'} of ${l.productName || 'Item'}`)
+      .join(', ');
+    const extraCount = shipment.lines.length > 2 ? ` (+${shipment.lines.length - 2} more)` : '';
+    const itemsText = linesSummary ? `${linesSummary}${extraCount}` : 'Shipment items';
+
+    await this.notificationsService.notifySuperAdmins(
+      'Shipment receipt submitted',
+      `[${shpNumber}] ${destName} reported receipt of ${itemsText}. Review in Approvals to finalize.`,
+      'SHIPMENT',
+      shipment.id,
+    );
+    return received;
   }
 
   /**
@@ -256,8 +289,18 @@ export class ShipmentsService {
     const shipment = await this.prisma.shipment.findUnique({
       where: { id: shipmentId },
       include: {
-        lines: true,
-        destinationLocation: true,
+        lines: {
+          include: { product: { select: { id: true, name: true } } },
+        },
+        sourceLocation: {
+          include: { warehouse: { select: { id: true, name: true } } },
+        },
+        destinationLocation: {
+          include: {
+            client: { select: { id: true, name: true } },
+            warehouse: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 
@@ -279,7 +322,7 @@ export class ShipmentsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const approved = await this.prisma.$transaction(async (tx) => {
       // 1. Post approved received quantities to destination usable stock in shared atomic transaction
       const linesToCredit = shipment.lines
         .filter((l) => l.receivedQty && !l.receivedQty.isZero())
@@ -317,14 +360,65 @@ export class ShipmentsService {
           ? ShipmentStatus.DISCREPANCY_HOLD
           : ShipmentStatus.COMPLETED;
 
-      return tx.shipment.update({
+      const updated = await tx.shipment.update({
         where: { id: shipmentId },
         data: {
           status: nextStatus,
         },
-        include: { lines: true },
+        include: {
+          lines: {
+            include: { product: { select: { id: true, name: true } } },
+          },
+          sourceLocation: {
+            include: { warehouse: { select: { id: true, name: true } } },
+          },
+          destinationLocation: {
+            include: {
+              client: { select: { id: true, name: true } },
+              warehouse: { select: { id: true, name: true } },
+            },
+          },
+        },
       });
+
+      return this.formatShipment(updated);
     });
+    await this.notificationsService.notifyClientAdmins(
+      shipment.destinationLocation?.clientId,
+      'Shipment receipt approved',
+      'Your confirmed shipment quantities were approved and added to stock.',
+      'SHIPMENT',
+      shipment.id,
+    );
+    return approved;
+  }
+
+  private formatShipment(shipment: any) {
+    if (!shipment) return shipment;
+    const shipmentNumber =
+      shipment.shipmentNumber ||
+      (shipment.id ? `SHP-${shipment.id.substring(0, 8).toUpperCase()}` : 'SHP-UNKNOWN');
+    const sourceWarehouseName =
+      shipment.sourceLocation?.warehouse?.name ||
+      shipment.sourceWarehouseName ||
+      'Central Warehouse';
+    const destinationName =
+      shipment.destinationLocation?.client?.name ||
+      shipment.destinationLocation?.warehouse?.name ||
+      shipment.destinationName ||
+      'Destination Facility';
+    const lines = (shipment.lines || []).map((line: any) => ({
+      ...line,
+      productName: line.product?.name || line.productName || 'Product',
+    }));
+
+    return {
+      ...shipment,
+      shipmentNumber,
+      sourceWarehouseName,
+      destinationName,
+      lines,
+    };
   }
 
   /**
@@ -364,7 +458,7 @@ export class ShipmentsService {
     const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
     const pageNumber = pagination?.page ? Math.max(Number(pagination.page), 1) : 1;
 
-    return this.prisma.shipment.findMany({
+    const shipments = await this.prisma.shipment.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: pageSize,
@@ -384,6 +478,8 @@ export class ShipmentsService {
         },
       },
     });
+
+    return shipments.map((s) => this.formatShipment(s));
   }
 
   async getShipmentById(user: AuthenticatedUser, shipmentId: string) {
@@ -431,6 +527,6 @@ export class ShipmentsService {
       }
     }
 
-    return shipment;
+    return this.formatShipment(shipment);
   }
 }

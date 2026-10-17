@@ -12,6 +12,7 @@ export type RequestStatus =
 export type ShipmentStatus =
   | 'PENDING'
   | 'IN_TRANSIT'
+  | 'AWAITING_RECEIPT_APPROVAL'
   | 'COMPLETED'
   | 'DISCREPANCY_HOLD';
 

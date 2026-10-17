@@ -3,10 +3,12 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   UserRole,
+  UserStatus,
   NotificationEventType,
   BatchStatus,
   Prisma,
@@ -104,6 +106,67 @@ export class NotificationsService {
         entityType: entityType || null,
         entityId: entityId || null,
       },
+    });
+  }
+
+  async notifyUser(
+    recipientUserId: string | null | undefined,
+    title: string,
+    message: string,
+    entityType: string,
+    entityId: string,
+    eventType = NotificationEventType.REQUEST_STATUS_CHANGED,
+  ) {
+    if (!recipientUserId) return;
+    try {
+      await this.createNotification(recipientUserId, eventType, title, message, entityType, entityId);
+    } catch (error) {
+      this.logger.error(`Could not create notification for ${entityType} ${entityId}`, error);
+    }
+  }
+
+  async notifySuperAdmins(title: string, message: string, entityType: string, entityId: string) {
+    await this.notifyRoleUsers(UserRole.SUPER_ADMIN, title, message, entityType, entityId);
+  }
+
+  async notifyClientAdmins(clientId: string | null | undefined, title: string, message: string, entityType: string, entityId: string) {
+    if (!clientId) return;
+    try {
+      const recipients = await this.prisma.user.findMany({
+        where: { role: UserRole.CLIENT_ADMIN, status: UserStatus.ACTIVE, clientId },
+        select: { id: true },
+      });
+      await this.notifyRecipients(recipients.map(({ id }) => id), title, message, entityType, entityId);
+    } catch (error) {
+      this.logger.error(`Could not notify client admins about ${entityType} ${entityId}`, error);
+    }
+  }
+
+  private async notifyRoleUsers(role: UserRole, title: string, message: string, entityType: string, entityId: string) {
+    try {
+      const recipients = await this.prisma.user.findMany({
+        where: { role, status: UserStatus.ACTIVE },
+        select: { id: true },
+      });
+      await this.notifyRecipients(recipients.map(({ id }) => id), title, message, entityType, entityId);
+    } catch (error) {
+      this.logger.error(`Could not notify ${role} users about ${entityType} ${entityId}`, error);
+    }
+  }
+
+  private async notifyRecipients(recipientIds: string[], title: string, message: string, entityType: string, entityId: string) {
+    const results = await Promise.allSettled(
+      [...new Set(recipientIds)].map((id) => this.createNotification(
+        id,
+        NotificationEventType.REQUEST_STATUS_CHANGED,
+        title,
+        message,
+        entityType,
+        entityId,
+      )),
+    );
+    results.forEach((result) => {
+      if (result.status === 'rejected') this.logger.error(`Could not create ${entityType} notification`, result.reason);
     });
   }
 
@@ -366,20 +429,18 @@ export class NotificationsService {
   // ==========================================
 
   async getSettings() {
-    const setting = await this.prisma.systemSetting.findUnique({
-      where: { key: 'notification_settings' },
-    });
+    const [setting, receiptSetting] = await Promise.all([
+      this.prisma.systemSetting.findUnique({ where: { key: 'notification_settings' } }),
+      this.prisma.systemSetting.findUnique({ where: { key: 'RECEIPT_CONFIRMATION_ENABLED' } }),
+    ]);
+    const notificationSettings = setting?.valueJson as { expiryWarningIntervals?: number[]; soundEnabled?: boolean } | undefined;
 
-    if (!setting) {
-      return {
-        expiryWarningIntervals: [90, 30, 7],
-        soundEnabled: false,
-      };
-    }
-
-    return setting.valueJson as {
-      expiryWarningIntervals: number[];
-      soundEnabled: boolean;
+    return {
+      expiryWarningIntervals: notificationSettings?.expiryWarningIntervals ?? [90, 30, 7],
+      soundEnabled: notificationSettings?.soundEnabled ?? false,
+      receiptConfirmationEnabled: receiptSetting?.valueJson === undefined
+        ? true
+        : Boolean(receiptSetting.valueJson),
     };
   }
 
@@ -392,19 +453,53 @@ export class NotificationsService {
     const updated = {
       expiryWarningIntervals: dto.expiryWarningIntervals ?? current.expiryWarningIntervals,
       soundEnabled: dto.soundEnabled ?? current.soundEnabled,
+      receiptConfirmationEnabled: dto.receiptConfirmationEnabled ?? current.receiptConfirmationEnabled,
     };
 
-    await this.prisma.systemSetting.upsert({
-      where: { key: 'notification_settings' },
-      update: {
-        valueJson: updated,
-        updatedById: user.id,
-      },
-      create: {
-        key: 'notification_settings',
-        valueJson: updated,
-        updatedById: user.id,
-      },
+    const intervals = updated.expiryWarningIntervals;
+    if (
+      !Array.isArray(intervals) ||
+      intervals.length === 0 ||
+      intervals.some((v, idx) => v <= 0 || (idx > 0 && v >= intervals[idx - 1]))
+    ) {
+      throw new BadRequestException('Expiry warning intervals must contain positive, descending day values');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await Promise.all([
+        tx.systemSetting.upsert({
+          where: { key: 'notification_settings' },
+          update: {
+            valueJson: {
+              expiryWarningIntervals: updated.expiryWarningIntervals,
+              soundEnabled: updated.soundEnabled,
+            },
+            updatedById: user.id,
+          },
+          create: {
+            key: 'notification_settings',
+            valueJson: {
+              expiryWarningIntervals: updated.expiryWarningIntervals,
+              soundEnabled: updated.soundEnabled,
+            },
+            updatedById: user.id,
+          },
+        }),
+        tx.systemSetting.upsert({
+          where: { key: 'RECEIPT_CONFIRMATION_ENABLED' },
+          update: { valueJson: updated.receiptConfirmationEnabled, updatedById: user.id },
+          create: { key: 'RECEIPT_CONFIRMATION_ENABLED', valueJson: updated.receiptConfirmationEnabled, updatedById: user.id },
+        }),
+        tx.auditEvent.create({
+          data: {
+            actorUserId: user.id,
+            action: 'SYSTEM_SETTINGS_UPDATED',
+            entityType: 'SYSTEM_SETTINGS',
+            entityId: 'global',
+            afterJson: updated,
+          },
+        }),
+      ]);
     });
 
     return updated;

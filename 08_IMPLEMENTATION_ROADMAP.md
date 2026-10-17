@@ -1,8 +1,8 @@
 # Implementation Roadmap & AI Agent Task Breakdown
-**Status:** Planning only. Do not begin coding until the owner authorizes implementation and open decisions are resolved.
+**Status:** Implementation authorized by owner on 2026-10-15. Proceed sequentially against `13_TASKS.md`; unresolved decisions block only the affected feature. Current verified gaps are recorded in `16_IMPLEMENTATION_AUDIT.md`.
 
-## Phase 0 — Close design gaps
-- Confirm open items in `DECISIONS.md`.
+## Phase 0 — Close design gaps (remaining items tracked individually)
+- Confirm open items in `11_DECISIONS.md`; do not block unrelated decided work.
 - Approve PRD, workflows, schema, permissions and UX screen inventory.
 - Select stack, hosting, storage, AI provider and operational targets.
 **Exit:** Versioned design baseline approved.

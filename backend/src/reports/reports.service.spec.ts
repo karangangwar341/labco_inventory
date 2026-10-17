@@ -4,6 +4,7 @@ import {
   UserRole,
   StockCondition,
   TransactionType,
+  ProductKind,
   Prisma,
 } from '@prisma/client';
 import { ReportType, ReportFormat } from './dto/query-report.dto.js';
@@ -73,6 +74,25 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
   });
 
   describe('1. Stock Balance Report (Physical & Available Invariants)', () => {
+    it('limits Store Admin stock reports to raw materials', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-wh-1' });
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
+
+      await reportsService.generateReport(
+        ReportType.STOCK_BALANCE,
+        { format: ReportFormat.JSON },
+        storeAdminUser,
+      );
+
+      expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          locationId: { in: ['loc-wh-1'] },
+          product: { kind: ProductKind.RAW_MATERIAL },
+        },
+      }));
+    });
+
     it('calculates Available = Usable - Reserved and Physical = Usable + Damaged + Expired', async () => {
       mockPrisma.inventoryBalance.findMany.mockResolvedValue([
         {

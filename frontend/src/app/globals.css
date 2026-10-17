@@ -1,34 +1,163 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 :root {
   --canvas: #f8fafc;
   --surface: #ffffff;
   --surface-subtle: #f1f5f9;
-  --border: #dbe3ee;
-  --text-primary: #172033;
-  --text-secondary: #5b6678;
+  --surface-hover: #f8fafc;
+  --border: #e2e8f0;
+  --border-subtle: #edf2f7;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-subtle: #eff6ff;
-  --danger: #b42318;
-  --warning: #a15c00;
-  --success: #18794e;
-  --focus-ring: #2563eb;
+  --primary-border: #bfdbfe;
+  --danger: #dc2626;
+  --danger-subtle: #fef2f2;
+  --warning: #d97706;
+  --warning-subtle: #fffbeb;
+  --success: #16a34a;
+  --success-subtle: #f0fdf4;
+  --focus-ring: rgba(37, 99, 235, 0.25);
+  
+  /* Easing curves (Emil Kowalski / improve-animations craft) */
+  --ease-out-cubic: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-modal: 220ms;
 }
 
 body {
   background-color: var(--canvas);
   color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Monospace data display */
+code, kbd, samp, pre, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Premium SaaS Card Container */
+.saas-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  transition: all 180ms var(--ease-out-cubic);
+}
+
+.saas-card:hover {
+  border-color: #cbd5e1;
+}
+
+.saas-card-interactive {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04);
+  transition: all 180ms var(--ease-out-cubic);
+  cursor: pointer;
+}
+
+.saas-card-interactive:hover {
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
 }
 
 /* Subtle gridded background behind content */
 .bg-grid-pattern {
   background-size: 24px 24px;
   background-image: 
-    linear-gradient(to right, rgba(219, 227, 238, 0.4) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(219, 227, 238, 0.4) 1px, transparent 1px);
+    linear-gradient(to right, rgba(226, 232, 240, 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 232, 240, 0.5) 1px, transparent 1px);
 }
+
+/* Polished Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Keyframe Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes zoomIn95 {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideDownSubtle {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-fast) var(--ease-out-cubic) forwards;
+}
+
+.animate-modal-pop {
+  animation: zoomIn95 var(--duration-modal) var(--ease-out-cubic) forwards;
+}
+
+.animate-popover {
+  animation: slideDownSubtle var(--duration-fast) var(--ease-out-cubic) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Safe Print Rules for A4 documents */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+

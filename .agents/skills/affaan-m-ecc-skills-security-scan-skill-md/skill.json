@@ -1,0 +1,10 @@
+{
+  "id": "affaan-m-ecc-skills-security-scan-skill-md",
+  "name": "security-scan",
+  "github_url": "https://github.com/affaan-m/ECC/tree/main/skills/security-scan",
+  "installed_at": "2026-10-15T06:19:21.633Z",
+  "owner": "affaan-m",
+  "repo": "ECC",
+  "branch": "main",
+  "skill_path": "skills/security-scan"
+}

@@ -3,7 +3,6 @@ import { DepartmentStatus, DepartmentIssueStatus } from './common';
 export interface DepartmentDto {
   id: string;
   name: string;
-  code: string;
   clientId: string;
   clientName?: string;
   status: DepartmentStatus;
@@ -31,7 +30,6 @@ export interface DepartmentIssueDto {
 
 export interface CreateDepartmentDto {
   name: string;
-  code: string;
   clientId?: string;
 }
 

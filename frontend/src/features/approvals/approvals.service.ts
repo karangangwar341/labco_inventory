@@ -3,6 +3,27 @@ import { endpoints } from '../../lib/api/endpoints';
 import { actionIdempotency } from '../../lib/api/idempotency';
 import { QueueItem, ApprovalTab } from './approvals.types';
 
+function asDisplayQuantity(value: unknown): string {
+  const text = String(value ?? '');
+  if (!/^-?\d+(?:\.\d+)?$/.test(text)) return text || '—';
+  return text.includes('.') ? text.replace(/0+$/, '').replace(/\.$/, '') : text;
+}
+
+function mapRequestLines(lines: any[] = []) {
+  return lines.map((line, index) => ({
+    id: line.id || `${line.productId || 'line'}-${index}`,
+    productName: line.product?.name || line.productName || `Item ${index + 1}`,
+    quantity: asDisplayQuantity(line.quantity),
+    unitName: line.unitNameSnapshot || line.unitName || line.unit?.unitName,
+    batchNumber: line.batchNumber || line.batch?.batchNumber || null,
+    expiryDate: line.expiryDate || null,
+  }));
+}
+
+function locationName(location: any): string | undefined {
+  return location?.warehouse?.name || location?.client?.name || location?.name;
+}
+
 export const approvalsService = {
   getQueue: async (): Promise<Record<ApprovalTab, QueueItem[]>> => {
     const queue: Record<ApprovalTab, QueueItem[]> = {
@@ -14,66 +35,110 @@ export const approvalsService = {
     };
 
     try {
-      // 1. Fetch pending stock requests
-      const requests = await apiClient
-        .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL' }))
-        .catch(() => []);
+      // Execute independent queue queries concurrently (P-005 / Phase 2)
+      const [requestsRes, shipmentsRes, productionRunsRes, departmentIssuesRes] =
+        await Promise.all([
+          apiClient
+            .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL' }))
+            .catch(() => []),
+          apiClient
+            .get<any[]>(endpoints.shipments.list({ status: 'AWAITING_RECEIPT_APPROVAL' }))
+            .catch(() => []),
+          apiClient
+            .get<any[]>(endpoints.manufacturing.productionRuns({ status: 'PENDING_APPROVAL' }))
+            .catch(() => []),
+          apiClient
+            .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL' }))
+            .catch(() => []),
+        ]);
 
-      queue.REQUESTS = (Array.isArray(requests) ? requests : []).map((r) => ({
+      queue.REQUESTS = (Array.isArray(requestsRes) ? requestsRes : []).map((r) => {
+        const lineItems = mapRequestLines(r.lines || []);
+        const source = locationName(r.sourceLocation);
+        const destination = locationName(r.destinationLocation);
+        const requestType = r.requestType || r.type || 'STOCK_OUT';
+        const location = requestType === 'STOCK_IN'
+          ? `Into ${destination || source || 'Location not available'}`
+          : requestType === 'STOCK_OUT'
+            ? `Out of ${source || destination || 'Location not available'}`
+            : source && destination ? `${source} → ${destination}` : source || destination || 'Location not available';
+        return {
         id: r.id,
-        type: `STOCK_REQUEST (${r.type || r.requestType || 'STOCK_OUT'})`,
+        type: `STOCK_REQUEST (${requestType})`,
         requester: r.requesterUsername || r.requester?.username || 'Store Admin',
-        location: `${r.locationName || r.sourceLocation?.name || 'Central WH'} -> ${r.destinationName || r.destinationLocation?.name || 'Destination'}`,
-        details: r.reason || r.notes || `Stock movement request with ${r.lines?.length || 0} line items`,
-        quantitySummary: `${r.lines?.length || 0} items requested`,
-        createdAt: r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Recent',
+        location,
+        details: r.reason || r.notes || 'Review the requested products and quantities.',
+        quantitySummary: `${lineItems.length} ${lineItems.length === 1 ? 'product' : 'products'}`,
+        lineItems,
+        createdAt: r.submittedAt ? new Date(r.submittedAt).toLocaleString() : r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Recent',
         priority: (r.priority === 'URGENT' ? 'URGENT' : 'NORMAL') as 'NORMAL' | 'URGENT',
-      }));
+        };
+      });
 
-      // 2. Fetch shipments on discrepancy hold or awaiting receipt approval
-      const shipments = await apiClient
-        .get<any[]>(endpoints.shipments.list({ status: 'DISCREPANCY_HOLD' }))
-        .catch(() => []);
-
-      queue.SHIPMENTS = (Array.isArray(shipments) ? shipments : []).map((s) => ({
+      queue.SHIPMENTS = (Array.isArray(shipmentsRes) ? shipmentsRes : []).map((s) => ({
         id: s.id,
-        type: `SHIPMENT (${s.status})`,
+        type: 'SHIPMENT RECEIPT APPROVAL',
         requester: s.recipientUsername || 'Client Admin',
         location: s.destinationName || s.destinationLocation?.name || 'Client Location',
-        details: s.notes || `Shipment ${s.shipmentNumber} under quarantine/receipt audit`,
-        quantitySummary: `${s.lines?.length || 0} lines dispatched`,
+        details: `The client confirmed receipt${s.shipmentNumber ? ` for shipment ${s.shipmentNumber}` : ''}. Approve to add the received quantities to client stock.${s.notes ? ` Note: ${s.notes}` : ''}`,
+        quantitySummary: `${s.lines?.length || 0} lines · awaiting receipt approval`,
+        lineItems: (s.lines || []).map((line: any, index: number) => ({
+          id: line.id || `shipment-line-${index}`,
+          productName: line.product?.name || line.productName || `Item ${index + 1}`,
+          quantity: asDisplayQuantity(line.dispatchedQty ?? line.quantity),
+          unitName: line.unitName || line.unitNameSnapshot,
+          batchNumber: line.batch?.batchNumber || line.batchNumber || null,
+          label: 'Dispatched',
+          quantityNote: line.receivedQty != null || line.discrepancyQty != null
+            ? `Received: ${asDisplayQuantity(line.receivedQty)} · Discrepancy: ${asDisplayQuantity(line.discrepancyQty)}`
+            : undefined,
+        })),
         createdAt: s.dispatchedAt ? new Date(s.dispatchedAt).toLocaleString() : 'Recent',
         priority: 'URGENT',
       }));
 
-      // 3. Fetch pending client manufacturing runs
-      const productionRuns = await apiClient
-        .get<any[]>(endpoints.manufacturing.productionRuns({ status: 'PENDING_APPROVAL' }))
-        .catch(() => []);
-
-      queue.MANUFACTURING = (Array.isArray(productionRuns) ? productionRuns : []).map((p) => ({
+      queue.MANUFACTURING = (Array.isArray(productionRunsRes) ? productionRunsRes : []).map((p) => {
+        const inputs = (p.inputs || []).map((line: any, index: number) => ({
+          id: line.id || `input-${index}`,
+          productName: line.product?.name || line.productName || `Input ${index + 1}`,
+          quantity: asDisplayQuantity(line.quantity),
+          unitName: line.unitNameSnapshot,
+          label: 'Input',
+        }));
+        const outputs = (p.outputs || []).map((line: any, index: number) => ({
+          id: line.id || `output-${index}`,
+          productName: line.product?.name || line.productName || `Output ${index + 1}`,
+          quantity: asDisplayQuantity(line.quantity),
+          unitName: line.unitNameSnapshot,
+          label: 'Output',
+        }));
+        return {
         id: p.id,
-        type: `PRODUCTION_RUN (${p.runNumber})`,
-        requester: p.clientName || 'Client Admin',
-        location: p.locationName || 'Client Production Suite',
-        details: p.notes || `Production of ${p.plannedQuantity} units for yield product ${p.yieldProductId}`,
-        quantitySummary: `Plan: ${p.plannedQuantity} units`,
+        type: `PRODUCTION_RUN${p.runNumber || p.productionReference ? ` (${p.runNumber || p.productionReference})` : ''}`,
+        requester: p.submittedBy?.username || p.client?.name || 'Client Admin',
+        location: p.client?.name || 'Client location',
+        details: p.notes || `Review the production plan${p.plannedOutput ? ` for ${asDisplayQuantity(p.plannedOutput)} units` : ''}.`,
+        quantitySummary: `${inputs.length} inputs · ${outputs.length} outputs`,
+        lineItems: [...inputs, ...outputs],
         createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Recent',
         priority: 'NORMAL',
-      }));
+        };
+      });
 
-      // 4. Fetch pending department issues
-      const departmentIssues = await apiClient
-        .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL' }))
-        .catch(() => []);
-
-      queue.DEPARTMENTS = (Array.isArray(departmentIssues) ? departmentIssues : []).map((d) => ({
+      queue.DEPARTMENTS = (Array.isArray(departmentIssuesRes) ? departmentIssuesRes : []).map((d) => ({
         id: d.id,
-        type: `DEPARTMENT_ISSUE (${d.issueNumber})`,
-        requester: d.requesterName || 'Department Head',
-        location: d.departmentName || 'Client Department',
-        details: d.reason || 'Consumables stock requisition',
-        quantitySummary: `${d.items?.length || 0} items requested`,
+        type: 'DEPARTMENT_ISSUE',
+        requester: d.issuedBy?.username || d.requesterName || 'Department Admin',
+        location: d.department?.name || d.departmentName || 'Client department',
+        details: d.notes || 'Review the requested product and quantity.',
+        quantitySummary: `${asDisplayQuantity(d.quantity)} ${d.unit?.unitName || d.unitNameSnapshot || ''}`.trim(),
+        lineItems: [{
+          id: d.id,
+          productName: d.product?.name || d.productName || 'Product',
+          quantity: asDisplayQuantity(d.quantity),
+          unitName: d.unit?.unitName || d.unitNameSnapshot,
+          batchNumber: d.batch?.batchNumber || null,
+        }],
         createdAt: d.createdAt ? new Date(d.createdAt).toLocaleString() : 'Recent',
         priority: 'NORMAL',
       }));

@@ -7,11 +7,13 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import {
   UserRole,
   ProductionStatus,
   ProductionMode,
   ProductStatus,
+  ProductKind,
   StockCondition,
   TransactionType,
   Prisma,
@@ -32,6 +34,7 @@ export class ManufacturingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -40,11 +43,30 @@ export class ManufacturingService {
   private async processInputs(
     inputs: ProductionInputDto[],
     tx: Prisma.TransactionClient,
+    clientId: string,
   ) {
     if (!inputs || inputs.length === 0) {
       throw new BadRequestException('At least one production input is required');
     }
 
+    const clientLocation = await tx.stockLocation.findUnique({ where: { clientId } });
+    if (!clientLocation) {
+      throw new BadRequestException('This client has no stock location configured');
+    }
+    const inputProductIds = [...new Set(inputs.map((input) => input.productId))];
+    const [balances, ledgerEntries] = await Promise.all([
+      tx.inventoryBalance.findMany({
+        where: { locationId: clientLocation.id, productId: { in: inputProductIds } },
+        select: { productId: true },
+        distinct: ['productId'],
+      }),
+      tx.ledgerEntry.findMany({
+        where: { locationId: clientLocation.id, productId: { in: inputProductIds } },
+        select: { productId: true },
+        distinct: ['productId'],
+      }),
+    ]);
+    const stockedProductIds = new Set([...balances, ...ledgerEntries].map(({ productId }) => productId));
     const processed = [];
 
     for (const input of inputs) {
@@ -61,6 +83,15 @@ export class ManufacturingService {
         throw new BadRequestException(
           `Product "${product.name}" is not approved (status: ${product.status})`,
         );
+      }
+      if (product.kind !== ProductKind.RAW_MATERIAL) {
+        throw new BadRequestException(`Manufacturing input "${product.name}" must be a raw material`);
+      }
+      if (product.ownerScope === 'CLIENT' && product.clientId !== clientId) {
+        throw new ForbiddenException('Cannot use another client’s raw material');
+      }
+      if (!stockedProductIds.has(product.id)) {
+        throw new BadRequestException(`Raw material "${product.name}" has never been stocked at this client`);
       }
 
       const unit = product.units.find(
@@ -102,6 +133,7 @@ export class ManufacturingService {
   private async processOutputs(
     outputs: ProductionOutputDto[],
     tx: Prisma.TransactionClient,
+    clientId: string,
   ) {
     if (!outputs || outputs.length === 0) {
       throw new BadRequestException('At least one production output is required');
@@ -123,6 +155,12 @@ export class ManufacturingService {
         throw new BadRequestException(
           `Product "${product.name}" is not approved (status: ${product.status})`,
         );
+      }
+      if (product.kind !== ProductKind.MANUFACTURED_PRODUCT) {
+        throw new BadRequestException(`Manufacturing output "${product.name}" must be a manufactured product`);
+      }
+      if (product.ownerScope !== 'CLIENT' || product.clientId !== clientId) {
+        throw new ForbiddenException('Manufacturing outputs must belong to this client’s catalog');
       }
 
       // Tracking mode validation
@@ -190,8 +228,8 @@ export class ManufacturingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const processedInputs = await this.processInputs(dto.inputs, tx);
-      const processedOutputs = await this.processOutputs(dto.outputs, tx);
+      const processedInputs = await this.processInputs(dto.inputs, tx, resolvedClientId!);
+      const processedOutputs = await this.processOutputs(dto.outputs, tx, resolvedClientId!);
 
       return tx.productionRun.create({
         data: {
@@ -264,7 +302,7 @@ export class ManufacturingService {
       }
     }
 
-    return this.prisma.productionRun.update({
+    const submitted = await this.prisma.productionRun.update({
       where: { id: runId },
       data: {
         status: ProductionStatus.PENDING_APPROVAL,
@@ -275,6 +313,13 @@ export class ManufacturingService {
         outputs: true,
       },
     });
+    await this.notificationsService.notifySuperAdmins(
+      'Production run awaiting approval',
+      'A client submitted a manufacturing run for review.',
+      'PRODUCTION_RUN',
+      run.id,
+    );
+    return submitted;
   }
 
   /**
@@ -318,7 +363,31 @@ export class ManufacturingService {
       throw new BadRequestException(`No stock location exists for client ${run.clientId}`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const approved = await this.prisma.$transaction(async (tx) => {
+      const referencedProductIds = [...new Set([
+        ...run.inputs.map((input) => input.productId),
+        ...run.outputs.map((output) => output.productId),
+      ])];
+      const referencedProducts = await tx.product.findMany({
+        where: { id: { in: referencedProductIds } },
+        select: { id: true, name: true, kind: true, status: true, ownerScope: true, clientId: true },
+      });
+      const productsById = new Map(referencedProducts.map((product) => [product.id, product]));
+      for (const input of run.inputs) {
+        const product = productsById.get(input.productId);
+        if (!product || product.kind !== ProductKind.RAW_MATERIAL || product.status !== ProductStatus.APPROVED ||
+          (product.ownerScope === 'CLIENT' && product.clientId !== run.clientId)) {
+          throw new BadRequestException(`Manufacturing input ${input.productId} must be an approved raw material`);
+        }
+      }
+      for (const output of run.outputs) {
+        const product = productsById.get(output.productId);
+        if (!product || product.kind !== ProductKind.MANUFACTURED_PRODUCT || product.status !== ProductStatus.APPROVED ||
+          product.ownerScope !== 'CLIENT' || product.clientId !== run.clientId) {
+          throw new BadRequestException(`Manufacturing output ${output.productId} must be an approved manufactured product`);
+        }
+      }
+
       // 1. Post raw material deductions (MANUFACTURING_INPUT) in shared atomic transaction
       await this.ledgerService.postTransaction(
         {
@@ -405,6 +474,14 @@ export class ManufacturingService {
         },
       });
     });
+    await this.notificationsService.notifyClientAdmins(
+      run.clientId,
+      'Production run approved',
+      'Your production run was approved and inventory was updated.',
+      'PRODUCTION_RUN',
+      run.id,
+    );
+    return approved;
   }
 
   /**
@@ -441,13 +518,21 @@ export class ManufacturingService {
       ? `${run.notes} | Rejected: ${dto.reason}`
       : `Rejected: ${dto.reason}`;
 
-    return this.prisma.productionRun.update({
+    const rejected = await this.prisma.productionRun.update({
       where: { id: runId },
       data: {
         status: ProductionStatus.REJECTED,
         notes: updatedNotes,
       },
     });
+    await this.notificationsService.notifyUser(
+      run.submittedById,
+      'Production run rejected',
+      `Your production run was rejected. Reason: ${dto.reason}`,
+      'PRODUCTION_RUN',
+      run.id,
+    );
+    return rejected;
   }
 
   /**
@@ -467,7 +552,7 @@ export class ManufacturingService {
       return []; // Manufacturing is client-scoped
     }
 
-    return this.prisma.productionRun.findMany({
+    const runs = await this.prisma.productionRun.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -481,6 +566,37 @@ export class ManufacturingService {
         submittedBy: { select: { id: true, username: true } },
       },
     });
+
+    return runs.map((r) => this.formatProductionRun(r));
+  }
+
+  private formatProductionRun(run: any) {
+    if (!run) return run;
+    const runNumber =
+      run.runNumber ||
+      (run.id ? `RUN-${run.id.substring(0, 8).toUpperCase()}` : 'RUN-UNKNOWN');
+    const clientName = run.client?.name || 'Client Facility';
+    const inputs = (run.inputs || []).map((i: any) => ({
+      ...i,
+      productName: i.product?.name || i.productName || 'Raw Material',
+    }));
+    const outputs = (run.outputs || []).map((o: any) => ({
+      ...o,
+      productName: o.product?.name || o.productName || 'Yield Product',
+    }));
+    const yieldProductName =
+      outputs[0]?.productName || run.yieldProductName || 'Finished Product';
+
+    return {
+      ...run,
+      runNumber,
+      clientName,
+      inputs,
+      inputLines: inputs,
+      outputs,
+      outputLines: outputs,
+      yieldProductName,
+    };
   }
 
   async getProductionRunById(user: AuthenticatedUser, runId: string) {
@@ -512,6 +628,6 @@ export class ManufacturingService {
       throw new ForbiddenException('Store Admin cannot view client production runs');
     }
 
-    return run;
+    return this.formatProductionRun(run);
   }
 }

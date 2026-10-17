@@ -1,298 +1,898 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button } from '../../../components/ui/Button';
-import { PageHeader } from '../../../components/layout/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingState } from '@/components/feedback/LoadingState';
+import { ErrorState } from '@/components/feedback/ErrorState';
 import { requestsService } from '../requests.service';
+import type { CreateStockRequestPayload } from '../requests.types';
+import { catalogService } from '@/features/catalog/catalog.service';
+import { CatalogProduct } from '@/features/catalog/catalog.types';
+import { inventoryService } from '@/features/inventory/inventory.service';
+import { StockLocationDto } from '@/types/api';
+import { useAuth } from '@/features/auth/auth.store';
+import { queryKeys } from '@/lib/query/query-keys';
+import { authService } from '@/features/auth/auth.service';
+import type { CategoryDto } from '@/types/api';
+
+type Direction = 'STOCK_IN' | 'STOCK_OUT';
+type RequestLineDraft = {
+  // These two fields only drive the cascading form selectors and are excluded from the API payload.
+  categoryId: string;
+  subcategoryId: string;
+  productId: string;
+  unitId: string;
+  quantity: string;
+  batchNumber: string;
+  expiryDate: string;
+};
+
+const blankLine = (): RequestLineDraft => ({
+  categoryId: '',
+  subcategoryId: '',
+  productId: '',
+  unitId: '',
+  quantity: '',
+  batchNumber: '',
+  expiryDate: '',
+});
+
+function isStockInType(value: string | null): value is Direction {
+  return value === 'STOCK_IN' || value === 'STOCK_OUT';
+}
 
 export function CreateRequestForm() {
+  const queryClient = useQueryClient();
   const router = useRouter();
-
-  const [requestType, setRequestType] = useState<'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'PHYSICAL_COUNT'>('STOCK_OUT');
-  const [priority, setPriority] = useState<'NORMAL' | 'URGENT'>('NORMAL');
-  const [sourceLocation, setSourceLocation] = useState('Central Warehouse (Main Hub)');
-  const [destinationClient, setDestinationClient] = useState('Metro Diagnostics Lab');
-  const [justification, setJustification] = useState('');
-
-  const [lines, setLines] = useState<Array<{
-    productId: string;
-    productName: string;
-    unit: string;
-    quantity: number;
-    condition: 'USABLE' | 'DAMAGED' | 'EXPIRED';
-    batchNumber: string;
-  }>>([
-    {
-      productId: 'prod-1',
-      productName: 'Reagent Cartridge Alpha-9',
-      unit: 'CARTON',
-      quantity: 5,
-      condition: 'USABLE',
-      batchNumber: 'LOT-2026-A1',
-    },
-  ]);
-
+  const { user } = useAuth();
+  const userId = user?.id;
+  const clientId = user?.clientId;
+  const [direction, setDirection] = useState<Direction>('STOCK_OUT');
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [stockedProductIds, setStockedProductIds] = useState<Set<string>>(new Set());
+  const [availableByProduct, setAvailableByProduct] = useState<Record<string, number>>({});
+  const [balancesByProduct, setBalancesByProduct] = useState<Record<string, Awaited<ReturnType<typeof inventoryService.getBalances>>>>({});
+  const [stockLoadedForLocation, setStockLoadedForLocation] = useState('');
+  const [isLoadingStock, setIsLoadingStock] = useState(false);
+  const [locations, setLocations] = useState<StockLocationDto[]>([]);
+  const [lines, setLines] = useState<RequestLineDraft[]>([blankLine()]);
+  const [locationId, setLocationId] = useState('');
+  const [destinationLocationId, setDestinationLocationId] = useState('');
+  const [sourceType, setSourceType] = useState('');
+  const [reason, setReason] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
-  const addLine = () => {
-    setLines([
-      ...lines,
-      {
-        productId: 'prod-2',
-        productName: 'Sterile Micro-Pipette Tips (200uL)',
-        unit: 'PACK',
-        quantity: 10,
-        condition: 'USABLE',
-        batchNumber: '',
-      },
-    ]);
-  };
+  const isWarehouseUser = user?.role === 'STORE_ADMIN' || user?.role === 'SUPER_ADMIN';
+  const isDispatch = direction === 'STOCK_OUT' && isWarehouseUser;
 
-  const removeLine = (idx: number) => {
-    if (lines.length === 1) return;
-    setLines(lines.filter((_, i) => i !== idx));
-  };
+  const targetLocations = useMemo(() => {
+    if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
+    if (user?.role === 'STORE_ADMIN') return locations.filter((location) => location.locationType === 'WAREHOUSE');
+    return locations;
+  }, [locations, user?.role]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sourceLocations = useMemo(() => {
+    if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
+    return locations.filter((location) => location.locationType === 'WAREHOUSE');
+  }, [locations, user?.role]);
+
+  const dispatchTargets = useMemo(
+    () => locations.filter((location) => location.locationType === 'CLIENT'),
+    [locations],
+  );
+
+  const availableLocations = direction === 'STOCK_IN' ? targetLocations : sourceLocations;
+  const selectableProducts = useMemo(
+    () => direction === 'STOCK_OUT'
+      ? products.filter((product) => stockedProductIds.has(product.id))
+      : products,
+    [direction, products, stockedProductIds],
+  );
+  const topLevelCategories = useMemo(
+    () => categories.filter((category) => !category.parentId),
+    [categories],
+  );
+  const categoriesForLine = (categoryId: string) => categories.filter((category) => category.parentId === categoryId);
+  const productsForLine = (line: RequestLineDraft) => selectableProducts.filter((product) => {
+    const productCategory = categories.find((category) => category.id === product.categoryId) ?? product.category;
+    if (line.subcategoryId) return product.categoryId === line.subcategoryId;
+    if (!line.categoryId) return true;
+    return product.categoryId === line.categoryId || productCategory?.parentId === line.categoryId;
+  });
+  const selectedProductForLine = (line: RequestLineDraft) => products.find((product) => product.id === line.productId);
+
+  const loadFormOptions = useCallback(async () => {
+    setIsLoading(true);
     setFormError(null);
+    try {
+      const scope = clientId ? `client-${clientId}` : 'company';
+      const bootstrap = userId
+        ? await queryClient.fetchQuery({
+            queryKey: queryKeys.session.bootstrap(userId),
+            queryFn: () => authService.getBootstrap(),
+            staleTime: 5 * 60 * 1000,
+          })
+        : undefined;
+      const [productData, categoryData, locationData] = bootstrap
+        ? [
+            bootstrap.products.map((product) => ({
+              ...product,
+              kind: product.kind as CatalogProduct['kind'],
+              trackingMode: product.trackingMode as CatalogProduct['trackingMode'],
+              baseUnit: product.units.find((unit) => unit.isBaseUnit)?.unitName ?? '',
+              minThreshold: Number(product.minQuantity),
+              isActive: true,
+              categoryName: product.category.name,
+              units: product.units.map((unit) => ({ ...unit, status: 'ACTIVE' as const })),
+            })) as CatalogProduct[],
+            bootstrap.categories,
+            bootstrap.locations,
+          ]
+        : await Promise.all([
+            queryClient.fetchQuery({
+              queryKey: queryKeys.catalog.products(scope),
+              queryFn: () => catalogService.getProducts(),
+              staleTime: 5 * 60 * 1000,
+            }),
+            queryClient.fetchQuery({
+              queryKey: queryKeys.catalog.categories(scope),
+              queryFn: () => catalogService.getCategories(),
+              staleTime: 5 * 60 * 1000,
+            }),
+            queryClient.fetchQuery({
+              queryKey: queryKeys.inventory.locations(userId),
+              queryFn: () => inventoryService.getLocations(),
+              staleTime: 5 * 60 * 1000,
+            }),
+          ]);
+      const approvedProducts = productData.filter((product) => product.status === 'APPROVED');
+      setProducts(approvedProducts);
+      setCategories(categoryData as CategoryDto[]);
+      setLocations(locationData);
 
-    for (const line of lines) {
-      if (line.quantity <= 0) {
-        setFormError('All line quantities must be strictly greater than zero.');
+      const editId = new URLSearchParams(window.location.search).get('edit');
+      if (editId) {
+        const draft = await requestsService.getRequestById(editId);
+        if (draft.status !== 'DRAFT') {
+          throw new Error('Only an unsent draft can be edited.');
+        }
+        const requestType = draft.requestType || draft.type || '';
+        setEditingDraftId(draft.id);
+        setDirection(requestType === 'STOCK_IN' ? 'STOCK_IN' : 'STOCK_OUT');
+        setLocationId(draft.sourceLocationId || draft.locationId || draft.destinationLocationId || '');
+        setDestinationLocationId(draft.destinationLocationId || '');
+        setSourceType(draft.sourceType || '');
+        setReason(draft.reason || draft.notes || '');
+        setLines(draft.lines.map((line) => {
+          const product = productData.find((option) => option.id === line.productId);
+          const category = categoryData.find((option) => option.id === product?.categoryId);
+          return {
+            categoryId: category?.parentId || category?.id || '',
+            subcategoryId: category?.parentId ? category.id : '',
+            productId: line.productId,
+            unitId: line.unitId || '',
+            quantity: String(line.quantity),
+            batchNumber: line.batchNumber || '',
+            expiryDate: line.expiryDate ? new Date(line.expiryDate).toISOString().slice(0, 10) : '',
+          };
+        }));
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Could not load products and locations.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clientId, queryClient, userId]);
+
+  useEffect(() => {
+    const requestedDirection = new URLSearchParams(window.location.search).get('type');
+    if (isStockInType(requestedDirection)) setDirection(requestedDirection);
+    void loadFormOptions();
+  }, [loadFormOptions]);
+
+  useEffect(() => {
+    if (!availableLocations.some((location) => location.id === locationId)) {
+      setLocationId(availableLocations[0]?.id || '');
+    }
+  }, [availableLocations, locationId]);
+
+  useEffect(() => {
+    if (direction !== 'STOCK_OUT' || !locationId) {
+      setStockedProductIds(new Set());
+      setIsLoadingStock(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsLoadingStock(true);
+    setStockLoadedForLocation('');
+    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+    const balanceFilters = isSuperAdmin ? { locationId, limit: 500 } : undefined;
+    void queryClient.fetchQuery({
+      // Store and client APIs are scoped to the signed-in user's assigned location,
+      // so share the exact cache entry used by Stock & Inventory. Super Admins
+      // choose a source warehouse and therefore need a separate location cache.
+      queryKey: queryKeys.inventory.balances(userId, balanceFilters),
+      queryFn: () => inventoryService.getBalances(balanceFilters),
+      staleTime: 2 * 60 * 1000,
+    }).then((balances) => {
+      if (!isCurrent) return;
+      const availability = balances.reduce<Record<string, number>>((totals, balance) => {
+        totals[balance.productId] = (totals[balance.productId] || 0) + Number(balance.availableQty ?? 0);
+        return totals;
+      }, {});
+      const balancesByProductId = balances.reduce<typeof balancesByProduct>((grouped, balance) => {
+        (grouped[balance.productId] ||= []).push(balance);
+        return grouped;
+      }, {});
+      setAvailableByProduct(availability);
+      setBalancesByProduct(balancesByProductId);
+      setStockedProductIds(new Set(Object.entries(availability).filter(([, quantity]) => quantity > 0).map(([id]) => id)));
+      setStockLoadedForLocation(locationId);
+    }).catch((error) => {
+      if (!isCurrent) return;
+      setStockedProductIds(new Set());
+      setAvailableByProduct({});
+      setBalancesByProduct({});
+      setStockLoadedForLocation(locationId);
+      setFormError(error instanceof Error ? error.message : 'Could not load available stock.');
+    }).finally(() => {
+      if (isCurrent) setIsLoadingStock(false);
+    });
+
+    return () => { isCurrent = false; };
+  }, [direction, locationId, queryClient, user?.role, userId]);
+
+  useEffect(() => {
+    if (direction !== 'STOCK_OUT' || isLoadingStock || stockLoadedForLocation !== locationId) return;
+    setLines((current) => current.map((line) => (
+      !line.productId
+        ? line
+        : !stockedProductIds.has(line.productId)
+          ? { ...line, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' }
+          : (() => {
+              const product = products.find((option) => option.id === line.productId);
+              if (!product || (product.trackingMode !== 'BATCH_ONLY' && product.trackingMode !== 'BOTH')) return line;
+              const availableLots = (balancesByProduct[product.id] || []).filter(
+                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+              );
+              if (line.batchNumber && availableLots.some((balance) => balance.batchNumber === line.batchNumber)) return line;
+              return availableLots.length === 1
+                ? { ...line, batchNumber: availableLots[0].batchNumber! }
+                : line.batchNumber
+                  ? { ...line, batchNumber: '' }
+                  : line;
+            })()
+    )));
+  }, [balancesByProduct, direction, isLoadingStock, locationId, products, stockLoadedForLocation, stockedProductIds]);
+
+  useEffect(() => {
+    if (!dispatchTargets.some((location) => location.id === destinationLocationId)) {
+      setDestinationLocationId(dispatchTargets[0]?.id || '');
+    }
+  }, [dispatchTargets, destinationLocationId]);
+
+  const updateLine = (index: number, changes: Partial<RequestLineDraft>) => {
+    setLines((current) => current.map((line, lineIndex) =>
+      lineIndex === index ? { ...line, ...changes } : line,
+    ));
+  };
+
+  const handleProductChange = (index: number, productId: string) => {
+    const product = products.find((option) => option.id === productId);
+    const category = categories.find((option) => option.id === product?.categoryId) ?? product?.category;
+    const baseUnit = product?.units?.find((unit) => unit.isBaseUnit && unit.status !== 'SUPERSEDED');
+    const availableLots = product && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')
+      ? (balancesByProduct[product.id] || []).filter(
+          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+        )
+      : [];
+    updateLine(index, {
+      categoryId: category?.parentId || category?.id || '',
+      subcategoryId: category?.parentId ? category.id : '',
+      productId,
+      unitId: baseUnit?.id || '',
+      batchNumber: direction === 'STOCK_OUT' && availableLots.length === 1
+        ? availableLots[0].batchNumber!
+        : '',
+      expiryDate: '',
+    });
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setFormError(null);
+    setSavedDraftId(null);
+
+    if (!user) {
+      setFormError('Your session has ended. Sign in again to continue.');
+      return;
+    }
+    if (!locationId) {
+      setFormError('No stock location is available for your account. Ask your administrator to check your assignment.');
+      return;
+    }
+    if (isDispatch && !destinationLocationId) {
+      setFormError('Choose the client receiving this stock.');
+      return;
+    }
+    if (direction === 'STOCK_IN' && !sourceType) {
+      setFormError('Choose where the stock came from.');
+      return;
+    }
+
+    for (const [index, line] of lines.entries()) {
+      const product = selectedProductForLine(line);
+      if (!product) {
+        setFormError(`Choose a product for item ${index + 1}.`);
+        return;
+      }
+      if (!line.unitId) {
+        setFormError(`${product.name} has no active unit configured. Ask your administrator for help.`);
+        return;
+      }
+      if (!Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
+        setFormError(`Enter a quantity greater than zero for ${product.name}.`);
+        return;
+      }
+
+      if (direction === 'STOCK_OUT' && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')) {
+        const availableLots = (balancesByProduct[product.id] || []).filter(
+          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+        );
+        if (availableLots.length > 1 && !availableLots.some((balance) => balance.batchNumber === line.batchNumber)) {
+          setFormError(`Choose the lot to dispatch for ${product.name}.`);
+          return;
+        }
+      }
+
+      // MOQ enforcement on dispatch/stock-out
+      const selectedUnit = product.units?.find((u) => u.id === line.unitId);
+      const conversion = Number(selectedUnit?.conversionToBase || 1);
+      const requestedBase = Number(line.quantity) * conversion;
+      const moq = Number(product.minOrderQuantity || 1);
+      if ((direction === 'STOCK_OUT' || isDispatch) && moq > 1 && requestedBase < moq) {
+        setFormError(
+          `Order quantity for "${product.name}" (${requestedBase} ${product.baseUnit}) is below the Minimum Order Quantity (MOQ) of ${moq} ${product.baseUnit}. Please increase the requested quantity.`,
+        );
         return;
       }
     }
 
     setIsSubmitting(true);
-
     try {
-      await requestsService.createRequest({
-        type: requestType,
-        locationId: 'loc-wh-1',
-        priority,
-        notes: justification,
-        lines: lines.map((l) => ({
-          productId: l.productId,
-          quantity: l.quantity,
-          condition: l.condition,
-          batchNumber: l.batchNumber || undefined,
-        })),
-      });
-      router.push('/requests');
-    } catch (err: any) {
-      setFormError(err.message || 'Failed to submit stock request');
+      const selectedDestination = dispatchTargets.find((location) => location.id === destinationLocationId);
+      const payload: CreateStockRequestPayload = {
+        requestType: isDispatch ? 'DISPATCH' : direction,
+        sourceType: direction === 'STOCK_IN' ? sourceType : undefined,
+        sourceLocationId: direction === 'STOCK_OUT' ? locationId : undefined,
+        destinationLocationId: direction === 'STOCK_IN' ? locationId : isDispatch ? destinationLocationId : undefined,
+        clientId: user.role === 'CLIENT_ADMIN' ? user.clientId || undefined : selectedDestination?.clientId || undefined,
+        priority: 'NORMAL',
+        reason: reason.trim() || undefined,
+        lines: lines.map((line) => {
+          const product = selectedProductForLine(line);
+          const availableLots = product && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')
+            ? (balancesByProduct[product.id] || []).filter(
+                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+              )
+            : [];
+          const batchNumber = line.batchNumber || (
+            direction === 'STOCK_OUT' && availableLots.length === 1
+              ? availableLots[0].batchNumber
+              : undefined
+          );
+          return {
+            productId: line.productId,
+            unitId: line.unitId,
+            quantity: Number(line.quantity),
+            condition: 'USABLE' as const,
+            batchNumber: batchNumber?.trim() || undefined,
+            expiryDate: line.expiryDate ? new Date(`${line.expiryDate}T00:00:00.000Z`).toISOString() : undefined,
+          };
+        }),
+      };
+      const request = editingDraftId
+        ? await requestsService.updateRequest(editingDraftId, {
+            reason: payload.reason,
+            lines: payload.lines,
+          })
+        : await requestsService.createRequest(payload);
+
+      try {
+        const submitted = await requestsService.submitRequest(request.id);
+        const isStockOut = direction === 'STOCK_OUT' || isDispatch;
+        router.push(`/requests/${submitted.id}${isStockOut ? '?challan=true' : ''}`);
+      } catch (error) {
+        setSavedDraftId(request.id);
+        const detail = error instanceof Error ? error.message : 'The request could not be submitted.';
+        setFormError(`Your draft was saved, but it was not sent for approval. ${detail}`);
+      }
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Your request could not be saved. Check the details and try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  if (isLoading) return <LoadingState message="Loading products and location assignments…" />;
+  if (formError && products.length === 0 && locations.length === 0) {
+    return <ErrorState title="Stock request could not be started" message={formError} onRetry={loadFormOptions} />;
+  }
+
+  const locationLabel = direction === 'STOCK_IN' ? 'Destination Stock Location' : 'Source Warehouse / Origin';
+
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
-        title="Create Stock Request"
-        description="Draft and submit inventory movements. Reservations allocate automatically upon submission."
+        title={editingDraftId
+          ? 'Edit Stock Movement'
+          : direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
+            ? 'Record Received Stock'
+            : direction === 'STOCK_IN'
+              ? 'Receive New Stock (Stock In)'
+              : 'Send / Dispatch Stock (Stock Out)'}
+        description={
+          isDispatch
+            ? 'Send items from your warehouse to a client clinic or hospital.'
+            : direction === 'STOCK_IN'
+              ? user?.role === 'CLIENT_ADMIN'
+                ? 'Record items that have already arrived at your client location. Super Admin approval is required before the stock is added.'
+                : 'Record new items arriving at your warehouse from a supplier or delivery truck.'
+              : 'Record items being dispatched, used, or transferred out of your store.'
+        }
         actions={
-          <Link href="/requests">
-            <Button variant="secondary" size="sm">← Back to Requests</Button>
+          <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+            ← Back to My Requests
           </Link>
         }
       />
 
+      {/* Direction Switcher Segmented Control */}
+      <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex gap-1.5" aria-label="Stock direction">
+        {(['STOCK_OUT', 'STOCK_IN'] as const).map((value) => {
+          const isSelected = direction === value;
+          const isStockIn = value === 'STOCK_IN';
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={isSelected}
+              disabled={Boolean(editingDraftId)}
+              onClick={() => setDirection(value)}
+              className={`flex-1 py-3 px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
+                isSelected
+                  ? isStockIn
+                    ? 'bg-white text-emerald-800 shadow-sm border border-emerald-300'
+                    : 'bg-white text-blue-800 shadow-sm border border-blue-300'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+              }`}
+            >
+              <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
+              <span>{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {formError && (
-        <div className="p-3 bg-[#fef3f2] border border-[#fee4e2] rounded-lg text-[#b42318] text-xs flex items-center gap-2">
-          <span>⚠️</span>
-          <span>{formError}</span>
+        <div role="alert" className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-1">
+          <div className="flex items-center gap-2 font-semibold">
+            <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Submission Notice</span>
+          </div>
+          <p className="pl-6 text-rose-600 leading-relaxed">{formError}</p>
+          {savedDraftId && (
+            <div className="pl-6 pt-1">
+              <Link href={`/requests/${savedDraftId}`} className="font-semibold underline text-rose-700">
+                Open Saved Draft #{savedDraftId.slice(0, 8).toUpperCase()} →
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="p-3.5 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg text-xs space-y-1">
-        <span className="font-semibold text-[#2563eb] flex items-center gap-1.5">
-          <span>🔒</span> Atomic Reservation Notice:
-        </span>
-        <p className="text-[#172033] leading-relaxed">
-          Submitting this request will automatically reserve stock from usable inventory (<code className="font-semibold">Available = Usable - Reserved ≥ 0</code>). Stock ledger updates will post only upon Super Admin approval.
-        </p>
-      </div>
+      {products.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto font-bold text-sm">!</div>
+            <h4 className="text-sm font-semibold text-slate-800">No approved products are available</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              No catalog products currently have approved status. Ask your administrator to review and approve catalog items.
+            </p>
+          </CardContent>
+        </Card>
+      ) : availableLocations.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-center space-y-2">
+            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto font-bold text-sm">!</div>
+            <h4 className="text-sm font-semibold text-slate-800">No stock location assigned</h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Your account has no active warehouse or client facility assignment. Contact Super Admin to configure your location permissions.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Step 1: Choose Location & Source */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">1</span>
+                <CardTitle>Step 1: Choose Location &amp; Source</CardTitle>
+              </div>
+              <CardDescription>
+                Where are these items currently located, and where are they going?
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Select
+                label={locationLabel}
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                required
+                disabled={Boolean(editingDraftId)}
+                helperText="Your operating warehouse or store location."
+              >
+                {availableLocations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name} ({location.locationType === 'WAREHOUSE' ? 'Warehouse' : 'Client Store'})
+                  </option>
+                ))}
+              </Select>
 
-      <form onSubmit={handleSubmit} className="bg-white border border-[#dbe3ee] rounded-xl p-5 shadow-xs space-y-5 text-xs">
-        {/* Movement Type */}
-        <div className="space-y-1.5">
-          <label className="text-[#172033] font-semibold block">Movement Type</label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {[
-              { type: 'STOCK_OUT', label: 'Dispatch (Out)', desc: 'Ship to client' },
-              { type: 'STOCK_IN', label: 'Intake (In)', desc: 'Receive supplier' },
-              { type: 'TRANSFER', label: 'Transfer', desc: 'Move between hubs' },
-              { type: 'PHYSICAL_COUNT', label: 'Count Adjustment', desc: 'Reconcile variance' },
-            ].map((t) => (
-              <button
-                key={t.type}
+              {isDispatch && (
+                <Select
+                  label="Which Client or Clinic is receiving this?"
+                  value={destinationLocationId}
+                  onChange={(e) => setDestinationLocationId(e.target.value)}
+                  required
+                  disabled={Boolean(editingDraftId)}
+                  helperText="Choose the hospital or facility receiving these items."
+                >
+                  {dispatchTargets.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+
+              {direction === 'STOCK_IN' && (
+                <Select
+                  label="Where did you receive this stock from?"
+                  value={sourceType}
+                  onChange={(e) => setSourceType(e.target.value)}
+                  required
+                  disabled={Boolean(editingDraftId)}
+                  helperText="Select how these items arrived at your store."
+                >
+                  <option value="">Select origin...</option>
+                  <option value="DIRECT_PURCHASE">Supplier Delivery (Purchase Bill / Order)</option>
+                  <option value="OPENING_STOCK">Opening Initial Stock</option>
+                  <option value="DEPARTMENT_RETURN">Returned from Hospital / Department</option>
+                  <option value="DONATION">Manufacturer Sample or Donation</option>
+                  <option value="OTHER">Other Delivery</option>
+                </Select>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Requested Items */}
+          <Card>
+            <CardHeader
+              action={
+                <span className="text-xs font-mono text-slate-500 font-semibold">
+                  {lines.length} Line Item{lines.length > 1 ? 's' : ''}
+                </span>
+              }
+            >
+              <CardTitle>Requested Products &amp; Quantities</CardTitle>
+              <CardDescription>
+                Select products, base units, and batch or expiration lot data.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {lines.map((line, index) => {
+                const product = selectedProductForLine(line);
+                const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
+                const precision = product?.quantityPrecision ?? 0;
+                const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
+                const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
+                const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
+                const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
+                const availableLots = product
+                  ? (balancesByProduct[product.id] || []).filter(
+                      (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+                    )
+                  : [];
+                const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
+                const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
+                const availableBase = product && hasCurrentAvailability
+                  ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
+                    ? Number(selectedLot.availableQty)
+                    : availableByProduct[product.id]
+                  : undefined;
+                const availableInSelectedUnit = availableBase === undefined
+                  ? undefined
+                  : availableBase / Number(selectedUnit?.conversionToBase || 1);
+                const quantityHelper = [
+                  precision > 0 ? `Up to ${precision} decimal places` : '',
+                  direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
+                    ? `${selectedLot ? 'Available in this lot' : 'Available here'}: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
+                    : '',
+                ].filter(Boolean).join(' · ') || undefined;
+
+                return (
+                  <div
+                    key={index}
+                    className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-3.5 relative transition-all duration-150 hover:border-slate-300"
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold font-mono">
+                          {index + 1}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-800">
+                          {product ? product.name : `Line Item #${index + 1}`}
+                        </span>
+                        {product?.trackingMode && product.trackingMode !== 'NONE' && (
+                          <Badge variant="neutral" size="sm">
+                            {product.trackingMode.replaceAll('_', ' ')}
+                          </Badge>
+                        )}
+                        {product?.minOrderQuantity && Number(product.minOrderQuantity) > 1 && (
+                          <Badge variant="purple" size="sm">
+                            MOQ: {product.minOrderQuantity} {product.baseUnit}
+                          </Badge>
+                        )}
+                      </div>
+
+                      {lines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
+                          className="text-[11px] font-medium text-rose-600 hover:text-rose-800 flex items-center gap-1 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Catalog filters narrow the product list while retaining stock-out availability rules. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Select
+                        label="Category"
+                        value={line.categoryId}
+                        onChange={(e) => updateLine(index, { categoryId: e.target.value, subcategoryId: '', productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                      >
+                        <option value="">All categories</option>
+                        {topLevelCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                      </Select>
+                      <Select
+                        label="Subcategory / brand"
+                        value={line.subcategoryId}
+                        onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                        disabled={!line.categoryId || categoriesForLine(line.categoryId).length === 0}
+                      >
+                        <option value="">All subcategories</option>
+                        {categoriesForLine(line.categoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                      </Select>
+                    </div>
+
+                    {/* Product Selector */}
+                    <Select
+                      label="Product"
+                      value={line.productId}
+                      onChange={(e) => handleProductChange(index, e.target.value)}
+                      required
+                    >
+                      <option value="">{line.categoryId ? 'Select a product...' : 'Select a category or product...'}</option>
+                      {productsForLine(line).map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.brand ? `${option.name} · ${option.brand}` : option.name}
+                        </option>
+                      ))}
+                    </Select>
+                    {line.categoryId && productsForLine(line).length === 0 && (
+                      <p className="text-[11px] text-slate-500">No approved products match this category{direction === 'STOCK_OUT' ? ' with available stock at this location' : ''}.</p>
+                    )}
+
+                    {direction === 'STOCK_OUT' && !isLoadingStock && selectableProducts.length === 0 && (
+                      <p className="text-[11px] text-amber-600 font-medium">
+                        No available stocked products at this location to dispatch.
+                      </p>
+                    )}
+                    {direction === 'STOCK_OUT' && isLoadingStock && (
+                      <p className="text-[11px] text-blue-600">Loading available stock balances…</p>
+                    )}
+
+                    {/* Quantity & Unit Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                      <Input
+                        label="Quantity"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step={precision ? 1 / 10 ** precision : 1}
+                        value={line.quantity}
+                        onChange={(e) => updateLine(index, { quantity: e.target.value })}
+                        required
+                        placeholder="e.g. 100"
+                        helperText={quantityHelper}
+                      />
+
+                      <Select
+                        label="Packaging Unit"
+                        value={line.unitId}
+                        onChange={(e) => updateLine(index, { unitId: e.target.value })}
+                        required
+                        disabled={!activeUnits.length}
+                      >
+                        <option value="">Select unit...</option>
+                        {activeUnits.map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.unitName} {unit.isBaseUnit ? '(Base)' : ''}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    {/* Batch / Expiry Tracking Row */}
+                    {(tracksBatch || tracksExpiry || Boolean(line.expiryDate) || Boolean(line.batchNumber)) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
+                        {tracksBatch && direction === 'STOCK_OUT' && product && (
+                          availableLots.length > 0 ? (
+                            <Select
+                              label="Batch / Lot to dispatch"
+                              value={effectiveBatchNumber}
+                              onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                              required={availableLots.length > 1}
+                            >
+                              {availableLots.length > 1 && <option value="">Choose a lot...</option>}
+                              {availableLots.map((balance) => (
+                                <option key={balance.id} value={balance.batchNumber}>
+                                  {balance.batchNumber} · {Number(balance.availableQty).toLocaleString()} {balance.unit || product.baseUnit} available
+                                </option>
+                              ))}
+                            </Select>
+                          ) : (
+                            <p className="text-xs text-slate-500">No lot number is recorded for the available stock.</p>
+                          )
+                        )}
+
+                        {tracksBatch && direction !== 'STOCK_OUT' && (
+                          <Input
+                            label="Batch / Lot Number"
+                            value={line.batchNumber}
+                            onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                            placeholder="e.g. LOT-2026-X"
+                            helperText="Lot trace identifier for quarantine and recall"
+                          />
+                        )}
+
+                        {(tracksExpiry || Boolean(line.expiryDate)) && (
+                          <div className="space-y-1.5 w-full">
+                            <label className="text-xs font-medium text-slate-700 block">
+                              Expiration Date
+                            </label>
+                            <input
+                              type="date"
+                              value={line.expiryDate}
+                              onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
+                              className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                            />
+                            <p className="text-[11px] text-slate-500">Scheduled expiry shelf date</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <Button
                 type="button"
-                onClick={() => setRequestType(t.type as any)}
-                className={`p-2.5 rounded-lg border text-left transition ${
-                  requestType === t.type
-                    ? 'bg-[#eff6ff] border-[#2563eb] text-[#2563eb] font-semibold'
-                    : 'bg-white border-[#dbe3ee] text-[#5b6678] hover:border-slate-400'
-                }`}
+                variant="secondary"
+                size="sm"
+                onClick={() => setLines((current) => [...current, blankLine()])}
+                className="w-full py-2.5 border-dashed"
               >
-                <div className="font-semibold text-xs">{t.label}</div>
-                <div className="text-[10px] text-[#5b6678] mt-0.5">{t.desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+                <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
+                + Add Another Product Line
+              </Button>
+            </CardContent>
+          </Card>
 
-        {/* Origin & Destination */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div className="space-y-1">
-            <label className="text-[#172033] font-semibold block">Origin Location</label>
-            <select
-              value={sourceLocation}
-              onChange={(e) => setSourceLocation(e.target.value)}
-              className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-            >
-              <option value="Central Warehouse (Main Hub)">Central Warehouse (Main Hub)</option>
-              <option value="Metro Diagnostics Lab (Client Loc)">Metro Diagnostics Lab (Client Loc)</option>
-            </select>
-          </div>
+          {/* Step 3: Note / Reason */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">3</span>
+                <CardTitle>Step 3: Add a Note (Optional)</CardTitle>
+              </div>
+              <CardDescription>
+                Add any helpful note, invoice number, or order details for your administrator.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                maxLength={500}
+                placeholder="e.g. Regular weekly replenishment, hospital emergency ward order, or invoice #104..."
+                helperText={`${reason.length}/500 characters`}
+              />
+            </CardContent>
+          </Card>
 
-          {requestType === 'STOCK_OUT' && (
-            <div className="space-y-1">
-              <label className="text-[#172033] font-semibold block">Destination Client</label>
-              <select
-                value={destinationClient}
-                onChange={(e) => setDestinationClient(e.target.value)}
-                className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-              >
-                <option value="Metro Diagnostics Lab">Metro Diagnostics Lab (Assigned)</option>
-                <option value="City Clinical Laboratories">City Clinical Laboratories (Assigned)</option>
-              </select>
+          {/* Friendly Guidance Banner */}
+          <div className="p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-xl flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-sm">
+              ✓
             </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="text-[#172033] font-semibold block">Priority Level</label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as any)}
-              className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-            >
-              <option value="NORMAL">Normal Priority</option>
-              <option value="URGENT">Urgent (Expedited Queue)</option>
-            </select>
+            <div className="text-xs text-slate-700 space-y-1">
+              <span className="font-semibold text-slate-900 block">
+                {direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
+                  ? 'Record stock that has arrived'
+                  : 'What happens when you send this for approval?'}
+              </span>
+              <p className="leading-relaxed text-slate-600">
+                {direction === 'STOCK_OUT'
+                  ? 'Available stock is reserved while Super Admin reviews it. After approval, the items are dispatched.'
+                  : user?.role === 'CLIENT_ADMIN'
+                    ? 'This records stock already received; it does not request a warehouse delivery. Super Admin approval is required before the quantity appears in your stock.'
+                    : 'This records items arriving at your warehouse. Super Admin approval is required before they are added to available stock.'}
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* Dynamic Lines */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-[#172033]">Requested Items & Quantities</span>
-            <Button type="button" variant="secondary" size="sm" onClick={addLine}>
-              + Add Item Line
+          {/* Bottom Actions */}
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
+            <Link href="/requests" className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors">
+              ← Cancel and return to list
+            </Link>
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              isLoading={isSubmitting}
+              disabled={isSubmitting || products.length === 0 || availableLocations.length === 0}
+              className="w-full sm:w-auto px-6 py-2.5 font-bold shadow-sm"
+            >
+              {editingDraftId
+                ? 'Save Changes & Send for Approval'
+                : direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
+                  ? 'Submit Received Stock for Approval →'
+                  : 'Send for Approval →'}
             </Button>
           </div>
-
-          <div className="space-y-2.5">
-            {lines.map((line, idx) => (
-              <div
-                key={idx}
-                className="p-3 bg-[#f8fafc] border border-[#dbe3ee] rounded-lg grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-              >
-                <div className="sm:col-span-4 space-y-1">
-                  <label className="text-[10px] text-[#5b6678] font-semibold block">Product</label>
-                  <select
-                    value={line.productId}
-                    onChange={(e) => {
-                      const name = e.target.value === 'prod-1' ? 'Reagent Cartridge Alpha-9' : 'Sterile Micro-Pipette Tips (200uL)';
-                      setLines(lines.map((l, i) => i === idx ? { ...l, productId: e.target.value, productName: name } : l));
-                    }}
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-                  >
-                    <option value="prod-1">Reagent Cartridge Alpha-9</option>
-                    <option value="prod-2">Sterile Micro-Pipette Tips (200uL)</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="text-[10px] text-[#5b6678] font-semibold block">Quantity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={line.quantity}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setLines(lines.map((l, i) => i === idx ? { ...l, quantity: val } : l));
-                    }}
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-                  />
-                </div>
-
-                <div className="sm:col-span-2 space-y-1">
-                  <label className="text-[10px] text-[#5b6678] font-semibold block">Unit</label>
-                  <select
-                    value={line.unit}
-                    onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, unit: e.target.value } : l))}
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-                  >
-                    <option value="CARTON">CARTON</option>
-                    <option value="PACK">PACK</option>
-                    <option value="PIECE">PIECE</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-3 space-y-1">
-                  <label className="text-[10px] text-[#5b6678] font-semibold block">Batch / Lot #</label>
-                  <input
-                    type="text"
-                    value={line.batchNumber}
-                    placeholder="e.g. LOT-2026-A1"
-                    onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, batchNumber: e.target.value } : l))}
-                    className="w-full px-2.5 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-                  />
-                </div>
-
-                <div className="sm:col-span-1 flex justify-end items-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => removeLine(idx)}
-                    disabled={lines.length === 1}
-                    className="p-1.5 text-[#5b6678] hover:text-[#b42318] disabled:opacity-30"
-                    title="Remove item"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Justification */}
-        <div className="space-y-1">
-          <label className="text-[#172033] font-semibold block">Operational Notes / Justification</label>
-          <textarea
-            rows={2}
-            value={justification}
-            onChange={(e) => setJustification(e.target.value)}
-            placeholder="Operational purpose of this stock movement..."
-            className="w-full px-3 py-2 bg-white border border-[#dbe3ee] rounded-md text-[#172033] placeholder-[#5b6678]/60 focus:outline-none focus:border-[#2563eb]"
-          />
-        </div>
-
-        {/* Submit Controls */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#dbe3ee]">
-          <Link href="/requests">
-            <Button type="button" variant="quiet">Cancel</Button>
-          </Link>
-          <Button type="submit" variant="primary" isLoading={isSubmitting}>
-            Submit Request for Approval
-          </Button>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

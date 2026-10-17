@@ -3,10 +3,12 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import {
   BackupStatus,
   DrillStatus,
@@ -25,6 +27,7 @@ export class BackupsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    @Optional() private readonly storageService?: StorageService,
   ) {}
 
   // ==========================================
@@ -344,31 +347,41 @@ export class BackupsService {
   // SYSTEM HEALTH & MONITORING
   // ==========================================
 
+  private lastHealthCache: { data: any; cachedAt: number } | null = null;
+
   async getHealth() {
-    let dbStatus = 'CONNECTED';
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-    } catch {
-      dbStatus = 'DISCONNECTED';
+    const now = Date.now();
+    if (this.lastHealthCache && now - this.lastHealthCache.cachedAt < 10_000) {
+      return this.lastHealthCache.data;
     }
 
-    const backupSummary = await this.getBackupStatusSummary();
+    const [dbResult, backupSummary, pendingApprovalsCount, activeLowStockCount, storageHealth] =
+      await Promise.all([
+        this.prisma.$queryRaw`SELECT 1`
+          .then(() => 'CONNECTED')
+          .catch(() => 'DISCONNECTED'),
+        this.getBackupStatusSummary(),
+        this.prisma.stockRequest.count({
+          where: { status: 'PENDING_APPROVAL' },
+        }),
+        this.prisma.stockAlertState.count({
+          where: { isLowStock: true },
+        }),
+        this.storageService
+          ? this.storageService.getStorageHealth()
+          : Promise.resolve({ status: 'HEALTHY' as const, driver: 'local' as const, details: 'Storage driver active' }),
+      ]);
 
-    const [pendingApprovalsCount, activeLowStockCount] = await Promise.all([
-      this.prisma.stockRequest.count({
-        where: { status: 'PENDING_APPROVAL' },
-      }),
-      this.prisma.stockAlertState.count({
-        where: { isLowStock: true },
-      }),
-    ]);
-
+    const dbStatus = dbResult;
     const isHealthy =
-      dbStatus === 'CONNECTED' && !backupSummary.hasPersistentWarning;
+      dbStatus === 'CONNECTED' &&
+      !backupSummary.hasPersistentWarning &&
+      storageHealth.status === 'HEALTHY';
 
-    return {
+    const healthData = {
       status: isHealthy ? 'HEALTHY' : 'DEGRADED',
       database: dbStatus,
+      storage: storageHealth,
       uptimeSeconds: Math.floor(process.uptime()),
       memory: {
         heapUsedBytes: process.memoryUsage().heapUsed,
@@ -388,6 +401,9 @@ export class BackupsService {
       },
       timestamp: new Date().toISOString(),
     };
+
+    this.lastHealthCache = { data: healthData, cachedAt: now };
+    return healthData;
   }
 
   // ==========================================

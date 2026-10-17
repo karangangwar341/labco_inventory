@@ -8,9 +8,12 @@ export const endpoints = {
     login: () => '/auth/login',
     logout: () => '/auth/logout',
     me: () => '/me',
+    bootstrap: () => '/me/bootstrap',
   },
 
   inventory: {
+    locations: () => '/inventory/locations',
+    lowStockCount: () => '/inventory/low-stock-count',
     balances: (params?: {
       locationId?: string;
       productId?: string;
@@ -65,6 +68,8 @@ export const endpoints = {
   catalog: {
     products: () => '/products',
     productById: (id: string) => `/products/${id}`,
+    reviewProduct: (id: string) => `/products/${id}/review`,
+    reviewProductVersion: (id: string, versionId: string) => `/products/${id}/versions/${versionId}/review`,
     categories: () => '/categories',
   },
 
@@ -93,6 +98,8 @@ export const endpoints = {
     byId: (id: string) => `/departments/${id}`,
     create: () => '/departments',
     update: (id: string) => `/departments/${id}`,
+    approve: (id: string) => `/departments/${id}/approve`,
+    reject: (id: string) => `/departments/${id}/reject`,
     issues: (params?: {
       clientId?: string;
       departmentId?: string;
@@ -127,6 +134,7 @@ export const endpoints = {
     approve: (batchId: string) => `/import-batches/${batchId}/approve`,
     reject: (batchId: string) => `/import-batches/${batchId}/reject`,
     validate: (batchId: string) => `/import-batches/${batchId}/validate`,
+    submit: (batchId: string) => `/import-batches/${batchId}/submit`,
     errors: (batchId: string) => `/import-batches/${batchId}/errors`,
   },
 
@@ -140,6 +148,7 @@ export const endpoints = {
     },
     markRead: (id: string) => `/notifications/${id}/read`,
     markAllRead: () => '/notifications/read-all',
+    settings: () => '/notifications/settings',
   },
 
   reports: {
@@ -177,13 +186,46 @@ export const endpoints = {
     list: () => '/users',
     byId: (id: string) => `/users/${id}`,
     create: () => '/users',
-    update: (id: string) => `/users/${id}`,
+    disable: (id: string) => `/users/${id}/disable`,
+    resetPassword: (id: string) => `/users/${id}/reset-password`,
   },
 
   organization: {
     clients: () => '/clients',
     clientById: (id: string) => `/clients/${id}`,
+    createClient: () => '/clients',
+    updateClient: (id: string) => `/clients/${id}`,
+    clientWarehouses: (id: string) => `/clients/${id}/warehouses`,
+    clientWarehouseAssignment: (clientId: string, warehouseId: string) =>
+      `/clients/${clientId}/warehouses/${warehouseId}`,
     warehouses: () => '/warehouses',
     warehouseById: (id: string) => `/warehouses/${id}`,
+    createWarehouse: () => '/warehouses',
+    updateWarehouse: (id: string) => `/warehouses/${id}`,
+  },
+
+  staff: {
+    list: (params?: { clientId?: string; page?: number; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.clientId) q.set('clientId', params.clientId);
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      const qs = q.toString();
+      return qs ? `/client-staff?${qs}` : '/client-staff';
+    },
+    byId: (id: string) => `/client-staff/${id}`,
+    create: () => '/client-staff',
+    update: (id: string) => `/client-staff/${id}`,
+    delete: (id: string) => `/client-staff/${id}`,
+    workLogs: (params?: { clientId?: string; page?: number; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (params?.clientId) q.set('clientId', params.clientId);
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      const qs = q.toString();
+      return qs ? `/client-staff/work-logs?${qs}` : '/client-staff/work-logs';
+    },
+    staffWorkLogs: (staffId: string) => `/client-staff/${staffId}/work-logs`,
+    createWorkLog: (staffId: string) => `/client-staff/${staffId}/work-logs`,
   },
 };

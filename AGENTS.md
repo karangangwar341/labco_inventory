@@ -24,11 +24,12 @@ If documents conflict, stop and report the conflict. Do not silently choose one.
 ## Approved Technology Stack
 - **Backend:** Node.js + TypeScript + NestJS
 - **Frontend:** Next.js + React + TypeScript
-- **Database:** PostgreSQL (ACID transactions, pessimistic row locking `FOR UPDATE`, continuous WAL)
+- **Database:** Neon Serverless PostgreSQL (ACID transactions, pessimistic row locking `FOR UPDATE`, PgBouncer connection pooling, direct migration URL, continuous WAL / PITR)
 - **ORM:** Prisma ORM with raw SQL for critical concurrency/locking operations
 - **Auth:** JWT authentication with RBAC (NestJS guards & service authorization)
 - **AI Extraction:** Google Gemini API behind provider-agnostic adapter
-- **Storage:** Private local storage (dev) / S3-compatible (prod - provider deferred)
+- **Storage:** Neon Object Storage (branch-aware, S3-compatible blob storage) with local driver fallback
+- **Runtime & Deployment:** Direct Node.js runtime / serverless deployment (Docker is not required)
 
 ## Non-negotiable invariants
 - Never let imports/drafts/pending requests change finalized inventory.

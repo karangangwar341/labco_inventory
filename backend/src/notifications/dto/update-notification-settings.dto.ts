@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsNumber, IsOptional } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
 
 export class UpdateNotificationSettingsDto {
   @ApiPropertyOptional({
@@ -8,7 +8,8 @@ export class UpdateNotificationSettingsDto {
   })
   @IsOptional()
   @IsArray()
-  @IsNumber({}, { each: true })
+  @IsInt({ each: true })
+  @Min(1, { each: true })
   expiryWarningIntervals?: number[];
 
   @ApiPropertyOptional({
@@ -19,4 +20,9 @@ export class UpdateNotificationSettingsDto {
   @IsOptional()
   @IsBoolean()
   soundEnabled?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Require client receipt confirmation after dispatch approval' })
+  @IsOptional()
+  @IsBoolean()
+  receiptConfirmationEnabled?: boolean;
 }

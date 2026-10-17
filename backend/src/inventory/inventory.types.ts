@@ -3,8 +3,16 @@ import { Decimal } from '@prisma/client/runtime/library';
 export interface CalculatedBalanceView {
   id: string;
   locationId: string;
+  locationName?: string;
   productId: string;
+  productName?: string;
+  brand?: string | null;
+  categoryName?: string | null;
+  categoryId?: string | null;
+  unit?: string | null;
+  minThreshold?: number;
   batchId: string | null;
+  batchNumber?: string | null;
   usableQty: Decimal;
   reservedQty: Decimal;
   damagedQty: Decimal;

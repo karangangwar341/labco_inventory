@@ -42,6 +42,7 @@ export class ApiError extends Error {
     }
 
     super(resolvedMessage);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = 'ApiError';
     this.status = status;
     this.data = data;

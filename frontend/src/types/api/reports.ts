@@ -1,11 +1,9 @@
 export type ReportType =
-  | 'CURRENT_STOCK_BALANCE'
-  | 'STOCK_MOVEMENT_LEDGER'
-  | 'DISCREPANCY_SUMMARY'
-  | 'SHIPMENT_RECEIPT_STATUS'
+  | 'STOCK_BALANCE'
+  | 'INVENTORY_LEDGER'
+  | 'BATCH_EXPIRY'
   | 'CLIENT_CONSUMPTION'
-  | 'SYSTEM_AUDIT_LOG'
-  | 'PRODUCTION_YIELD';
+  | 'PRODUCTION_RUNS';
 
 export type ReportFormat = 'json' | 'csv';
 
@@ -16,14 +14,22 @@ export interface QueryReportDto {
   locationId?: string;
   productId?: string;
   clientId?: string;
+  warehouseId?: string;
 }
 
 export interface ReportAuditDto {
   id: string;
-  reportType: string;
-  format: string;
-  requestedBy: string;
-  recordCount: number;
-  timestamp: string;
-  hash: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  reason?: string | null;
+  occurredAt: string;
+  actorUser?: { id: string; username: string; role: string };
+}
+
+export interface ReportResult {
+  reportType: ReportType;
+  format: 'json';
+  rowCount: number;
+  data: Array<Record<string, unknown>>;
 }

@@ -7,6 +7,8 @@ import {
   RequestType,
   StockCondition,
   ProductStatus,
+  ProductKind,
+  CatalogScope,
   ReservationStatus,
   ApprovalDecision,
   TrackingMode,
@@ -25,6 +27,7 @@ describe('Requests & Reservations Service (T-007)', () => {
   let mockPrisma: any;
   let mockAuthService: any;
   let mockLedgerService: any;
+  let mockNotificationsService: any;
 
   const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
   const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN };
@@ -33,6 +36,8 @@ describe('Requests & Reservations Service (T-007)', () => {
     id: 'prod-1',
     name: 'Lab Test Tube',
     status: ProductStatus.APPROVED,
+    kind: ProductKind.RAW_MATERIAL,
+    ownerScope: CatalogScope.COMPANY,
     quantityPrecision: 0,
     units: [
       {
@@ -92,6 +97,11 @@ describe('Requests & Reservations Service (T-007)', () => {
     mockLedgerService = {
       postTransaction: vi.fn(),
     };
+    mockNotificationsService = {
+      notifySuperAdmins: vi.fn(),
+      notifyUser: vi.fn(),
+      notifyClientAdmins: vi.fn(),
+    };
 
     const mockShipmentsService: any = {
       createShipmentForApprovedDispatch: vi.fn(),
@@ -104,6 +114,7 @@ describe('Requests & Reservations Service (T-007)', () => {
       mockLedgerService as any,
       reservationsService,
       mockShipmentsService,
+      mockNotificationsService,
     );
   });
 
@@ -135,6 +146,23 @@ describe('Requests & Reservations Service (T-007)', () => {
       expect(mockPrisma.reservation.create).not.toHaveBeenCalled();
       expect(mockPrisma.inventoryBalance.update).not.toHaveBeenCalled();
     });
+
+    it('rejects manufactured products in Store Admin stock requests', async () => {
+      const manufacturedProduct = {
+        ...approvedProduct,
+        kind: ProductKind.MANUFACTURED_PRODUCT,
+        ownerScope: CatalogScope.CLIENT,
+      };
+      mockPrisma.product.findUnique.mockResolvedValue(manufacturedProduct);
+      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+
+      await expect(requestsService.createDraft(storeAdminUser, {
+        requestType: RequestType.STOCK_OUT,
+        sourceLocationId: 'loc-1',
+        lines: [{ productId: 'finished-kit', quantity: 1, unitId: 'unit-ea' }],
+      })).rejects.toThrow('Store Admins can only request company raw materials');
+    });
   });
 
   describe('2. Submission & Atomic Reservations', () => {
@@ -149,6 +177,7 @@ describe('Requests & Reservations Service (T-007)', () => {
           {
             id: 'line-1',
             productId: 'prod-1',
+            product: { kind: ProductKind.RAW_MATERIAL, ownerScope: CatalogScope.COMPANY },
             baseQuantity: new Prisma.Decimal(25),
             condition: StockCondition.USABLE,
           },
@@ -172,6 +201,12 @@ describe('Requests & Reservations Service (T-007)', () => {
       const result = await requestsService.submitRequest(storeAdminUser, 'req-1');
 
       expect(result.status).toBe(RequestStatus.PENDING_APPROVAL);
+      expect(mockNotificationsService.notifySuperAdmins).toHaveBeenCalledWith(
+        'Approval requested',
+        expect.any(String),
+        'STOCK_REQUEST',
+        'req-1',
+      );
       expect(mockPrisma.reservation.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -202,6 +237,7 @@ describe('Requests & Reservations Service (T-007)', () => {
           {
             id: 'line-1',
             productId: 'prod-1',
+            product: { kind: ProductKind.RAW_MATERIAL, ownerScope: CatalogScope.COMPANY },
             baseQuantity: new Prisma.Decimal(90),
             condition: StockCondition.USABLE,
           },
@@ -315,6 +351,13 @@ describe('Requests & Reservations Service (T-007)', () => {
       await requestsService.rejectRequest(superAdminUser, 'req-1', {
         reason: 'Duplicate budget allocation',
       });
+      expect(mockNotificationsService.notifyUser).toHaveBeenCalledWith(
+        storeAdminUser.id,
+        'Request rejected',
+        expect.stringContaining('Duplicate budget allocation'),
+        'STOCK_REQUEST',
+        'req-1',
+      );
 
       expect(mockPrisma.approval.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -383,6 +426,13 @@ describe('Requests & Reservations Service (T-007)', () => {
       });
 
       expect(res.status).toBe(RequestStatus.APPROVED);
+      expect(mockNotificationsService.notifyUser).toHaveBeenCalledWith(
+        storeAdminUser.id,
+        'Request approved',
+        expect.any(String),
+        'STOCK_REQUEST',
+        'req-1',
+      );
       // Reservation is marked CONSUMED
       expect(mockPrisma.reservation.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -429,7 +479,7 @@ describe('Requests & Reservations Service (T-007)', () => {
   });
 
   describe('5. Stock-In Tracking & Physical Count Adjustments (T-008)', () => {
-    it('enforces batch tracking requirement when product trackingMode is BATCH_ONLY', async () => {
+    it('allows stock-in without a lot number even when product trackingMode is BATCH_ONLY', async () => {
       const batchProduct = {
         ...approvedProduct,
         id: 'prod-batch',
@@ -438,21 +488,23 @@ describe('Requests & Reservations Service (T-007)', () => {
       mockPrisma.product.findUnique.mockResolvedValue(batchProduct);
       mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
       mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
+      mockPrisma.stockRequest.create.mockResolvedValue({ id: 'req-batch-optional' });
 
-      await expect(
-        requestsService.createDraft(storeAdminUser, {
-          requestType: RequestType.STOCK_IN,
-          sourceType: 'DIRECT_PURCHASE',
-          sourceLocationId: 'loc-1',
-          lines: [
-            {
-              productId: 'prod-batch',
-              quantity: 10,
-              unitId: 'unit-ea',
-            },
-          ],
-        }),
-      ).rejects.toThrow(BadRequestException);
+      const draft = await requestsService.createDraft(storeAdminUser, {
+        requestType: RequestType.STOCK_IN,
+        sourceType: 'DIRECT_PURCHASE',
+        sourceLocationId: 'loc-1',
+        lines: [
+          {
+            productId: 'prod-batch',
+            quantity: 10,
+            unitId: 'unit-ea',
+          },
+        ],
+      });
+
+      expect(draft.id).toBe('req-batch-optional');
+      expect(mockPrisma.stockBatch.create).not.toHaveBeenCalled();
     });
 
     it('creates stockBatch automatically when batchNumber is specified on stock-in', async () => {

@@ -6,6 +6,7 @@ import {
   DepartmentIssueStatus,
   DepartmentReturnStatus,
   ProductStatus,
+  ProductKind,
   StockCondition,
   TransactionType,
   Prisma,
@@ -22,6 +23,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   let mockPrisma: any;
   let mockLedgerService: any;
   let mockInventoryService: any;
+  let mockNotificationsService: any;
 
   const superAdminUser: any = {
     id: 'sa-1',
@@ -50,6 +52,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   const testProduct = {
     id: 'prod-1',
     name: 'Lab Diagnostic Cartridge',
+    kind: ProductKind.MANUFACTURED_PRODUCT,
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
     trackingMode: 'NONE',
@@ -124,11 +127,17 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         locationType: 'CLIENT',
       }),
     };
+    mockNotificationsService = {
+      notifySuperAdmins: vi.fn(),
+      notifyUser: vi.fn(),
+      notifyClientAdmins: vi.fn(),
+    };
 
     departmentsService = new DepartmentsService(
       mockPrisma as any,
       mockLedgerService as any,
       mockInventoryService as any,
+      mockNotificationsService as any,
     );
   });
 
@@ -345,7 +354,11 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         baseQuantity: new Prisma.Decimal(50),
         status: DepartmentIssueStatus.PENDING_APPROVAL,
         department: { name: 'Hematology Lab' },
-        product: { name: 'Lab Diagnostic Cartridge' },
+        product: {
+          name: 'Lab Diagnostic Cartridge',
+          kind: ProductKind.MANUFACTURED_PRODUCT,
+          status: ProductStatus.APPROVED,
+        },
       });
 
       mockPrisma.departmentIssue.update.mockResolvedValue({

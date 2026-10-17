@@ -44,6 +44,9 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
       loginEvent: {
         create: vi.fn(),
       },
+      product: { findMany: vi.fn().mockResolvedValue([]) },
+      category: { findMany: vi.fn().mockResolvedValue([]) },
+      stockLocation: { findMany: vi.fn().mockResolvedValue([]) },
     };
 
     mockJwtService = {
@@ -51,6 +54,49 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
     };
 
     authService = new AuthService(mockPrisma as any, mockJwtService as any);
+  });
+
+  describe('getBootstrap', () => {
+    it('only includes approved company raw materials for Store Admins', async () => {
+      await authService.getBootstrap({
+        id: 'store-admin-1', username: 'store-admin', role: UserRole.STORE_ADMIN,
+        status: UserStatus.ACTIVE, warehouseId: 'warehouse-1',
+      });
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { ownerScope: 'COMPANY', kind: 'RAW_MATERIAL', status: 'APPROVED' },
+        take: 250,
+      }));
+    });
+
+    it('loads bounded role-scoped startup references in parallel and omits other warehouse identities for clients', async () => {
+      mockPrisma.stockLocation.findMany.mockResolvedValue([{
+        id: 'location-client', locationType: 'CLIENT', warehouseId: null, clientId: 'client-1',
+        warehouse: null, client: { name: 'Client One' },
+      }]);
+
+      const result = await authService.getBootstrap({
+        id: 'client-admin-1', username: 'client-admin', role: UserRole.CLIENT_ADMIN,
+        status: UserStatus.ACTIVE, clientId: 'client-1', warehouseId: null,
+      });
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ OR: expect.arrayContaining([
+          { ownerScope: 'CLIENT', clientId: 'client-1' },
+        ]) }),
+        take: 250,
+      }));
+      expect(mockPrisma.category.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { OR: [
+          { ownerScope: 'COMPANY' },
+          { ownerScope: 'CLIENT', clientId: 'client-1' },
+        ] },
+        take: 250,
+      }));
+      expect(result.locations).toEqual([{ id: 'location-client', name: 'Client One', locationType: 'CLIENT', warehouseId: null, clientId: 'client-1' }]);
+      expect(result.products).toEqual([]);
+      expect(result.categories).toEqual([]);
+    });
   });
 
   describe('validateUserCredentials', () => {
@@ -199,7 +245,7 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
         id: 'session-uuid',
         userId: mockUser.id,
         isRevoked: false,
-        lastActivityAt: new Date(),
+        lastActivityAt: new Date(Date.now() - 10 * 60 * 1000),
         expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
         user: mockUser,
       };

@@ -1,21 +1,24 @@
 # Deployment, Operations & Recovery Runbook
 **Version:** 0.1 | Provider and hosting selection deferred.
 
-## 1. Environments
-- Separate local development, test/CI, staging and production environments.
-- Separate credentials, storage and databases for each environment.
+## 1. Environments & Infrastructure Platform
+- **Database:** Neon Serverless PostgreSQL (`DATABASE_URL` with PgBouncer connection pooling for app traffic, `DIRECT_URL` for Prisma migrations).
+- **Object Storage:** Neon Object Storage (S3-compatible, branch-aware blob storage with `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`).
+- **Container / Docker Requirement:** None. Application runs directly on Node.js 20+ runtime and deploys to serverless or PaaS environments without requiring Docker or local container daemons.
+- Separate local development, test/CI, staging and production environments using Neon branches (instant copy-on-write branching for both database and object storage).
+- Separate credentials, storage buckets and databases for each environment.
 - Never copy production secrets into local/dev configuration.
 - Use least-privilege service accounts and secret manager/environment injection.
 
 ## 2. Deployment pipeline
 1. Review code and required tests.
 2. Run formatter, static checks, unit/integration/security tests and dependency scans.
-3. Build immutable artifact/container.
-4. Apply backward-compatible database migrations with a documented rollback/forward-fix plan.
-5. Deploy to staging and run smoke tests.
-6. Take/verify pre-deployment backup when schema/data risk warrants it.
-7. Deploy production with health checks and rollback criteria.
-8. Verify login, approval queue, inventory read, transaction posting in safe test scope, background jobs and backup status.
+3. Build application package / distribution bundle (`npm run build`). Docker containers are not required.
+4. Apply database migrations to Neon PostgreSQL direct endpoint (`DIRECT_URL`) via `npx prisma migrate deploy`.
+5. Deploy to staging environment and run smoke tests.
+6. Take/verify pre-deployment backup or Neon branch snapshot when schema/data risk warrants it.
+7. Deploy production with health checks (`/api/v1/health`) and rollback criteria.
+8. Verify login, approval queue, inventory read, transaction posting in safe test scope, background jobs and backup/storage status.
 
 ## 3. Backups & Data Protection
 - Data loss tolerance: as close to zero as practically achievable for confirmed transactions.
@@ -40,7 +43,7 @@ Incident procedure: detect → contain → preserve evidence/audit → assess sc
 
 ## 6. Security operations
 - Rotate/revoke credentials when staff or providers change.
-- Patch dependencies and base images.
+- Patch dependencies and Node.js runtime environment.
 - Review privileged account activity and exports.
 - Ensure file access is authorized and time-limited.
 - Test session revocation after account reset/disable.

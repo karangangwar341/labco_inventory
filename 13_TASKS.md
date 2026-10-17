@@ -1,5 +1,5 @@
 # Agent Task Backlog
-**Status:** Design gates passed. Phase 1 authorized by owner.
+**Status:** Implementation authorized by owner on 2026-10-15. This checklist is historical and must not be treated as evidence of completion; verified code status is in `16_IMPLEMENTATION_AUDIT.md`.
 
 ## Design gates
 - [x] D-001 receipt-disabled behavior decided (immediate atomic warehouse-to-client transfer on dispatch approval)
@@ -11,7 +11,7 @@
 - [x] D-008 shared vs named client accounts decided (one shared account initially, schema ready for named accounts)
 - [x] D-009 stack/storage/AI provider selected (NestJS + Next.js + PostgreSQL + Prisma + Gemini adapter)
 - [x] D-010 scale, performance, RPO/RTO approved (near-zero RPO for confirmed transactions via WAL/PITR)
-- [x] D-011 retention/privacy/legal review complete (retention baseline defined)
+- [ ] D-011 retention/privacy/legal review complete (retention schedule for audit logs, drafts and attachments remains undefined)
 - [x] D-013 conversion-change policy approved (snapshots preserved; future changes require new version & approval)
 - [x] D-014 material product edit policy approved (spec versions effective-dated and approval-gated)
 - [x] PRD/workflow/schema/permissions/UI reviewed and approved
@@ -28,9 +28,18 @@
 - [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
 - [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [x] T-010 Client manufacturing linked/separate workflows (production runs, planned/actual/wastage output tracking, raw material availability check, atomic input deductions and output additions with no partial posting)
-- [x] T-011 Departments, issues, returns and condition handling (department master, proposed change approval, issue history without separate stock balance, condition returns into Usable/Damaged/Expired buckets, Super Admin write-off)
-- [x] T-012 Bulk CSV/document extraction and review UI (Gemini adapter & deterministic extraction, unapproved draft boundary, duplicate warnings without silent merge, row editing without re-upload, all-or-nothing and partial approvals, single source warehouse check, formula-injection neutralization, Next.js review grid)
+- [ ] T-011 Departments, issues, returns and condition handling (backend endpoints exist; department return/write-off screens and proposal queue remain missing)
+- [ ] T-012 Bulk CSV/document extraction and review UI (stock-in/out submit and approval paths exist; physical count/catalog import posting, persisted duplicate decisions and malware scanning remain incomplete)
 - [x] T-013 Notifications, low-stock and expiry alerts (in-app notification center, downward crossing low-stock triggers, persistent low-stock state, recovery re-crossing, configurable 90/30/7 day expiry warnings, Store Admin exclusion policy, sound disabled by default)
-- [x] T-014 Reports, exports and export audit (authorized stock balance, ledger, expiry forecast, consumption and manufacturing reports; Store/Client tenant scoping; inbound warehouse privacy redaction; RFC 4180 CSV formula-injection neutralization; append-only audit_events logging)
+- [ ] T-014 Reports, exports and export audit (API/UI wired; full tenant/privacy/export-audit acceptance remains outstanding)
 - [x] T-015 Backups, monitoring, restore drills and runbook (90-day retention, 3x automated retry with persistent Super Admin warnings, cleared only upon success, restore drill sandbox verifying checksum and inventory invariants, system health monitoring endpoint, Next.js resilience dashboard)
-- [x] T-016 Security, accessibility, performance, UAT and release readiness (security headers middleware, CORS, rate limits, CSV formula neutralization, tenant privacy redaction, audit hygiene with zero secrets, mathematical balance invariant verification suite, WCAG-compliant responsive UI)
+- [ ] T-016 Security, accessibility, performance, UAT and release readiness (not accepted until security, accessibility, performance and UAT evidence is reviewed)
+
+## Performance follow-up tasks (15_PERFORMANCE_IMPLEMENTATION_PLAN.md)
+- [x] P-001 Baseline and request diagnostics (X-Request-ID correlation headers across frontend and backend, response duration headers X-Response-Time, redacted non-PII Prisma query logging in development/diagnostics)
+- [x] P-002 Shared query cache foundation (TanStack Query installed, QueryClientProvider configured in providers.tsx, typed domain key factories in query-keys.ts, memory-only session isolation, automatic query cache wipe on logout/session revocation)
+- [x] P-003 Read-only route migration (Inventory balances, Product catalog, Requests list, and Admin Dashboards migrated to useQuery with domain-tuned staleTime to eliminate repeated GETs on navigation)
+- [x] P-004 Mutation invalidation (centralized invalidation helpers in invalidation.ts; write flows invalidate dependent query families; zero optimistic inventory changes to preserve server-authoritative invariants)
+- [x] P-005 API & query concurrency optimizations (converted serial awaits in approvals queue fetch to concurrent Promise.all)
+- [x] P-006 Database plan fixes (all relational query paths verified with compound indexes on inventory_balances, ledger_entries, stock_requests, reservations, and shipments)
+- [ ] P-007 Performance acceptance & benchmark verification (historical marker not revalidated; current latency benchmarks and full test results are not established by this audit)

@@ -18,6 +18,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
   let shipmentsService: ShipmentsService;
   let mockPrisma: any;
   let mockLedgerService: any;
+  let mockNotificationsService: any;
 
   const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
   const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN };
@@ -49,8 +50,12 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
     mockLedgerService = {
       postTransaction: vi.fn(),
     };
+    mockNotificationsService = {
+      notifySuperAdmins: vi.fn(),
+      notifyClientAdmins: vi.fn(),
+    };
 
-    shipmentsService = new ShipmentsService(mockPrisma as any, mockLedgerService as any);
+    shipmentsService = new ShipmentsService(mockPrisma as any, mockLedgerService as any, mockNotificationsService as any);
   });
 
   describe('1. Dispatch Approval & D-001 Configuration', () => {

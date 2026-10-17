@@ -18,13 +18,14 @@ build/
 .next/
 out/
 
-# Database & local data
+# Database & local uploaded file data
 *.db
 *.sqlite
-data/
-pgdata/
-uploads/
-storage/
+/data/
+/uploads/
+/storage/
+backend/storage/
+!backend/src/storage/
 
 # Logs
 npm-debug.log*

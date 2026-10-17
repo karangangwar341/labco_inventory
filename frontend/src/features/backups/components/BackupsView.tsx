@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -10,48 +11,63 @@ import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { backupsService } from '../backups.service';
 import { BackupRecord, BackupStatusSummary } from '../backups.types';
+import { queryKeys } from '../../../lib/query/query-keys';
+import { invalidation } from '../../../lib/query/invalidation';
 
 export function BackupsView() {
-  const [backups, setBackups] = useState<BackupRecord[]>([]);
-  const [summary, setSummary] = useState<BackupStatusSummary | null>(null);
-  const [isTriggering, setIsTriggering] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const queryClient = useQueryClient();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  const fetchBackups = useCallback(() => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    Promise.all([
-      backupsService.getBackups(),
-      backupsService.getBackupStatusSummary(),
-    ])
-      .then(([records, summaryData]) => {
-        setBackups(Array.isArray(records) ? records : []);
-        setSummary(summaryData);
-      })
-      .catch((err: unknown) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to fetch backup records');
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+  const {
+    data: backups = [],
+    isLoading: isBackupsLoading,
+    error: backupsError,
+    refetch: refetchBackups,
+  } = useQuery({
+    queryKey: queryKeys.backups.list(),
+    queryFn: async () => {
+      const data = await backupsService.getBackups();
+      return Array.isArray(data) ? data : [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    fetchBackups();
-  }, [fetchBackups]);
+  const {
+    data: summary = null,
+    isLoading: isSummaryLoading,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = useQuery({
+    queryKey: queryKeys.backups.summary(),
+    queryFn: () => backupsService.getBackupStatusSummary(),
+    staleTime: 2 * 60 * 1000,
+  });
 
-  const handleTriggerBackup = async () => {
-    setIsTriggering(true);
-    setErrorMsg(null);
-    try {
-      await backupsService.triggerBackup('MANUAL_PRE_MIGRATION');
+  const isLoading = isBackupsLoading || isSummaryLoading;
+  const currentError = errorMsg || (backupsError instanceof Error ? backupsError.message : summaryError instanceof Error ? summaryError.message : null);
+
+  const triggerMutation = useMutation({
+    mutationFn: (triggerType: string) => backupsService.triggerBackup(triggerType),
+    onSuccess: () => {
       setActionSuccess('Manual backup initiated successfully.');
-      fetchBackups();
-    } catch (err: unknown) {
+      invalidation.afterBackupTrigger(queryClient);
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: unknown) => {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to initiate backup');
-    } finally {
-      setIsTriggering(false);
-    }
+    },
+  });
+
+  const handleTriggerBackup = () => {
+    setErrorMsg(null);
+    triggerMutation.mutate('MANUAL_PRE_MIGRATION');
+  };
+
+  const handleRetry = () => {
+    setErrorMsg(null);
+    refetchBackups();
+    refetchSummary();
   };
 
   return (
@@ -63,7 +79,7 @@ export function BackupsView() {
           <Button
             variant="primary"
             onClick={handleTriggerBackup}
-            isLoading={isTriggering}
+            isLoading={triggerMutation.isPending}
           >
             + Trigger Manual Backup
           </Button>
@@ -77,8 +93,8 @@ export function BackupsView() {
         </div>
       )}
 
-      {errorMsg && (
-        <ErrorState message={errorMsg} onRetry={fetchBackups} />
+      {currentError && (
+        <ErrorState message={currentError} onRetry={handleRetry} />
       )}
 
       {/* SLA & Status Overview */}
@@ -137,7 +153,7 @@ export function BackupsView() {
           title="No backup records found"
           description="Initiate a manual backup or wait for the scheduled daily backup run."
           action={
-            <Button variant="primary" onClick={handleTriggerBackup} isLoading={isTriggering}>
+            <Button variant="primary" onClick={handleTriggerBackup} isLoading={triggerMutation.isPending}>
               + Trigger First Snapshot
             </Button>
           }
@@ -158,7 +174,7 @@ export function BackupsView() {
             {backups.map((b) => (
               <TableRow key={b.id}>
                 <TableCell className="font-mono text-xs font-semibold text-[#172033]">
-                  {b.id}
+                  {(b as any).name || (b as any).snapshotName || 'Backup'}
                 </TableCell>
                 <TableCell className="text-xs text-[#5b6678]">
                   {b.startedAt ? new Date(b.startedAt).toLocaleString() : '—'}

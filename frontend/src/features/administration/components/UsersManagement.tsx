@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserRole } from '../../../types/common';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Badge } from '../../../components/ui/Badge';
@@ -11,132 +12,121 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
-import { administrationService, UserAccount } from '../administration.service';
+import { administrationService } from '../administration.service';
+import { queryKeys } from '../../../lib/query/query-keys';
 
 export function UsersManagement() {
-  const [users, setUsers] = useState<UserAccount[]>([]);
+  const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('STORE_ADMIN');
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [clientId, setClientId] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
+  const [resetTarget, setResetTarget] = useState<{ id: string; username: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(() => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    administrationService
-      .getUsers()
-      .then((data) => {
-        setUsers(Array.isArray(data) ? data : []);
-      })
-      .catch((err: unknown) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to load user accounts');
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+  const usersQuery = useQuery({
+    queryKey: queryKeys.administration.users(),
+    queryFn: administrationService.getUsers,
+  });
+  const clientsQuery = useQuery({
+    queryKey: queryKeys.administration.clients(),
+    queryFn: administrationService.getClients,
+  });
+  const warehousesQuery = useQuery({
+    queryKey: queryKeys.administration.warehouses(),
+    queryFn: administrationService.getWarehouses,
+  });
 
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await administrationService.createUser({
-        username: newUsername,
-        password: newPassword,
-        role: newRole,
-      });
+  const refreshUsers = async () => queryClient.invalidateQueries({ queryKey: queryKeys.administration.users() });
+  const createMutation = useMutation({
+    mutationFn: administrationService.createUser,
+    onSuccess: async () => {
+      await refreshUsers();
       setShowCreateModal(false);
       setNewUsername('');
       setNewPassword('');
-      setActionNotice(`User account [${newUsername}] created successfully.`);
-      fetchUsers();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to create user account');
-    }
+      setClientId('');
+      setWarehouseId('');
+      setNotice('User account created.');
+      setActionError(null);
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : 'Could not create the account.'),
+  });
+  const disableMutation = useMutation({
+    mutationFn: administrationService.disableUser,
+    onSuccess: async () => {
+      await refreshUsers();
+      setNotice('Account disabled and active sessions revoked.');
+      setActionError(null);
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : 'Could not disable the account.'),
+  });
+  const resetMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) => administrationService.resetPassword(id, password),
+    onSuccess: async () => {
+      await refreshUsers();
+      setResetTarget(null);
+      setResetPassword('');
+      setNotice('Password reset and active sessions revoked.');
+      setActionError(null);
+    },
+    onError: (error) => setActionError(error instanceof Error ? error.message : 'Could not reset the password.'),
+  });
+
+  const createUser = (event: React.FormEvent) => {
+    event.preventDefault();
+    setActionError(null);
+    createMutation.mutate({
+      username: newUsername,
+      password: newPassword,
+      role: newRole,
+      ...(newRole === 'STORE_ADMIN' ? { warehouseId } : {}),
+      ...(newRole === 'CLIENT_ADMIN' ? { clientId } : {}),
+    });
   };
+
+  const disableUser = (userId: string, username: string) => {
+    if (!window.confirm(`Disable ${username}? Their active sessions will end immediately.`)) return;
+    setActionError(null);
+    disableMutation.mutate(userId);
+  };
+
+  const users = usersQuery.data ?? [];
+  const organizationsLoading = clientsQuery.isLoading || warehousesQuery.isLoading;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="User Accounts & Role Governance"
-        description="Provision operators and assign strict boundary roles. Sessions are automatically revoked on role alterations."
-        actions={
-          <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-            + Provision User Account
-          </Button>
-        }
+        title="User accounts"
+        description="Create accounts, assign the correct organization, reset passwords, or disable access."
+        actions={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Add user</Button>}
       />
 
-      {actionNotice && (
-        <div className="p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg text-xs text-[#2563eb] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span>🛡️</span>
-            <span>{actionNotice}</span>
-          </div>
-          <button onClick={() => setActionNotice(null)} className="text-[#2563eb]">✕</button>
-        </div>
-      )}
+      {notice && <div role="status" className="rounded-lg border border-[#bbf7d0] bg-[#ecfdf3] p-3 text-sm text-[#18794e]">{notice}</div>}
+      {actionError && <div role="alert" className="rounded-lg border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[#b42318]">{actionError}</div>}
+      {usersQuery.error && <ErrorState message={usersQuery.error instanceof Error ? usersQuery.error.message : 'Could not load user accounts.'} onRetry={() => usersQuery.refetch()} />}
 
-      {errorMsg && (
-        <ErrorState message={errorMsg} onRetry={fetchUsers} />
-      )}
-
-      {isLoading ? (
-        <LoadingState message="Loading user accounts from backend..." />
-      ) : users.length === 0 ? (
-        <EmptyState
-          title="No users found"
-          description="Provision operator accounts with specific role permissions."
-          action={
-            <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-              + Provision First User
-            </Button>
-          }
-        />
+      {usersQuery.isLoading ? <LoadingState message="Loading user accounts..." /> : users.length === 0 ? (
+        <EmptyState title="No user accounts" description="Add an account for a warehouse operator, client administrator, or Super Admin." action={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Add first user</Button>} />
       ) : (
         <Table>
-          <TableHeader sticky>
-            <tr>
-              <TableHead>Account Username</TableHead>
-              <TableHead>RBAC Role</TableHead>
-              <TableHead>Assigned Boundary Scope</TableHead>
-              <TableHead>Account Status</TableHead>
-              <TableHead className="text-right">Created At</TableHead>
-            </tr>
-          </TableHeader>
+          <TableHeader sticky><tr><TableHead>Username</TableHead><TableHead>Role</TableHead><TableHead>Organization</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></tr></TableHeader>
           <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-semibold text-[#172033]">
-                  {u.username}
-                </TableCell>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="font-medium text-[#172033]">{user.username}</TableCell>
+                <TableCell><Badge variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}>{user.role.replaceAll('_', ' ')}</Badge></TableCell>
+                <TableCell className="text-[#5b6678]">{user.warehouse?.name ?? user.client?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}</TableCell>
+                <TableCell><Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>{user.status.replaceAll('_', ' ')}</Badge></TableCell>
                 <TableCell>
-                  <Badge
-                    variant={
-                      u.role === 'SUPER_ADMIN'
-                        ? 'purple'
-                        : u.role === 'STORE_ADMIN'
-                        ? 'primary'
-                        : 'neutral'
-                    }
-                  >
-                    {u.role}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-[#5b6678] text-xs">
-                  {u.warehouse?.name || u.client?.name || (u.role === 'SUPER_ADMIN' ? 'Global Platform Scope' : 'Unassigned')}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={u.status === 'ACTIVE' ? 'success' : 'danger'}>
-                    {u.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right font-mono text-xs text-[#5b6678]">
-                  {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '—'}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => { setResetTarget({ id: user.id, username: user.username }); setResetPassword(''); }}>Reset password</Button>
+                    <Button variant="secondary" size="sm" disabled={user.status === 'DISABLED' || disableMutation.isPending} onClick={() => disableUser(user.id, user.username)}>{user.status === 'DISABLED' ? 'Disabled' : 'Disable'}</Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -144,53 +134,40 @@ export function UsersManagement() {
         </Table>
       )}
 
-      {/* Provision User Modal */}
-      <Modal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        title="Provision New Operator Account"
-      >
-        <form onSubmit={handleCreateUser} className="space-y-3.5 text-xs">
-          <Input
-            label="Username"
-            placeholder="e.g. storeadmin_wh2"
-            value={newUsername}
-            onChange={(e) => setNewUsername(e.target.value)}
-            required
-          />
-
-          <Input
-            label="Initial Password (min 12 chars)"
-            type="password"
-            placeholder="••••••••••••"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            minLength={12}
-          />
-
-          <div>
-            <label className="block text-xs font-semibold text-[#172033] mb-1">
-              Select RBAC Boundary Role
-            </label>
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as UserRole)}
-              className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-xs text-[#172033] focus:outline-none focus:border-[#2563eb]"
-            >
-              <option value="STORE_ADMIN">STORE_ADMIN (Warehouse &amp; Stock Movements)</option>
-              <option value="CLIENT_ADMIN">CLIENT_ADMIN (Local Facility Scope &amp; Privacy)</option>
-              <option value="SUPER_ADMIN">SUPER_ADMIN (Global Authority &amp; Approvals)</option>
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Add user">
+        <form onSubmit={createUser} className="space-y-4">
+          <Input label="Username" value={newUsername} onChange={(event) => setNewUsername(event.target.value)} required maxLength={80} autoComplete="off" />
+          <Input label="Temporary password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+          <label className="block space-y-1 text-sm font-medium text-[#172033]">Role
+            <select value={newRole} onChange={(event) => setNewRole(event.target.value as UserRole)} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
+              <option value="STORE_ADMIN">Store Admin</option><option value="CLIENT_ADMIN">Client Admin</option><option value="SUPER_ADMIN">Super Admin</option>
             </select>
+          </label>
+          {newRole === 'STORE_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Warehouse
+            <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} required disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
+              <option value="">Choose a warehouse</option>{(warehousesQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>}
+          {newRole === 'CLIENT_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Client
+            <select value={clientId} onChange={(event) => setClientId(event.target.value)} required disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
+              <option value="">Choose a client</option>{(clientsQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>}
+          {(clientsQuery.error || warehousesQuery.error) && <p role="alert" className="text-sm text-[#b42318]">Could not load clients or warehouses. Close and try again.</p>}
+          <div className="flex justify-end gap-2 border-t border-[#dbe3ee] pt-4">
+            <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" disabled={createMutation.isPending || organizationsLoading}>{createMutation.isPending ? 'Saving...' : 'Create account'}</Button>
           </div>
+        </form>
+      </Modal>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit">
-              Provision Account
-            </Button>
+      <Modal isOpen={Boolean(resetTarget)} onClose={() => setResetTarget(null)} title={`Reset password${resetTarget ? ` for ${resetTarget.username}` : ''}`}>
+        <form onSubmit={(event) => { event.preventDefault(); if (resetTarget) resetMutation.mutate({ id: resetTarget.id, password: resetPassword }); }} className="space-y-4">
+          <Input label="New password (at least 12 characters)" type="password" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+          <p className="text-sm text-[#5b6678]">This ends all active sessions for the account.</p>
+          <div className="flex justify-end gap-2 border-t border-[#dbe3ee] pt-4">
+            <Button variant="secondary" onClick={() => setResetTarget(null)}>Cancel</Button>
+            <Button variant="primary" type="submit" disabled={resetMutation.isPending}>{resetMutation.isPending ? 'Resetting...' : 'Reset password'}</Button>
           </div>
         </form>
       </Modal>

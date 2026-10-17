@@ -4,8 +4,8 @@
 ## 1. Recommended logical architecture
 - Responsive web frontend.
 - Backend API as the authoritative business-rule boundary.
-- Relational database with ACID transactions.
-- Private object storage for attachments/import files.
+- Neon Serverless PostgreSQL database with ACID transactions and connection pooling.
+- Neon Object Storage (branch-aware, S3-compatible) for attachments and import files.
 - Background worker for extraction, report generation, expiry checks and backup monitoring.
 - In-app notification service.
 - AI document/image extraction adapter that returns structured suggestions only.
@@ -36,13 +36,15 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 ## 4. Endpoint inventory (illustrative, not final)
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/v1/auth/login` | Authenticate |
+| POST | `/api/v1/auth/login` | Authenticate and return the user's profile plus bounded, role-scoped startup references (products, categories, and permitted stock locations) in the same response |
 | POST | `/api/v1/auth/logout` | Revoke current session |
 | GET | `/api/v1/me` | Current role and scope |
+| GET | `/api/v1/me/bootstrap` | Refresh the same minimal role-scoped startup data after a page reload or session restore |
 | GET/POST | `/api/v1/clients` | List/create client (Super Admin only for writes) |
 | GET/POST | `/api/v1/warehouses` | List/create warehouse |
 | POST | `/api/v1/clients/{id}/warehouses` | Assign client to warehouse |
-| GET/POST | `/api/v1/products` | Scoped catalog |
+| GET/POST | `/api/v1/products` | Scoped catalog; Store Admin receives approved company raw materials only |
+| GET | `/api/v1/products/manufacturing-options` | Client-only approved outputs and raw materials with current or historical stock at that client |
 | POST | `/api/v1/products/{id}/submit` | Submit product draft |
 | GET/POST | `/api/v1/stock-requests` | Create/list permitted requests |
 | PATCH | `/api/v1/stock-requests/{id}` | Edit pending request with version |
@@ -86,5 +88,6 @@ Within one DB transaction:
 ## 7. AI import contract
 AI extraction response should include proposed field values, source snippets/coordinates where available, confidence/uncertainty, warnings and raw extraction references. It must not call stock-posting endpoints or approve requests. A human reviews and submits; Super Admin approval remains mandatory.
 
-## 8. Technical decisions still open
-Framework/language, database vendor, hosting/cloud, object storage, AI provider/model, malware scanner, CI/CD, monitoring provider, expected scale and RPO/RTO.
+## 8. Selected infrastructure and open decisions
+- Selected: NestJS + TypeScript backend, Next.js frontend, Neon Serverless PostgreSQL, Neon Object Storage, Google Gemini extraction adapter. Zero Docker requirements.
+- Open: Production CDN routing, domain/TLS certs, and scheduled backup retention policy enforcement.

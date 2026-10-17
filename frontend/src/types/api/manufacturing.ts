@@ -28,12 +28,24 @@ export interface ProductionRunDto {
 }
 
 export interface CreateProductionRunDto {
-  locationId: string;
-  yieldProductId: string;
-  plannedQuantity: number;
-  inputLines: Array<{
+  clientId?: string;
+  mode?: 'LINKED' | 'SEPARATE';
+  productionReference?: string;
+  plannedOutput?: number;
+  actualOutput?: number;
+  wastage?: number;
+  inputs: Array<{
     productId: string;
+    batchId?: string;
     quantity: number;
+    unitId: string;
+  }>;
+  outputs: Array<{
+    productId: string;
+    batchNumber?: string;
+    expiryDate?: string;
+    quantity: number;
+    unitId: string;
   }>;
   notes?: string;
 }

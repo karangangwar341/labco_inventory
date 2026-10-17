@@ -8,8 +8,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex bg-[#f8fafc] text-[#172033]">
-      {/* Primary Sidebar (Desktop persistent 248px, Mobile drawer) */}
+    <div className="min-h-screen flex bg-slate-50/60 text-slate-900 antialiased font-sans">
+      {/* Primary Sidebar (Desktop persistent 260px, Mobile drawer) */}
       <AppSidebar
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
@@ -20,9 +20,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         {/* Contextual Top Bar */}
         <TopBar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
 
-        {/* Content Region with subtle grid pattern */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-grid-pattern overflow-x-hidden">
-          <div className="max-w-[1600px] mx-auto w-full">
+        {/* Content Region */}
+        <main className="flex-1 p-5 sm:p-7 lg:p-9 overflow-x-hidden">
+          <div className="max-w-[1600px] mx-auto w-full space-y-6">
             {children}
           </div>
         </main>

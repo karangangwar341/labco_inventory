@@ -13,6 +13,12 @@ export class UserSummaryDto {
 
   @ApiProperty({ enum: UserStatus })
   status!: UserStatus;
+
+  @ApiProperty({ required: false, nullable: true })
+  warehouseId?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  clientId?: string | null;
 }
 
 export class AuthResponseDto {
@@ -27,4 +33,7 @@ export class AuthResponseDto {
 
   @ApiProperty({ type: UserSummaryDto })
   user!: UserSummaryDto;
+
+  @ApiProperty({ required: false, description: 'Role-scoped startup data for the first workspace screen' })
+  bootstrap?: Record<string, unknown>;
 }

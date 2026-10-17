@@ -14,6 +14,7 @@
 
 ## 3. Rollback & Forward-Fix Strategy
 - **Forward-fix preferred**: In case of application issues, prefer forward-fixing via a corrective migration or rolling back application containers while keeping backward-compatible schema changes intact.
+- **Product kind migration (`20261015090000_product_kind`)**: Adds a non-null `products.kind` enum column with `RAW_MATERIAL` as the database default, so all existing catalog products are classified as raw materials without changing stock balances or ledger history. Forward-fix is preferred. Dropping the column to roll back would discard any manufactured-product classifications created after deployment; only reverse it after confirming no such products exist or exporting and preserving their classifications.
 - **Emergency rollback**:
   If an unapplied or broken migration must be rolled back on a test/staging instance:
   ```bash

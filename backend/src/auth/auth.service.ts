@@ -4,16 +4,30 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { User, UserStatus, LoginOutcome } from '@prisma/client';
+import { User, UserStatus, LoginOutcome, UserRole, ProductStatus, ProductKind, CatalogScope, OrganizationStatus } from '@prisma/client';
 import { AuthResponseDto } from './dto/auth-response.dto.js';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
+interface CachedSessionUser {
+  user: User;
+  sessionId: string;
+  userId: string;
+  cachedAt: number;
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  // Short-lived in-memory session cache (60s TTL) to prevent repeated remote DB roundtrips on burst/parallel requests
+  private sessionMemoryCache = new Map<string, CachedSessionUser>();
+  // In-flight promise sharing to coalesce concurrent requests for the same session into 1 DB query
+  private inFlightSessionValidations = new Map<string, Promise<User | null>>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -146,12 +160,22 @@ export class AuthService {
       },
     });
 
+    // Seed session in memory cache immediately so post-login dashboard bursts hit 0 DB roundtrips
+    this.sessionMemoryCache.set(session.id, {
+      user,
+      sessionId: session.id,
+      userId: user.id,
+      cachedAt: now.getTime(),
+    });
+
     // Access token lifetime: 15 minutes (900 seconds)
     const payload = {
       sub: user.id,
       username: user.username,
       role: user.role,
       sessionId: session.id,
+      warehouseId: user.warehouseId ?? null,
+      clientId: user.clientId ?? null,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -165,25 +189,151 @@ export class AuthService {
         username: user.username,
         role: user.role,
         status: user.status,
+        warehouseId: user.warehouseId ?? null,
+        clientId: user.clientId ?? null,
       },
     };
   }
 
+  /** Small, role-scoped reference set used to render the first workspace screen. */
+  async getBootstrap(user: { id: string; username: string; role: string; status: string; clientId?: string | null; warehouseId?: string | null }) {
+    const role = user.role as UserRole;
+    const productScope = role === UserRole.SUPER_ADMIN
+      ? { status: ProductStatus.APPROVED }
+      : role === UserRole.STORE_ADMIN
+        ? { ownerScope: CatalogScope.COMPANY, kind: ProductKind.RAW_MATERIAL, status: ProductStatus.APPROVED }
+        : {
+            status: ProductStatus.APPROVED,
+            OR: [
+              { ownerScope: CatalogScope.COMPANY },
+              { ownerScope: CatalogScope.CLIENT, clientId: user.clientId ?? '__unassigned__' },
+            ],
+          };
+
+    const categoryScope = role === UserRole.CLIENT_ADMIN
+      ? {
+          OR: [
+            { ownerScope: CatalogScope.COMPANY },
+            { ownerScope: CatalogScope.CLIENT, clientId: user.clientId ?? '__unassigned__' },
+          ],
+        }
+      : { ownerScope: CatalogScope.COMPANY };
+
+    const locationQuery = role === UserRole.SUPER_ADMIN
+      ? this.prisma.stockLocation.findMany({
+          where: { OR: [{ warehouse: { status: OrganizationStatus.ACTIVE } }, { client: { status: OrganizationStatus.ACTIVE } }] },
+          select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' }, take: 100,
+        })
+      : role === UserRole.STORE_ADMIN
+        ? this.prisma.stockLocation.findMany({
+            where: {
+              OR: [
+                { warehouseId: user.warehouseId ?? '__unassigned__', warehouse: { status: OrganizationStatus.ACTIVE } },
+                { client: { status: OrganizationStatus.ACTIVE, warehouseAssignments: { some: { warehouseId: user.warehouseId ?? '__unassigned__', isActive: true } } } },
+              ],
+            },
+            select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+          })
+        : this.prisma.stockLocation.findMany({
+            where: { clientId: user.clientId ?? '__unassigned__', client: { status: OrganizationStatus.ACTIVE } },
+            select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+          });
+
+    const [products, categories, locations] = await Promise.all([
+      this.prisma.product.findMany({
+        where: productScope,
+        select: {
+          id: true, name: true, kind: true, categoryId: true, brand: true, description: true,
+          ownerScope: true, clientId: true, status: true, quantityPrecision: true, allowFractional: true,
+          minQuantity: true, minOrderQuantity: true, trackingMode: true, createdAt: true,
+          category: { select: { id: true, name: true, parentId: true, ownerScope: true, clientId: true } },
+          units: { where: { status: 'ACTIVE' }, select: { id: true, unitName: true, isBaseUnit: true, conversionToBase: true }, orderBy: { isBaseUnit: 'desc' } },
+        },
+        orderBy: { name: 'asc' }, take: 250,
+      }),
+      this.prisma.category.findMany({ where: categoryScope, select: { id: true, name: true, parentId: true, ownerScope: true, clientId: true }, orderBy: { name: 'asc' }, take: 250 }),
+      locationQuery,
+    ]);
+
+    return {
+      user: { id: user.id, username: user.username, role: user.role, status: user.status, clientId: user.clientId, warehouseId: user.warehouseId },
+      products,
+      categories,
+      locations: locations.map((location) => ({
+        id: location.id,
+        name: location.warehouse?.name ?? location.client?.name ?? 'Stock location',
+        locationType: location.locationType,
+        warehouseId: user.role === UserRole.CLIENT_ADMIN ? null : location.warehouseId,
+        clientId: user.role === UserRole.STORE_ADMIN ? null : location.clientId,
+      })),
+    };
+  }
+
   async validateSession(userId: string, sessionId: string): Promise<User | null> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
-      include: { user: true },
-    });
+    const now = Date.now();
+
+    // 1. Check in-memory session cache (60s TTL) to serve rapid/burst requests without remote DB hit
+    const cached = this.sessionMemoryCache.get(sessionId);
+    if (cached && cached.userId === userId && now - cached.cachedAt < 60_000) {
+      if (cached.user.status === UserStatus.DISABLED) {
+        this.sessionMemoryCache.delete(sessionId);
+        return null;
+      }
+      return cached.user;
+    }
+
+    // 2. In-flight promise sharing (stampede prevention)
+    const inFlight = this.inFlightSessionValidations.get(sessionId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const validationPromise = this.doValidateSession(userId, sessionId, cached);
+    this.inFlightSessionValidations.set(sessionId, validationPromise);
+    try {
+      return await validationPromise;
+    } finally {
+      this.inFlightSessionValidations.delete(sessionId);
+    }
+  }
+
+  private async doValidateSession(
+    userId: string,
+    sessionId: string,
+    fallbackCached?: CachedSessionUser,
+  ): Promise<User | null> {
+    const now = Date.now();
+
+    let session: any = null;
+    try {
+      session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        include: { user: true },
+      });
+    } catch (err: any) {
+      // If a database connection timeout or transient network pool glitch occurs:
+      // Gracefully fall back to the existing memory-cached session if available (< 5 mins stale)
+      // to avoid failing user requests with 500 when remote PgBouncer is under heavy load.
+      if (fallbackCached && fallbackCached.userId === userId && now - fallbackCached.cachedAt < 300_000) {
+        this.logger.warn(
+          `[Auth] DB transient error while validating session ${sessionId.slice(0, 8)}, falling back to memory cache: ${err?.message || err}`,
+        );
+        return fallbackCached.user.status === UserStatus.DISABLED ? null : fallbackCached.user;
+      }
+      throw err;
+    }
 
     if (!session || session.userId !== userId || session.isRevoked) {
+      this.sessionMemoryCache.delete(sessionId);
       return null;
     }
 
-    const now = Date.now();
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
     // Check 7-day inactivity timeout
     if (now - session.lastActivityAt.getTime() > sevenDaysMs || now > session.expiresAt.getTime()) {
+      this.sessionMemoryCache.delete(sessionId);
       await this.prisma.session.update({
         where: { id: session.id },
         data: { isRevoked: true, revokedAt: new Date() },
@@ -192,6 +342,7 @@ export class AuthService {
     }
 
     if (session.user.status === UserStatus.DISABLED) {
+      this.sessionMemoryCache.delete(sessionId);
       await this.prisma.session.update({
         where: { id: session.id },
         data: { isRevoked: true, revokedAt: new Date() },
@@ -199,16 +350,33 @@ export class AuthService {
       return null;
     }
 
-    // Refresh last activity timestamp
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { lastActivityAt: new Date() },
+    // Cache valid session in memory
+    this.sessionMemoryCache.set(sessionId, {
+      user: session.user,
+      sessionId,
+      userId,
+      cachedAt: now,
     });
+
+    // Throttle lastActivityAt updates: only write when > 5 minutes stale.
+    // This avoids a DB write round-trip on every single API request.
+    const ACTIVITY_UPDATE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+    if (now - session.lastActivityAt.getTime() > ACTIVITY_UPDATE_THRESHOLD_MS) {
+      // Fire-and-forget: don't block the request on this non-critical write
+      this.prisma.session.update({
+        where: { id: session.id },
+        data: { lastActivityAt: new Date() },
+      }).catch(() => {
+        // Non-critical; swallow errors silently
+      });
+    }
 
     return session.user;
   }
 
   async logout(userId: string, sessionId: string): Promise<{ success: boolean; message: string }> {
+    this.sessionMemoryCache.delete(sessionId);
+
     await this.prisma.session.updateMany({
       where: {
         id: sessionId,
@@ -228,6 +396,12 @@ export class AuthService {
   }
 
   async revokeAllUserSessions(userId: string): Promise<void> {
+    for (const [sId, entry] of this.sessionMemoryCache.entries()) {
+      if (entry.userId === userId) {
+        this.sessionMemoryCache.delete(sId);
+      }
+    }
+
     await this.prisma.session.updateMany({
       where: {
         userId,

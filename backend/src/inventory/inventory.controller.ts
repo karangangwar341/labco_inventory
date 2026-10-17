@@ -54,6 +54,24 @@ export class InventoryController {
     });
   }
 
+  @Get('low-stock-count')
+  @ApiOperation({
+    summary: 'Get fast count of products with available stock at or below min threshold',
+  })
+  getLowStockCount(@CurrentUser() user: AuthenticatedUser) {
+    return this.inventoryService.getLowStockCount(user);
+  }
+
+  @Get('locations')
+  @ApiOperation({
+    summary: 'List stock locations available to the signed-in user',
+    description:
+      'Returns only locations within the caller role scope. Client Admin responses include only their own client location.',
+  })
+  getAccessibleLocations(@CurrentUser() user: AuthenticatedUser) {
+    return this.inventoryService.getAccessibleLocations(user);
+  }
+
   @Get('transactions')
   @ApiOperation({ summary: 'View immutable transaction ledger history within caller scope' })
   getTransactions(@CurrentUser() user: AuthenticatedUser) {

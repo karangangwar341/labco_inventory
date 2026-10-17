@@ -1,104 +1,90 @@
 'use client';
 
-import React, { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Button } from '../../../components/ui/Button';
+import { ErrorState } from '../../../components/feedback/ErrorState';
+import { LoadingState } from '../../../components/feedback/LoadingState';
+import { notificationsService } from '../../notifications/notifications.service';
+import { NotificationSettings } from '../../notifications/notifications.types';
+import { queryKeys } from '../../../lib/query/query-keys';
+
+const DEFAULT_SETTINGS: NotificationSettings = {
+  receiptConfirmationEnabled: true,
+  expiryWarningIntervals: [90, 30, 7],
+  soundEnabled: false,
+};
 
 export function SystemSettingsForm() {
-  const [receiptConfirmationEnabled, setReceiptConfirmationEnabled] = useState(true);
-  const [expiryHorizons, setExpiryHorizons] = useState({ first: 90, second: 30, critical: 7 });
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({ queryKey: queryKeys.notifications.settings(), queryFn: notificationsService.getSettings });
+  const [draft, setDraft] = useState(DEFAULT_SETTINGS);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveNotice('Global governance settings updated and cached across worker nodes.');
-    setTimeout(() => setSaveNotice(null), 5000);
+  useEffect(() => {
+    if (settingsQuery.data) setDraft(settingsQuery.data);
+  }, [settingsQuery.data]);
+
+  const saveMutation = useMutation({
+    mutationFn: notificationsService.updateSettings,
+    onSuccess: async (settings) => {
+      setDraft(settings);
+      setNotice('Settings saved.');
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notifications.settings() });
+    },
+  });
+
+  const intervals = [draft.expiryWarningIntervals[0] ?? 90, draft.expiryWarningIntervals[1] ?? 30, draft.expiryWarningIntervals[2] ?? 7];
+  const validIntervals = intervals.every((value) => Number.isInteger(value) && value > 0)
+    && intervals[0] > intervals[1] && intervals[1] > intervals[2];
+
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    setNotice(null);
+    saveMutation.mutate({ ...draft, expiryWarningIntervals: intervals });
   };
 
+  if (settingsQuery.isLoading) return <LoadingState message="Loading system settings..." />;
+  if (settingsQuery.error) return <ErrorState message={settingsQuery.error instanceof Error ? settingsQuery.error.message : 'Could not load system settings.'} onRetry={() => settingsQuery.refetch()} />;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
-      <PageHeader
-        title="System Settings"
-        description="Global operational switches, custody transition rules, and audit parameters."
-      />
+    <div className="max-w-4xl space-y-5">
+      <PageHeader title="System settings" description="Control shipment receipt confirmation and in-app alerts." />
+      {notice && <div role="status" className="rounded-lg border border-[#bbf7d0] bg-[#ecfdf3] p-3 text-sm text-[#18794e]">{notice}</div>}
+      {saveMutation.error && <div role="alert" className="rounded-lg border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[#b42318]">{saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save settings.'}</div>}
 
-      {saveNotice && (
-        <div className="p-3 bg-[#ecfdf3] border border-[#bbf7d0] rounded-lg text-[#18794e] text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span>✓</span>
-            <span>{saveNotice}</span>
-          </div>
-          <button onClick={() => setSaveNotice(null)} className="text-[#18794e] hover:opacity-75">✕</button>
-        </div>
-      )}
-
-      <form onSubmit={handleSave} className="space-y-4 text-xs">
-        {/* Custody Transfer Protocol */}
-        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-[#172033]">Receipt Confirmation Custody Workflow (Decision D-001)</h3>
-              <p className="text-[#5b6678] text-[11px] mt-0.5">
-                Controls whether dispatch puts shipments into an in-transit holding state awaiting recipient verification.
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={receiptConfirmationEnabled}
-                onChange={(e) => setReceiptConfirmationEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-10 h-5 bg-[#dbe3ee] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#2563eb]"></div>
-            </label>
-          </div>
-        </div>
-
-        {/* Expiry Warning Thresholds */}
-        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-3">
+      <form onSubmit={save} className="space-y-4">
+        <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
           <div>
-            <h3 className="text-sm font-semibold text-[#172033]">Expiry Monitoring Horizons (Days)</h3>
-            <p className="text-[#5b6678] text-[11px] mt-0.5">
-              Configures threshold tiers for automated notification alerts before lot shelf expiration.
-            </p>
+            <h2 className="text-base font-semibold text-[#172033]">Shipment receipt confirmation</h2>
+            <p className="mt-1 text-sm text-[#5b6678]">When enabled, an approved dispatch waits for the client to confirm the received quantities. When disabled, stock transfers to the client atomically when the dispatch is approved.</p>
           </div>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-[#172033]">
+            <input type="checkbox" checked={draft.receiptConfirmationEnabled} onChange={(event) => setDraft({ ...draft, receiptConfirmationEnabled: event.target.checked })} />
+            Require receipt confirmation
+          </label>
+        </section>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1">
-              <label className="text-[#5b6678] font-medium block">Early Warning</label>
-              <input
-                type="number"
-                value={expiryHorizons.first}
-                onChange={(e) => setExpiryHorizons({ ...expiryHorizons, first: Number(e.target.value) })}
-                className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[#5b6678] font-medium block">Secondary Horizon</label>
-              <input
-                type="number"
-                value={expiryHorizons.second}
-                onChange={(e) => setExpiryHorizons({ ...expiryHorizons, second: Number(e.target.value) })}
-                className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[#5b6678] font-medium block">Critical Alert Horizon</label>
-              <input
-                type="number"
-                value={expiryHorizons.critical}
-                onChange={(e) => setExpiryHorizons({ ...expiryHorizons, critical: Number(e.target.value) })}
-                className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-[#172033] focus:outline-none focus:border-[#2563eb]"
-              />
-            </div>
+        <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
+          <div>
+            <h2 className="text-base font-semibold text-[#172033]">Expiry warning days</h2>
+            <p className="mt-1 text-sm text-[#5b6678]">Enter three whole-number thresholds in descending order, such as 90, 30, and 7 days.</p>
           </div>
-        </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {intervals.map((value, index) => <label key={index} className="space-y-1 text-sm font-medium text-[#172033]">{['Early warning', 'Upcoming', 'Urgent'][index]}
+              <input type="number" min={1} step={1} value={value} onChange={(event) => setDraft({ ...draft, expiryWarningIntervals: intervals.map((item, itemIndex) => itemIndex === index ? Number(event.target.value) : item) })} className="min-h-10 w-full rounded-md border border-[#dbe3ee] px-3 font-normal" />
+            </label>)}
+          </div>
+          {!validIntervals && <p role="alert" className="text-sm text-[#b42318]">Use three positive whole numbers, from the largest warning window to the smallest.</p>}
+        </section>
 
-        <div className="flex justify-end pt-2">
-          <Button type="submit" variant="primary">
-            Save System Settings
-          </Button>
-        </div>
+        <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
+          <div><h2 className="text-base font-semibold text-[#172033]">Notification sound</h2><p className="mt-1 text-sm text-[#5b6678]">Sound is off by default.</p></div>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-[#172033]"><input type="checkbox" checked={draft.soundEnabled} onChange={(event) => setDraft({ ...draft, soundEnabled: event.target.checked })} />Play sound for in-app notifications</label>
+        </section>
+
+        <div className="flex justify-end"><Button type="submit" disabled={!validIntervals || saveMutation.isPending}>{saveMutation.isPending ? 'Saving...' : 'Save settings'}</Button></div>
       </form>
     </div>
   );

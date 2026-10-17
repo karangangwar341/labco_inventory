@@ -24,6 +24,25 @@ export const departmentsService = {
     return apiClient.post<Department>(endpoints.departments.create(), payload);
   },
 
+  approveDepartment: async (id: string): Promise<Department> => {
+    const actionKey = `approve-department-${id}`;
+    const idempotencyKey = actionIdempotency.getKey(actionKey);
+    try {
+      const result = await apiClient.post<Department>(
+        endpoints.departments.approve(id),
+        {},
+        { idempotencyKey },
+      );
+      actionIdempotency.clearKey(actionKey);
+      return result;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  rejectDepartment: async (id: string, reason: string): Promise<Department> =>
+    apiClient.post<Department>(endpoints.departments.reject(id), { reason }),
+
   getIssues: async (params?: {
     clientId?: string;
     departmentId?: string;

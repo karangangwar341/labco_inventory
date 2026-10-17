@@ -41,9 +41,14 @@ export class CategoriesService {
       if (!parent) {
         throw new NotFoundException('Parent category not found');
       }
-      // Cannot attach client category to company category without alignment
-      if (ownerScope === CatalogScope.CLIENT && parent.ownerScope === CatalogScope.CLIENT && parent.clientId !== clientId) {
-        throw new ForbiddenException('Cannot nest category under another client category');
+      if (parent.parentId) {
+        throw new ConflictException('Categories can only have one level of subcategories. Choose a main category as the parent.');
+      }
+      if (ownerScope === CatalogScope.COMPANY && parent.ownerScope !== CatalogScope.COMPANY) {
+        throw new ForbiddenException('Company categories cannot be nested under client categories');
+      }
+      if (ownerScope === CatalogScope.CLIENT && (parent.ownerScope !== CatalogScope.CLIENT || parent.clientId !== clientId)) {
+        throw new ForbiddenException('Client categories can only be nested under a category owned by the same client');
       }
     }
 
@@ -61,7 +66,7 @@ export class CategoriesService {
       );
     }
 
-    return this.prisma.category.create({
+    const created = await this.prisma.category.create({
       data: {
         name: normalizedName,
         parentId: dto.parentId || null,
@@ -72,43 +77,51 @@ export class CategoriesService {
         parent: true,
       },
     });
+
+    this.categoriesCache.clear();
+    return created;
   }
 
+  private categoriesCache = new Map<string, { data: any[]; expiresAt: number }>();
+
   async findAll(user: AuthenticatedUser) {
+    const cacheKey = `${user.role}_${user.id}_${user.clientId || ''}`;
+    const cached = this.categoriesCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now < cached.expiresAt) {
+      return cached.data;
+    }
+
+    let categories: any[] = [];
     if (user.role === UserRole.SUPER_ADMIN) {
-      return this.prisma.category.findMany({
+      categories = await this.prisma.category.findMany({
         orderBy: { name: 'asc' },
         include: { children: true },
       });
-    }
-
-    if (user.role === UserRole.STORE_ADMIN) {
+    } else if (user.role === UserRole.STORE_ADMIN) {
       // Store Admin can only view company categories
-      return this.prisma.category.findMany({
+      categories = await this.prisma.category.findMany({
         where: { ownerScope: CatalogScope.COMPANY },
         orderBy: { name: 'asc' },
         include: { children: true },
       });
-    }
-
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    } else if (user.role === UserRole.CLIENT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
         select: { clientId: true },
       });
 
-      return this.prisma.category.findMany({
+      categories = await this.prisma.category.findMany({
         where: {
-          OR: [
-            { ownerScope: CatalogScope.COMPANY },
-            { ownerScope: CatalogScope.CLIENT, clientId: dbUser?.clientId || '' },
-          ],
+          ownerScope: CatalogScope.CLIENT,
+          clientId: dbUser?.clientId || '',
         },
         orderBy: { name: 'asc' },
         include: { children: true },
       });
     }
 
-    return [];
+    this.categoriesCache.set(cacheKey, { data: categories, expiresAt: now + 45_000 });
+    return categories;
   }
 }

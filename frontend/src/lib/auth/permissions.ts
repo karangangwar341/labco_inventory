@@ -29,3 +29,7 @@ export function canViewWarehouseIdentity(role?: UserRole): boolean {
 export function canManageUsers(role?: UserRole): boolean {
   return role === 'SUPER_ADMIN';
 }
+
+export function canReceiveShipments(role?: UserRole): boolean {
+  return role === 'SUPER_ADMIN' || role === 'CLIENT_ADMIN';
+}

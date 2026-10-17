@@ -24,6 +24,7 @@
 - Request detail: original values, attachments, reservations, stock availability, history, approve/reject, reason, priority controls.
 - Company product/category catalog; product units/conversions; threshold and tracking configuration.
 - Client product approval and product-change review.
+- Client operations overview: Super Admin can open a separate, client-scoped view of posted stock, manufacturing runs, and department issue/return reports. Department and manufacturing workspaces remain in the Client Admin navigation; Super Admin reviews their pending inventory changes through Approvals.
 - Client/warehouse assignment management with effective history.
 - User account management: create, disable, reset password; sessions revoked on reset/disable.
 - Import review: extracted field mapping, confidence/uncertainty indicators, duplicate warnings, row-level edit, validation, approval-mode selection.
@@ -32,8 +33,10 @@
 
 ## 4. Store Admin screens
 - Own warehouse dashboard and stock availability.
+- Catalog, stock balances, stock movement history, and warehouse reports show approved company raw materials only; never expose client-manufactured products to a Store Admin.
 - Stock-in request form.
 - Stock-out/dispatch request form with client assignment validation.
+- When a product is selected for stock-out, show the available quantity at the assigned warehouse in the selected unit beside the quantity field.
 - Warehouse transfer request form.
 - Physical count/correction request.
 - Pending requests and editable/cancellable requests submitted by the current account.
@@ -44,7 +47,7 @@
 ## 5. Client Admin screens
 - Own client dashboard and inventory (available, reserved if applicable, inbound/in-transit, damaged, expired).
 - Client product catalog and pending product submissions.
-- Direct stock-in and stock-out request forms.
+- Stock-in form records items already received at the client location; it is not a warehouse replenishment request and remains approval-gated. Stock-out records product leaving client stock.
 - Manufacturing run form (linked and separate modes).
 - Department list and proposed changes.
 - Department issue and return forms with condition, reason and optional attachment.
@@ -71,3 +74,23 @@ Loading, empty state, network error, permission denied, session expired/replaced
 - Display the difference between physical, reserved and usable-available stock.
 - Never imply an uploaded document has changed stock.
 - Confirm that all-or-nothing batches will post zero rows if any required validation/approval condition fails.
+
+## 9. Simplified daily-use experience
+**Owner-requested UX update: 2026-10-14.** This addendum reduces the amount shown at first glance while retaining the approved workflows and safeguards above.
+
+- Home dashboards lead with the user's next action and a short list of work that needs attention. Remove technical database, ledger, backup-retention, tenant-isolation, and concurrency details from ordinary user views; operational alerts remain visible to Super Admin when action is needed.
+- Store Admin and Client Admin dashboards provide two clear entry points: **Stock in** and **Stock out**. Each dashboard shows only relevant pending requests or incoming deliveries; other specialist workflows remain available under the collapsed **More** navigation group.
+- Super Admin dashboard leads with the approval queue. Show a backup warning only when a persistent backup failure needs attention.
+- Stock request forms show only fields relevant to the selected direction: assigned location, approved product, quantity, unit, and tracking fields only when the product requires a lot number or expiry date. Warehouse stock-out is a dispatch to an assigned client; Client Admin stock-out is from the client's own location.
+- Optional notes remain collapsed. Standard priority is the default. Users can add further product lines without making advanced workflow settings part of the initial view.
+- After submission, state plainly that Super Admin approval is required. Stock-out availability is held while review is pending; stock-in is not added until approved. A saved draft is clearly labeled and can be submitted from its detail page.
+- Add a role-neutral **How to use this system** help page with task-first instructions for stock-in, stock-out, request status, and common problems.
+- The navigation keeps Home, Stock, and My requests visible. Specialist pages and administration are grouped under **More** and **Administration**; Help stays visible.
+
+## 10. Product catalog management
+- Super Admin can create and edit company products and categories. Client Admin can create and edit products in their own client catalog; proposed client product changes remain subject to Super Admin approval. Store Admin has no catalog management controls.
+- Product creation starts with product name and a reusable main category. A brand is a reusable subcategory of that main category; do not show a separate free-text Brand field. Let users choose an existing brand/subcategory or add a brand under the selected main category. Category setup must say whether the user is adding a main category or a brand, and use “Category for this brand” instead of the ambiguous “Under category”. Then collect the base unit, additional units with product-specific conversions, and specifications. Existing unit names and specification names are suggestions; a new value can be entered while creating a product.
+- Super Admin catalog creation offers “Add raw material”; Client Admin catalog creation offers “Add manufactured product” and “Add client category”. Client categories are private to that client and are not reused from the company catalog. Show product type in catalog and details. Manufacturing inputs show approved raw materials stocked now or recorded in that client’s stock history; outputs show approved manufactured products from that client’s catalog. Department issues use manufactured products.
+- Product editing shows the active definition and submits a version proposal. Product specifications and unit conversions only become active after required Super Admin approval; the form explains the pending state and preserves existing transaction snapshots.
+- Keep tracking, fractional quantity, precision, and minimum quantity in a collapsed advanced section unless the user opens it. Do not make a user recreate category, brand, unit, or specification values for each product.
+- Keep database identifiers, UUIDs, and internal workflow keys out of routine user views. Use product, client, warehouse, department, status, and meaningful business reference labels; retain IDs only inside links and API actions.

@@ -53,7 +53,13 @@ export class AuthController {
       userAgent,
     );
 
-    return this.authService.login(user);
+    const response = await this.authService.login(user);
+    try {
+      response.bootstrap = await this.authService.getBootstrap(user);
+    } catch {
+      // Keep authentication available if the optional startup reference lookup is unavailable.
+    }
+    return response;
   }
 
   @Post('logout')
@@ -71,6 +77,8 @@ export class AuthController {
 @ApiTags('User Profile')
 @Controller('me')
 export class MeController {
+  constructor(private readonly authService: AuthService) {}
+
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
@@ -85,5 +93,13 @@ export class MeController {
       status: user.status,
       sessionId: user.sessionId,
     };
+  }
+
+  @Get('bootstrap')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Get the current user profile and small role-scoped startup data set' })
+  getBootstrap(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getBootstrap(user);
   }
 }

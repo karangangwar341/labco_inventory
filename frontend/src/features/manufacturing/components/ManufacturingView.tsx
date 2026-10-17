@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -10,67 +11,102 @@ import { EmptyState } from '../../../components/feedback/EmptyState';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { manufacturingService } from '../manufacturing.service';
-import { ProductionRun } from '../manufacturing.types';
+import { CreateProductionRunPayload, ProductionRun } from '../manufacturing.types';
+import { catalogService } from '../../catalog/catalog.service';
+import { queryKeys } from '../../../lib/query/query-keys';
+import { invalidation } from '../../../lib/query/invalidation';
+import { useAuth } from '../../auth/auth.store';
 
 export function ManufacturingView() {
-  const [runs, setRuns] = useState<ProductionRun[]>([]);
+  const queryClient = useQueryClient();
+  const { role, user } = useAuth();
+  const canCreateRuns = role === 'CLIENT_ADMIN';
   const [selectedRun, setSelectedRun] = useState<ProductionRun | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // New Run Form State
-  const [newRunLocation, setNewRunLocation] = useState('loc-client-1');
-  const [yieldProductId, setYieldProductId] = useState('prod-3');
+  const [yieldProductId, setYieldProductId] = useState('');
+  const [rawProductId, setRawProductId] = useState('');
+  const [yieldUnitId, setYieldUnitId] = useState('');
+  const [rawUnitId, setRawUnitId] = useState('');
   const [yieldQty, setYieldQty] = useState(25);
   const [inputRawQty, setInputRawQty] = useState(10);
 
-  const fetchRuns = useCallback(() => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    manufacturingService
-      .getProductionRuns()
-      .then((data) => {
-        setRuns(Array.isArray(data) ? data : []);
-      })
-      .catch((err: unknown) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to load manufacturing runs');
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+  const { data: manufacturingOptions, error: optionsError, refetch: refetchOptions } = useQuery({
+    queryKey: queryKeys.catalog.manufacturingOptions(user?.clientId ?? undefined),
+    queryFn: () => catalogService.getManufacturingOptions(),
+    enabled: canCreateRuns,
+    staleTime: 2 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    fetchRuns();
-  }, [fetchRuns]);
+  const {
+    data: runs = [],
+    isLoading,
+    error,
+    refetch: fetchRuns,
+  } = useQuery({
+    queryKey: queryKeys.manufacturing.list(),
+    queryFn: async () => {
+      const data = await manufacturingService.getProductionRuns();
+      return Array.isArray(data) ? data : [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
 
-  const handleCreateRun = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await manufacturingService.createProductionRun({
-        locationId: newRunLocation,
-        yieldProductId: yieldProductId,
-        plannedQuantity: Number(yieldQty),
-        inputLines: [{ productId: 'prod-1', quantity: Number(inputRawQty) }],
-      });
+  const rawMaterials = manufacturingOptions?.rawMaterials || [];
+  const manufacturedProducts = manufacturingOptions?.manufacturedProducts || [];
+  const effectiveYieldProductId = yieldProductId || manufacturedProducts[0]?.id || '';
+  const effectiveRawProductId = rawProductId || rawMaterials[0]?.id || '';
+  const selectedYieldProduct = manufacturedProducts.find((product) => product.id === effectiveYieldProductId);
+  const selectedRawProduct = rawMaterials.find((product) => product.id === effectiveRawProductId);
+  const activeUnits = (product: typeof selectedYieldProduct) => product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
+  const yieldUnits = activeUnits(selectedYieldProduct);
+  const rawUnits = activeUnits(selectedRawProduct);
+  const effectiveYieldUnitId = yieldUnitId || yieldUnits.find((unit) => unit.isBaseUnit)?.id || yieldUnits[0]?.id || '';
+  const effectiveRawUnitId = rawUnitId || rawUnits.find((unit) => unit.isBaseUnit)?.id || rawUnits[0]?.id || '';
+
+  const createMutation = useMutation({
+    mutationFn: (payload: CreateProductionRunPayload) => manufacturingService.createProductionRun(payload),
+    onSuccess: () => {
       setIsModalOpen(false);
       setActionSuccess('Production run created successfully as draft.');
-      fetchRuns();
-    } catch (err: unknown) {
+      invalidation.afterManufacturingMutation(queryClient);
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: unknown) => {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create production run');
+    },
+  });
+
+  const handleCreateRun = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    if (!effectiveYieldProductId || !effectiveRawProductId || !effectiveYieldUnitId || !effectiveRawUnitId) {
+      setErrorMsg('Choose an output product and unit, and an in-stock or previously stocked raw material and unit.');
+      return;
     }
+    createMutation.mutate({
+      mode: 'LINKED',
+      plannedOutput: Number(yieldQty),
+      inputs: [{ productId: effectiveRawProductId, unitId: effectiveRawUnitId, quantity: Number(inputRawQty) }],
+      outputs: [{ productId: effectiveYieldProductId, unitId: effectiveYieldUnitId, quantity: Number(yieldQty) }],
+    });
   };
+
+  const currentError = errorMsg || (error instanceof Error ? error.message : null) || (optionsError instanceof Error ? optionsError.message : null);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Client Manufacturing & Production Runs"
         description="Convert bulk raw ingredients into finished assay kits and controls under strict BOM formulation ratios."
-        actions={
+        actions={canCreateRuns ? (
           <Button variant="primary" onClick={() => setIsModalOpen(true)}>
             + New Production Run
           </Button>
-        }
+        ) : undefined}
       />
 
       {actionSuccess && (
@@ -80,8 +116,8 @@ export function ManufacturingView() {
         </div>
       )}
 
-      {errorMsg && (
-        <ErrorState message={errorMsg} onRetry={fetchRuns} />
+      {currentError && (
+        <ErrorState message={currentError} onRetry={() => { setErrorMsg(null); fetchRuns(); if (canCreateRuns) void refetchOptions(); }} />
       )}
 
       {isLoading ? (
@@ -90,11 +126,11 @@ export function ManufacturingView() {
         <EmptyState
           title="No manufacturing runs found"
           description="Create a new production run to initiate BOM consumption and finished goods formulation."
-          action={
+          action={canCreateRuns ? (
             <Button variant="primary" onClick={() => setIsModalOpen(true)}>
               + Start First Production Run
             </Button>
-          }
+          ) : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -198,7 +234,7 @@ export function ManufacturingView() {
                           className="flex items-center justify-between p-2 rounded-lg bg-[#f8fafc] border border-[#dbe3ee] text-xs"
                         >
                           <span className="text-[#172033] font-medium">
-                            {inp.productName || inp.productId}
+                            {inp.productName || 'Raw Material'}
                           </span>
                           <span className="font-mono text-[#b42318] font-bold">
                             - {inp.quantity} {inp.unit || 'units'}
@@ -227,18 +263,45 @@ export function ManufacturingView() {
         title="Initiate Client Production Run"
       >
         <form onSubmit={handleCreateRun} className="space-y-3.5 text-xs">
-          <Input
-            label="Location ID"
-            value={newRunLocation}
-            onChange={(e) => setNewRunLocation(e.target.value)}
-            required
-          />
-          <Input
-            label="Yield Product ID"
-            value={yieldProductId}
-            onChange={(e) => setYieldProductId(e.target.value)}
-            required
-          />
+          <div>
+            <label className="block font-medium text-[#172033] mb-1">Manufactured product</label>
+            <select
+              value={effectiveYieldProductId}
+              onChange={(e) => { setYieldProductId(e.target.value); setYieldUnitId(''); }}
+              required
+              className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033] focus:border-[#2563eb] focus:outline-none"
+            >
+              {!manufacturedProducts.length && <option value="">No approved manufactured products in your catalog</option>}
+              {manufacturedProducts.map((prod) => (
+                <option key={prod.id} value={prod.id}>
+                  {prod.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {yieldUnits.length > 0 && <div><label className="block font-medium text-[#172033] mb-1">Output unit</label><select value={effectiveYieldUnitId} onChange={(event) => setYieldUnitId(event.target.value)} required className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]">{yieldUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitName}{unit.isBaseUnit ? ' (base unit)' : ''}</option>)}</select></div>}
+
+          <div>
+            <label className="block font-medium text-[#172033] mb-1">Raw material used</label>
+            <select
+              value={effectiveRawProductId}
+              onChange={(e) => { setRawProductId(e.target.value); setRawUnitId(''); }}
+              required
+              className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033] focus:border-[#2563eb] focus:outline-none"
+            >
+              {!rawMaterials.length && <option value="">No approved raw materials stocked at this client yet</option>}
+              {rawMaterials.map((prod) => (
+                <option key={prod.id} value={prod.id}>
+                  {prod.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-[#5b6678]">Only raw materials stocked at this client now or recorded in its stock history are shown.</p>
+          </div>
+
+          {rawUnits.length > 0 && <div><label className="block font-medium text-[#172033] mb-1">Input unit</label><select value={effectiveRawUnitId} onChange={(event) => setRawUnitId(event.target.value)} required className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]">{rawUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.unitName}{unit.isBaseUnit ? ' (base unit)' : ''}</option>)}</select></div>}
+
           <Input
             label="Planned Output Quantity"
             type="number"

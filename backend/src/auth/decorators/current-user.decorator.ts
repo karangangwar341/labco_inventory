@@ -6,6 +6,8 @@ export interface AuthenticatedUser {
   role: string;
   status: string;
   sessionId: string;
+  warehouseId?: string | null;
+  clientId?: string | null;
 }
 
 export const CurrentUser = createParamDecorator(

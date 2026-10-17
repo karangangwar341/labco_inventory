@@ -1,237 +1,495 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
-import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
-import { useAuth } from '../../auth/auth.store';
-import { canViewWarehouseIdentity } from '../../../lib/auth/permissions';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/Table';
+import { Badge } from '../../../components/ui/Badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/Card';
+import { Select } from '../../../components/ui/Select';
+import { LoadingState } from '../../../components/feedback/LoadingState';
+import { ErrorState } from '../../../components/feedback/ErrorState';
 import { EmptyState } from '../../../components/feedback/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/Table';
+import { useAuth } from '../../auth/auth.store';
+import { catalogService } from '../../catalog/catalog.service';
+import { administrationService } from '../../administration/administration.service';
+import { reportsService } from '../reports.service';
+import { ReportType, QueryReportDto } from '../reports.types';
+import { queryKeys } from '../../../lib/query/query-keys';
 
-type ReportType = 'LEDGER_AUDIT' | 'STOCK_BALANCE' | 'EXPIRY_FORECAST' | 'DEPARTMENT_CONSUMPTION';
-
-interface LedgerRecord {
-  txId: string;
-  type: string;
-  location: string;
-  product: string;
-  direction: 'IN' | 'OUT';
-  quantity: number;
-  unit: string;
-  condition: string;
-  actor: string;
-  timestamp: string;
-}
-
-const MOCK_LEDGER_DATA: LedgerRecord[] = [
-  {
-    txId: 'TX-2026-901',
-    type: 'TRANSFER_DISPATCH',
-    location: 'Central Warehouse',
-    product: 'Reagent Cartridge Alpha-9',
-    direction: 'OUT',
-    quantity: 10,
-    unit: 'CARTON',
-    condition: 'USABLE',
-    actor: 'superadmin',
-    timestamp: '2026-10-14 00:45:10',
-  },
-  {
-    txId: 'TX-2026-902',
-    type: 'TRANSFER_RECEIPT',
-    location: 'Metro Diagnostics Lab',
-    product: 'Reagent Cartridge Alpha-9',
-    direction: 'IN',
-    quantity: 10,
-    unit: 'CARTON',
-    condition: 'USABLE',
-    actor: 'superadmin',
-    timestamp: '2026-10-14 00:45:11',
-  },
-  {
-    txId: 'TX-2026-903',
-    type: 'DEPARTMENT_ISSUE',
-    location: 'Metro Diagnostics Lab',
-    product: 'Sterile Micro-Pipette Tips (200uL)',
-    direction: 'OUT',
-    quantity: 5,
-    unit: 'BOX',
-    condition: 'USABLE',
-    actor: 'superadmin',
-    timestamp: '2026-10-14 01:05:32',
-  },
+const REPORT_OPTIONS: Array<{ type: ReportType; label: string; description: string }> = [
+  { type: 'STOCK_BALANCE', label: 'Current stock', description: 'Real-time projected usable, reserved, available, and quarantined quantities' },
+  { type: 'INVENTORY_LEDGER', label: 'Movement history', description: 'Immutable double-entry inventory audit trail and stock deltas' },
+  { type: 'BATCH_EXPIRY', label: 'Expiry forecast', description: 'Lot-level expiration schedule, days remaining, and shelf-life tracking' },
+  { type: 'CLIENT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department issues and returns' },
+  { type: 'PRODUCTION_RUNS', label: 'Manufacturing', description: 'Work-in-progress runs, recipe inputs, outputs, and wastage' },
 ];
+
+const LABELS: Record<string, string> = {
+  productName: 'Product', locationName: 'Location', locationType: 'Location type', batchNumber: 'Batch / Lot',
+  expiryDate: 'Expiry date', usableQuantity: 'Usable', reservedQuantity: 'Reserved', availableQuantity: 'Available',
+  damagedQuantity: 'Damaged', expiredQuantity: 'Expired', physicalQuantity: 'Physical total', minThreshold: 'Min threshold',
+  lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source',
+  condition: 'Condition', originalQuantity: 'Quantity', unitName: 'Unit', baseDelta: 'Stock delta',
+  direction: 'Direction', postedBy: 'Recorded by', daysRemaining: 'Days to expiry', batchStatus: 'Batch status',
+  isExpired: 'Expired', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
+  baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', runId: 'Run ID', productionReference: 'Reference',
+  clientName: 'Client', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
+  wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
+};
+
+const NUMERIC_COLUMNS = new Set([
+  'usableQuantity', 'reservedQuantity', 'availableQuantity', 'damagedQuantity',
+  'expiredQuantity', 'physicalQuantity', 'minThreshold', 'originalQuantity',
+  'baseDelta', 'daysRemaining', 'quantity', 'baseQuantity', 'plannedOutput',
+  'actualOutput', 'wastage', 'totalInputsCount', 'totalOutputsCount',
+]);
+
+const MONO_COLUMNS = new Set([
+  'batchNumber', 'runId', 'productionReference', 'timestamp', 'date', 'createdAt', 'expiryDate',
+]);
+
+function formatCellValue(column: string, value: unknown): React.ReactNode {
+  if (value === null || value === undefined || value === '') {
+    return <span className="text-slate-300 font-mono">—</span>;
+  }
+
+  // Boolean flags
+  if (typeof value === 'boolean') {
+    if (column === 'lowStockAlert') {
+      return value ? <Badge variant="warning" size="sm">LOW STOCK</Badge> : <span className="text-slate-400">Normal</span>;
+    }
+    if (column === 'isExpired') {
+      return value ? <Badge variant="danger" size="sm">EXPIRED</Badge> : <Badge variant="success" size="sm">Active</Badge>;
+    }
+    return value ? 'Yes' : 'No';
+  }
+
+  // Stock direction & movement delta
+  if (column === 'direction') {
+    const dir = String(value).toUpperCase();
+    return dir === 'IN' || dir === 'STOCK_IN'
+      ? <Badge variant="success" size="sm">IN</Badge>
+      : dir === 'OUT' || dir === 'STOCK_OUT'
+      ? <Badge variant="primary" size="sm">OUT</Badge>
+      : <Badge variant="neutral" size="sm">{String(value)}</Badge>;
+  }
+
+  if (column === 'baseDelta') {
+    const num = Number(value);
+    if (!isNaN(num)) {
+      if (num > 0) return <span className="text-emerald-700 font-mono font-semibold">+{num.toLocaleString()}</span>;
+      if (num < 0) return <span className="text-rose-600 font-mono font-semibold">{num.toLocaleString()}</span>;
+      return <span className="text-slate-500 font-mono">0</span>;
+    }
+  }
+
+  // Batch / Run Status
+  if (column === 'batchStatus' || column === 'status') {
+    const s = String(value).toUpperCase();
+    if (s.includes('EXPIRED') || s.includes('REJECTED') || s.includes('FAILED')) {
+      return <Badge variant="danger" size="sm">{String(value)}</Badge>;
+    }
+    if (s.includes('ACTIVE') || s.includes('APPROVED') || s.includes('COMPLETED')) {
+      return <Badge variant="success" size="sm">{String(value)}</Badge>;
+    }
+    if (s.includes('PENDING') || s.includes('WARNING') || s.includes('PROGRESS')) {
+      return <Badge variant="warning" size="sm">{String(value)}</Badge>;
+    }
+    return <Badge variant="neutral" size="sm">{String(value)}</Badge>;
+  }
+
+  // Dates
+  if (column.toLowerCase().includes('date') || column === 'timestamp' || column === 'createdAt') {
+    const dateStr = String(value);
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return (
+        <span className="font-mono text-[11px] text-slate-600 whitespace-nowrap">
+          {d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+        </span>
+      );
+    }
+  }
+
+  // Numeric quantities
+  if (NUMERIC_COLUMNS.has(column)) {
+    const num = Number(value);
+    if (!isNaN(num)) {
+      return <span className="font-mono tabular-nums font-semibold text-slate-800">{num.toLocaleString()}</span>;
+    }
+  }
+
+  // Batch / Code identifiers
+  if (column === 'batchNumber' || column === 'runId' || column === 'productionReference') {
+    return (
+      <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80">
+        {String(value)}
+      </span>
+    );
+  }
+
+  return String(value);
+}
 
 export function ReportsView() {
   const { user } = useAuth();
-  const [reportType, setReportType] = useState<ReportType>('LEDGER_AUDIT');
-  const [filterQuery, setFilterQuery] = useState('');
-  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [reportType, setReportType] = useState<ReportType>('INVENTORY_LEDGER');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [productId, setProductId] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  const canSeeSource = canViewWarehouseIdentity(user?.role);
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const canViewClientActivity = user?.role !== 'STORE_ADMIN';
+  const options = REPORT_OPTIONS.filter(
+    (item) => canViewClientActivity || !['CLIENT_CONSUMPTION', 'PRODUCTION_RUNS'].includes(item.type)
+  );
 
-  const filteredRecords = useMemo(() => {
-    return MOCK_LEDGER_DATA.filter((r) => {
-      const matchSearch =
-        !filterQuery ||
-        r.txId.toLowerCase().includes(filterQuery.toLowerCase()) ||
-        r.product.toLowerCase().includes(filterQuery.toLowerCase()) ||
-        r.actor.toLowerCase().includes(filterQuery.toLowerCase());
-      return matchSearch;
-    });
-  }, [filterQuery]);
+  const params: QueryReportDto = useMemo(() => ({
+    ...(startDate ? { startDate } : {}),
+    ...(endDate ? { endDate } : {}),
+    ...(productId ? { productId } : {}),
+    ...(isSuperAdmin && clientId ? { clientId } : {}),
+  }), [startDate, endDate, productId, isSuperAdmin, clientId]);
 
-  const sanitizeCsvValue = (val: string | number) => {
-    const str = String(val);
-    if (['=', '+', '-', '@'].includes(str.charAt(0))) {
-      return `'${str}`;
-    }
-    return str;
-  };
+  const reportQuery = useQuery({
+    queryKey: queryKeys.reports.view(reportType, { ...params }),
+    queryFn: () => reportsService.generateReport(reportType, params),
+    enabled: Boolean(user && options.some((item) => item.type === reportType)),
+    staleTime: 2 * 60_000,
+  });
 
-  const handleExportCsv = () => {
-    if (filteredRecords.length === 0) return;
+  const auditQuery = useQuery({
+    queryKey: [...queryKeys.reports.all, 'audit-history', user?.id],
+    queryFn: reportsService.getAuditHistory,
+    enabled: Boolean(user),
+    staleTime: 2 * 60_000,
+  });
 
-    const headers = ['Transaction ID', 'Type', 'Location', 'Product', 'Direction', 'Quantity', 'Unit', 'Condition', 'Actor', 'Timestamp'];
-    const rows = filteredRecords.map((row) => {
-      const loc = !canSeeSource && row.location === 'Central Warehouse' ? '[REDACTED]' : row.location;
-      return [
-        sanitizeCsvValue(row.txId),
-        sanitizeCsvValue(row.type),
-        sanitizeCsvValue(loc),
-        sanitizeCsvValue(row.product),
-        sanitizeCsvValue(row.direction),
-        sanitizeCsvValue(row.quantity),
-        sanitizeCsvValue(row.unit),
-        sanitizeCsvValue(row.condition),
-        sanitizeCsvValue(row.actor),
-        sanitizeCsvValue(row.timestamp),
-      ].join(',');
-    });
+  const productsQuery = useQuery({
+    queryKey: queryKeys.catalog.products(user?.id, { reportFilters: true }),
+    queryFn: () => catalogService.getProducts(),
+    enabled: Boolean(user),
+    staleTime: 10 * 60_000,
+  });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `audit_report_${reportType.toLowerCase()}_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const clientsQuery = useQuery({
+    queryKey: queryKeys.administration.clients(),
+    queryFn: administrationService.getClients,
+    enabled: Boolean(isSuperAdmin),
+    staleTime: 10 * 60_000,
+  });
 
-    setExportNotice(
-      `Export generated with formula-injection neutralization. Audit log recorded.`,
-    );
-    setTimeout(() => setExportNotice(null), 5000);
+  const csvMutation = useMutation({
+    mutationFn: () => reportsService.generateCsv(reportType, params),
+    onSuccess: (csv) => {
+      setExportError(null);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${reportType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    },
+    onError: (error) => setExportError(error instanceof Error ? error.message : 'Could not export this report.'),
+  });
+
+  const rows = reportQuery.data?.data ?? [];
+  const columns = rows.length ? Object.keys(rows[0]) : [];
+  const activeReportMeta = options.find((item) => item.type === reportType);
+
+  const hasActiveFilters = Boolean(startDate || endDate || productId || clientId);
+  const resetFilters = () => {
+    setStartDate('');
+    setEndDate('');
+    setProductId('');
+    setClientId('');
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Page Header with primary print / CSV actions */}
       <PageHeader
-        title="Reports & Audit Logs"
-        description="Filter-driven compliance reporting with spreadsheet formula-injection neutralization on exports."
+        title="Reports & Analytics"
+        description="Comprehensive audit-grade inventory movement ledgers, batch expiry forecasting, and stock telemetry."
         actions={
-          filteredRecords.length > 0 ? (
-            <Button variant="secondary" size="sm" onClick={handleExportCsv}>
-              ⬇ Export Filtered CSV ({filteredRecords.length})
+          <div className="flex flex-wrap items-center gap-2.5 print:hidden">
+            <Button
+              variant="secondary"
+              disabled={!rows.length || csvMutation.isPending}
+              onClick={() => csvMutation.mutate()}
+            >
+              <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {csvMutation.isPending ? 'Preparing CSV...' : 'Export CSV'}
             </Button>
-          ) : undefined
+            <Button
+              variant="secondary"
+              disabled={!rows.length}
+              onClick={() => window.print()}
+            >
+              <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print / PDF
+            </Button>
+          </div>
         }
       />
 
-      {exportNotice && (
-        <div className="p-3 bg-[#ecfdf3] border border-[#bbf7d0] rounded-lg text-[#18794e] text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span>🛡️</span>
-            <span>{exportNotice}</span>
+      {/* Report Selection & Filter Control Card */}
+      <Card className="print:hidden">
+        <CardContent className="space-y-5">
+          {/* Top navigation tabs for report types */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Select Report Dataset
+            </span>
+            <div
+              className="flex flex-wrap gap-1.5 p-1 bg-slate-100/80 rounded-xl border border-slate-200/80"
+              role="tablist"
+              aria-label="Report type"
+            >
+              {options.map((option) => {
+                const isSelected = reportType === option.type;
+                return (
+                  <button
+                    key={option.type}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => setReportType(option.type)}
+                    className={`px-3.5 py-2 text-xs font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                      isSelected
+                        ? 'bg-white text-blue-700 shadow-2xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            {activeReportMeta && (
+              <p className="text-[11px] text-slate-500 pl-1">{activeReportMeta.description}</p>
+            )}
           </div>
-          <button onClick={() => setExportNotice(null)} className="text-[#18794e] hover:opacity-75">✕</button>
-        </div>
-      )}
 
-      {/* 1. Filters First */}
-      <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            {[
-              { type: 'LEDGER_AUDIT' as ReportType, label: 'Ledger Audit' },
-              { type: 'STOCK_BALANCE' as ReportType, label: 'Stock Balance Summary' },
-              { type: 'EXPIRY_FORECAST' as ReportType, label: 'Expiry Forecast' },
-              { type: 'DEPARTMENT_CONSUMPTION' as ReportType, label: 'Dept Consumption' },
-            ].map((r) => (
-              <button
-                key={r.type}
-                onClick={() => setReportType(r.type)}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
-                  reportType === r.type
-                    ? 'bg-[#eff6ff] text-[#2563eb] border border-[#bfdbfe] font-semibold'
-                    : 'text-[#5b6678] hover:bg-[#f1f5f9]'
-                }`}
+          {/* Form Filter Row */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold text-slate-700 tracking-tight">
+                Filter Parameters
+              </span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
+              <div className="space-y-1.5 w-full">
+                <label className="text-xs font-medium text-slate-700 block">From Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                />
+              </div>
+
+              <div className="space-y-1.5 w-full">
+                <label className="text-xs font-medium text-slate-700 block">To Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={startDate || undefined}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                />
+              </div>
+
+              <Select
+                label="Product Scope"
+                value={productId}
+                onChange={(e) => setProductId(e.target.value)}
               >
-                {r.label}
-              </button>
-            ))}
+                <option value="">All catalog products</option>
+                {(productsQuery.data ?? []).map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </Select>
+
+              {isSuperAdmin && (
+                <Select
+                  label="Client Scope"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                >
+                  <option value="">All client accounts</option>
+                  {(clientsQuery.data ?? []).map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
           </div>
 
-          <div className="w-full sm:w-64">
-            <input
-              type="text"
-              placeholder="Search transaction, product, actor..."
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              className="w-full px-3 py-1.5 bg-white border border-[#dbe3ee] rounded-md text-xs text-[#172033] placeholder-[#5b6678]/60 focus:outline-none focus:border-[#2563eb]"
-            />
-          </div>
-        </div>
+          {exportError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-2">
+              <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{exportError}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Query Status Feedback */}
+      <div className="print:hidden">
+        {reportQuery.isLoading ? (
+          <LoadingState message="Generating authoritative report..." />
+        ) : reportQuery.error ? (
+          <ErrorState
+            message={reportQuery.error instanceof Error ? reportQuery.error.message : 'Could not load report.'}
+            onRetry={() => reportQuery.refetch()}
+          />
+        ) : !rows.length ? (
+          <EmptyState
+            title="No records found in this timeframe"
+            description="No inventory transactions or stock records match the selected date window and product criteria."
+          />
+        ) : null}
       </div>
 
-      {/* 2. Result Table Second */}
-      {filteredRecords.length === 0 ? (
-        <EmptyState
-          title="No audit records found"
-          description="Try broadening your search query or switching report categories."
-        />
-      ) : (
-        <Table>
-          <TableHeader>
-            <tr>
-              <TableHead>Transaction ID</TableHead>
-              <TableHead>Operation Type</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead>Direction & Qty</TableHead>
-              <TableHead>Condition</TableHead>
-              <TableHead>Actor</TableHead>
-              <TableHead className="text-right">Timestamp</TableHead>
-            </tr>
-          </TableHeader>
-          <TableBody>
-            {filteredRecords.map((r) => {
-              const displayLoc = !canSeeSource && r.location === 'Central Warehouse' ? '[REDACTED]' : r.location;
-              return (
-                <TableRow key={r.txId}>
-                  <TableCell className="font-mono font-semibold text-[#172033]">{r.txId}</TableCell>
-                  <TableCell className="font-medium text-[#2563eb]">{r.type}</TableCell>
-                  <TableCell className="text-[#5b6678]">{displayLoc}</TableCell>
-                  <TableCell className="text-[#172033] font-medium">{r.product}</TableCell>
-                  <TableCell>
-                    <span className={`font-mono font-bold ${r.direction === 'IN' ? 'text-[#18794e]' : 'text-[#b42318]'}`}>
-                      {r.direction === 'IN' ? '+' : '-'}{r.quantity} {r.unit}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={r.condition === 'USABLE' ? 'success' : 'danger'}>
-                      {r.condition}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-[#5b6678] font-mono text-[11px]">{r.actor}</TableCell>
-                  <TableCell className="text-right text-[#5b6678] font-mono text-[11px]">{r.timestamp}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+      {/* Active Report Table Card */}
+      {!!rows.length && (
+        <Card className="print:border-0 print:shadow-none">
+          <CardHeader
+            className="print:px-0"
+            action={
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">
+                  Showing <strong className="text-slate-800 font-mono">{reportQuery.data?.rowCount ?? rows.length}</strong> records
+                </span>
+                <span className="h-4 w-px bg-slate-200" />
+                <Badge variant="primary" size="sm">
+                  Live snapshot
+                </Badge>
+              </div>
+            }
+          >
+            <CardTitle>{activeReportMeta?.label}</CardTitle>
+            <CardDescription>{activeReportMeta?.description}</CardDescription>
+          </CardHeader>
+
+          <div className="overflow-x-auto">
+            <Table className="border-0 rounded-none shadow-none">
+              <TableHeader sticky>
+                <tr>
+                  {columns.map((column) => {
+                    const isNum = NUMERIC_COLUMNS.has(column);
+                    return (
+                      <TableHead
+                        key={column}
+                        align={isNum ? 'right' : 'left'}
+                        className="whitespace-nowrap"
+                      >
+                        {LABELS[column] ?? column.replace(/([A-Z])/g, ' $1').replace(/^./, (l) => l.toUpperCase())}
+                      </TableHead>
+                    );
+                  })}
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row, rowIndex) => (
+                  <TableRow key={`${reportType}-${rowIndex}`}>
+                    {columns.map((column) => {
+                      const isNum = NUMERIC_COLUMNS.has(column);
+                      const isMono = MONO_COLUMNS.has(column);
+                      return (
+                        <TableCell
+                          key={column}
+                          align={isNum ? 'right' : 'left'}
+                          mono={isMono}
+                          numeric={isNum}
+                          className="whitespace-nowrap"
+                        >
+                          {formatCellValue(column, row[column])}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
       )}
+
+      {/* Export Audit Trail Section */}
+      <Card className="print:hidden">
+        <CardHeader>
+          <CardTitle>Recent Export Audit Log</CardTitle>
+          <CardDescription>
+            Chronological record of report exports generated for compliance and data traceability.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {auditQuery.isLoading ? (
+            <div className="p-5 text-center text-xs text-slate-500">Loading export audit logs...</div>
+          ) : auditQuery.error ? (
+            <div className="p-5 text-xs text-rose-600">Could not retrieve export history.</div>
+          ) : (auditQuery.data ?? []).length === 0 ? (
+            <div className="p-5 text-center text-xs text-slate-400">No export logs recorded yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 text-[11px] uppercase tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-4">Dataset</th>
+                    <th className="py-2.5 px-4">Generated By</th>
+                    <th className="py-2.5 px-4 text-right">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {(auditQuery.data ?? []).slice(0, 8).map((entry) => (
+                    <tr key={entry.id} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 px-4 font-medium text-slate-800">
+                        <span className="font-mono text-slate-600">
+                          {entry.entityId.replaceAll('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-600">
+                        {entry.actorUser?.username ?? 'System User'}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-mono text-[11px] text-slate-500">
+                        {new Date(entry.occurredAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

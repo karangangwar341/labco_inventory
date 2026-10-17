@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 ## Warehouse, Client Manufacturing & Inventory Management System
-**Version:** 1.0 | **Status:** Design baseline; implementation not authorized until open decisions are resolved.
+**Version:** 1.0 | **Status:** Implementation authorized by owner on 2026-10-15; implementation audit and open decisions tracked in `16_IMPLEMENTATION_AUDIT.md` and `11_DECISIONS.md`.
 
 ## 1. Product purpose
 Provide an online system for a company to manage warehouse inventory, client supply, client-side manufacturing, department issues/returns, approvals, traceability, bulk imports and reporting. Stock changes must be controlled, auditable and concurrency-safe.
@@ -42,7 +42,7 @@ Provide an online system for a company to manage warehouse inventory, client sup
 **REQ-009** Client-to-warehouse assignments are controlled by Super Admin. Removing an assignment blocks new requests but does not interrupt already approved/in-transit movements.
 **REQ-010** Units and conversions are explicit. Conversion edits are audited; historical transactions preserve the conversion rule used at transaction time.
 **REQ-011** Quantity precision is configurable per product up to two decimal places. Whole-unit products reject fractions.
-**REQ-012** Batch/expiry fields are required only when the product tracking configuration requires them.
+**REQ-012** Lot/batch identification is required only when the product tracking configuration requires it. Expiry date is optional and may be recorded when known; it must not block a request.
 **REQ-013** Expired stock is excluded from usable stock and blocked from routine issue/dispatch. Disposal/write-off requires approval.
 **REQ-014** Manufacturing linked mode posts raw material consumption and finished product output atomically after approval. Separate stock-out and stock-in mode is also supported.
 **REQ-015** Departments have issue/return history only; no separate department stock balance.
@@ -53,6 +53,8 @@ Provide an online system for a company to manage warehouse inventory, client sup
 **REQ-020** All workflows and data access are server-authorized; frontend visibility is not an authorization boundary.
 
 ## 5. Product catalog
+- The company catalog contains raw materials; each client has a separate catalog for manufactured products. Client Admins can create manufactured products only, using categories owned by their client. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.
+- Manufacturing input choices are limited to approved raw materials with current client balances or stock-ledger history at that client. Output choices are approved manufactured products from that same client’s catalog. Manufactured products are issued to that client’s departments.
 - No SKU/product-code field.
 - Optional image, description and batch details.
 - Flexible physical attributes (e.g. weight, length, breadth, thickness, diameter) are distinct from inventory unit/quantity.

@@ -13,12 +13,14 @@ export class AuthorizationService {
     }
 
     if (user.role === UserRole.CLIENT_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({
-        where: { id: user.id },
-        select: { clientId: true },
-      });
+      const clientId = user.clientId !== undefined
+        ? user.clientId
+        : (await this.prisma.user.findUnique({
+            where: { id: user.id },
+            select: { clientId: true },
+          }))?.clientId;
 
-      if (!dbUser?.clientId || dbUser.clientId !== targetClientId) {
+      if (!clientId || clientId !== targetClientId) {
         throw new ForbiddenException('Forbidden: cross-client access prohibited');
       }
       return;
@@ -33,12 +35,14 @@ export class AuthorizationService {
     }
 
     if (user.role === UserRole.STORE_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({
-        where: { id: user.id },
-        select: { warehouseId: true },
-      });
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({
+            where: { id: user.id },
+            select: { warehouseId: true },
+          }))?.warehouseId;
 
-      if (!dbUser?.warehouseId || dbUser.warehouseId !== targetWarehouseId) {
+      if (!warehouseId || warehouseId !== targetWarehouseId) {
         throw new ForbiddenException('Forbidden: Store Admin can only operate within assigned warehouse');
       }
       return;

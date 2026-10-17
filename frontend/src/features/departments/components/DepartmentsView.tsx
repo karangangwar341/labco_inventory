@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
@@ -11,57 +13,130 @@ import { EmptyState } from '../../../components/feedback/EmptyState';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { departmentsService } from '../departments.service';
-import { Department, DepartmentIssue } from '../departments.types';
+import { Department } from '../departments.types';
+import { queryKeys } from '../../../lib/query/query-keys';
+import { invalidation } from '../../../lib/query/invalidation';
+import { useAuth } from '../../auth/auth.store';
 
 export function DepartmentsView() {
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [history, setHistory] = useState<DepartmentIssue[]>([]);
+  const { role } = useAuth();
+  const searchParams = useSearchParams();
+  const departmentIdFromNotification = searchParams.get('departmentId');
+  const handledNotificationId = useRef<string | null>(null);
+  const attemptedDepartmentRefresh = useRef<string | null>(null);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'DEPARTMENTS' | 'ISSUES'>('DEPARTMENTS');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [highlightedDepartmentId, setHighlightedDepartmentId] = useState<string | null>(null);
 
   // New Department Form State
   const [deptName, setDeptName] = useState('');
-  const [deptCode, setDeptCode] = useState('');
 
-  const fetchData = useCallback(() => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    Promise.all([
-      departmentsService.getDepartments(),
-      departmentsService.getIssues(),
-    ])
-      .then(([deptData, issueData]) => {
-        setDepartments(Array.isArray(deptData) ? deptData : []);
-        setHistory(Array.isArray(issueData) ? issueData : []);
-      })
-      .catch((err: unknown) => {
-        setErrorMsg(err instanceof Error ? err.message : 'Failed to load departments');
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+  const {
+    data: departments = [],
+    isLoading: isDeptsLoading,
+    error: deptsError,
+    refetch: refetchDepts,
+  } = useQuery({
+    queryKey: queryKeys.departments.list(),
+    queryFn: async () => {
+      const data = await departmentsService.getDepartments();
+      return Array.isArray(data) ? data : [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const {
+    data: history = [],
+    isLoading: isIssuesLoading,
+    error: issuesError,
+    refetch: refetchIssues,
+  } = useQuery({
+    queryKey: queryKeys.departments.issues(),
+    queryFn: async () => {
+      const data = await departmentsService.getIssues();
+      return Array.isArray(data) ? data : [];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
 
-  const handleCreateDepartment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await departmentsService.createDepartment({
-        name: deptName,
-        code: deptCode,
-      });
+  const isLoading = isDeptsLoading || isIssuesLoading;
+  const currentError = errorMsg || (deptsError instanceof Error ? deptsError.message : issuesError instanceof Error ? issuesError.message : null);
+
+  const createMutation = useMutation({
+    mutationFn: (payload: { name: string }) =>
+      departmentsService.createDepartment(payload),
+    onSuccess: () => {
       setIsModalOpen(false);
       setDeptName('');
-      setDeptCode('');
       setActionSuccess('Department created successfully.');
-      fetchData();
-    } catch (err: unknown) {
+      invalidation.afterDepartmentMutation(queryClient);
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: unknown) => {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create department');
+    },
+  });
+
+  const handleCreateDepartment = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    createMutation.mutate({ name: deptName });
+  };
+
+  const approveDepartment = useMutation({
+    mutationFn: (id: string) => departmentsService.approveDepartment(id),
+    onSuccess: async () => {
+      await invalidation.afterDepartmentMutation(queryClient);
+      setActionSuccess('Department approved.');
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Department could not be approved.'),
+  });
+
+  const rejectDepartment = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => departmentsService.rejectDepartment(id, reason),
+    onSuccess: async () => {
+      await invalidation.afterDepartmentMutation(queryClient);
+      setActionSuccess('Department request rejected.');
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Department could not be rejected.'),
+  });
+
+  useEffect(() => {
+    if (!departmentIdFromNotification || isDeptsLoading || handledNotificationId.current === departmentIdFromNotification) return;
+    const target = departments.find((department) => department.id === departmentIdFromNotification);
+    if (!target) {
+      if (attemptedDepartmentRefresh.current !== departmentIdFromNotification) {
+        attemptedDepartmentRefresh.current = departmentIdFromNotification;
+        departmentsService.getDepartmentById(departmentIdFromNotification).then((department) => {
+          queryClient.setQueryData<Department[]>(queryKeys.departments.list(), (current = []) =>
+            current.some((item) => item.id === department.id) ? current : [...current, department],
+          );
+        }).catch((err: unknown) => {
+          setErrorMsg(err instanceof Error ? err.message : 'This department request could not be opened.');
+        });
+      }
+      return;
     }
+    handledNotificationId.current = departmentIdFromNotification;
+    window.requestAnimationFrame(() => {
+      setActiveTab('DEPARTMENTS');
+      setHighlightedDepartmentId(target.id);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`department-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
+    window.setTimeout(() => setHighlightedDepartmentId(null), 5000);
+  }, [departmentIdFromNotification, departments, isDeptsLoading, queryClient]);
+
+  const handleRetry = () => {
+    setErrorMsg(null);
+    refetchDepts();
+    refetchIssues();
   };
 
   return (
@@ -83,8 +158,8 @@ export function DepartmentsView() {
         </div>
       )}
 
-      {errorMsg && (
-        <ErrorState message={errorMsg} onRetry={fetchData} />
+      {currentError && (
+        <ErrorState message={currentError} onRetry={handleRetry} />
       )}
 
       {/* Tabs */}
@@ -97,7 +172,7 @@ export function DepartmentsView() {
               : 'border-transparent text-[#5b6678] hover:text-[#172033]'
           }`}
         >
-          Active Departments ({departments.length})
+          Departments ({departments.length})
         </button>
         <button
           onClick={() => setActiveTab('ISSUES')}
@@ -129,12 +204,10 @@ export function DepartmentsView() {
             {departments.map((d) => (
               <div
                 key={d.id}
-                className="bg-white border border-[#dbe3ee] rounded-xl p-4 shadow-sm space-y-2"
+                id={`department-${d.id}`}
+                className={`bg-white border rounded-xl p-4 shadow-sm space-y-2 transition-colors ${highlightedDepartmentId === d.id ? 'border-[#2563eb] ring-2 ring-[#2563eb]/20' : 'border-[#dbe3ee]'}`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-[#2563eb]">
-                    {d.code}
-                  </span>
+                <div className="flex justify-end">
                   <Badge variant={d.status === 'ACTIVE' ? 'success' : 'neutral'}>
                     {d.status}
                   </Badge>
@@ -145,6 +218,29 @@ export function DepartmentsView() {
                 <p className="text-[11px] text-[#5b6678]">
                   {d.clientName || 'Client Entity'}
                 </p>
+                {role === 'SUPER_ADMIN' && d.status === 'PENDING_APPROVAL' && (
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={approveDepartment.isPending || rejectDepartment.isPending}
+                      onClick={() => approveDepartment.mutate(d.id)}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={approveDepartment.isPending || rejectDepartment.isPending}
+                      onClick={() => {
+                        const reason = window.prompt(`Why should ${d.name} be rejected?`);
+                        if (reason?.trim()) rejectDepartment.mutate({ id: d.id, reason: reason.trim() });
+                      }}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -168,23 +264,27 @@ export function DepartmentsView() {
               </tr>
             </TableHeader>
             <TableBody>
-              {history.map((tx) => (
+              {history.map((tx: any) => (
                 <TableRow key={tx.id}>
                   <TableCell className="font-mono font-medium text-[#172033]">
-                    {tx.issueNumber}
+                    {tx.issueNumber || 'Department issue'}
                   </TableCell>
                   <TableCell className="font-semibold text-[#172033]">
-                    {tx.departmentName || tx.departmentId}
+                    {tx.department?.name || tx.departmentName || 'Department'}
                   </TableCell>
                   <TableCell>
                     {tx.items?.map((it: { quantity: number; unit?: string; productName?: string; productId: string }, idx: number) => (
                       <span key={idx} className="block text-xs text-[#172033]">
-                        {it.quantity} {it.unit || 'units'} · {it.productName || it.productId}
+                        {it.quantity} {it.unit || 'units'} · {it.productName || 'Product'}
                       </span>
-                    )) || '—'}
+                    )) || (
+                      <span className="block text-xs text-[#172033]">
+                        {tx.quantity ? `${tx.quantity} ${tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · ` : ''}{tx.product?.name || tx.productName || 'Product'}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-[#5b6678] text-xs">
-                    {tx.reason || 'Routine lab testing'}
+                    {tx.notes || tx.reason || 'Routine lab testing'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
@@ -213,13 +313,6 @@ export function DepartmentsView() {
             placeholder="e.g. Molecular Pathology Suite"
             value={deptName}
             onChange={(e) => setDeptName(e.target.value)}
-            required
-          />
-          <Input
-            label="Department Code"
-            placeholder="e.g. MOL-05"
-            value={deptCode}
-            onChange={(e) => setDeptCode(e.target.value)}
             required
           />
           <div className="pt-2 flex justify-end gap-2">

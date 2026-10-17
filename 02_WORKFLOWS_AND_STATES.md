@@ -23,7 +23,7 @@ States: `DRAFT → SUBMITTED/PENDING_APPROVAL → APPROVED → POSTED/COMPLETED`
 If 100 usable units exist, request A reserves 90, leaving 10 available. A second request for 20 fails. A pending stock-in does not count until approved and posted. Once 50 units of stock-in is approved, up to 50 additional units become available, subject to other reservations and stock conditions.
 
 ## 4. Stock-in
-- Submit quantity, source type, product/unit, optional note/attachment and batch/expiry details when configured.
+- Submit quantity, source type, product/unit, optional note/attachment, and a lot number only when batch tracking is configured. Expiry date is always optional.
 - Opening stock, direct client stock-in, corrections and other stock-in types require approval.
 - Stock is increased only on approval/posting.
 - Define source types in configurable master data; initial suggested types: direct purchase, opening stock, department return, donation, other.
@@ -55,6 +55,7 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 - Super Admin approval posts all input deductions and output additions atomically. No partial posting.
 ### Separate transactions
 - Raw material consumption is a stock-out request; finished product creation is a stock-in request. Each independently requires approval.
+- Manufacturing runs accept only approved raw materials currently or historically stocked at the requesting client and approved manufactured-product outputs owned by that client. Product type, client ownership, and stock availability are validated on the server.
 - Preserve links where the user supplies a common production reference.
 
 ## 9. Department issue and return

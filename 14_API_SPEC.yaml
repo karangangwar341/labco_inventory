@@ -30,7 +30,8 @@ paths:
   /auth/login:
     post:
       security: []
-      summary: Authenticate a user; enforce lockout and single active session.
+      summary: Authenticate and return the profile with a small, role-scoped workspace bootstrap payload.
+      description: The bootstrap payload includes approved product/unit references, permitted categories, and only locations the authenticated role can use. Lists are bounded; detailed pages continue to load their own paginated data.
       responses:
         "200": { description: Authenticated }
         "401": { description: Invalid credentials }
@@ -45,6 +46,11 @@ paths:
       summary: Return current user role and authorized scope.
       responses:
         "200": { description: Current user }
+  /me/bootstrap:
+    get:
+      summary: Refresh the current user's minimal role-scoped workspace bootstrap data.
+      responses:
+        "200": { description: Current user profile and bounded product, category, and permitted location references }
   /clients:
     get:
       summary: List clients within caller scope.
@@ -66,12 +72,75 @@ paths:
   /products:
     get:
       summary: List catalog products within caller scope.
+      description: Store Admin receives approved company raw materials only; Client Admin receives shared approved company products and products owned by that client; Super Admin can inspect all products.
       responses:
         "200": { description: Product list }
     post:
       summary: Create a product draft within caller's permitted catalog.
+      description: Product payload includes kind: RAW_MATERIAL or MANUFACTURED_PRODUCT. Existing products default to RAW_MATERIAL; kind is immutable after creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, kind, categoryId, quantityPrecision, allowFractional, trackingMode, units]
+              properties:
+                kind:
+                  type: string
+                  enum: [RAW_MATERIAL, MANUFACTURED_PRODUCT]
       responses:
         "201": { description: Product draft created }
+  /products/manufacturing-options:
+    get:
+      summary: List the current client’s manufacturing choices.
+      description: Client Admin only. Returns approved raw materials with a current balance or ledger history at the client, and approved manufactured products owned by the client.
+      responses:
+        "200": { description: Scoped rawMaterials and manufacturedProducts lists }
+        "403": { description: Client Admin only }
+  /products/{id}:
+    patch:
+      summary: Propose a new version of an owned product; changes do not take effect before Super Admin approval.
+      description: The submitted kind must match the existing product kind; type conversion requires a separate product record.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Product version submitted for approval }
+        "403": { description: Outside caller's catalog scope }
+        "409": { description: Duplicate product or another change is pending }
+  /products/{id}/versions/{versionId}/review:
+    post:
+      summary: Super Admin approves or rejects a proposed product specification version.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: versionId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Product version decision recorded }
+        "403": { description: Super Admin only }
+  /categories:
+    get:
+      summary: List main categories and their brand subcategories within caller scope.
+      responses:
+        "200": { description: Scoped category hierarchy }
+    post:
+      summary: Create a main category (omit parentId) or a brand subcategory (set parentId to a main category). Only one subcategory level is supported.
+      responses:
+        "201": { description: Category created }
+  /inventory/locations:
+    get:
+      summary: List stock locations available within the caller's authorized scope.
+      description: Client Admin responses contain only their own client location.
+      responses:
+        "200": { description: Authorized stock locations }
   /stock-requests:
     get:
       summary: List requests within caller scope.

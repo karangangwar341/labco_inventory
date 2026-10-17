@@ -5,11 +5,13 @@ import {
   ForbiddenException,
   ConflictException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
 import { GeminiExtractionAdapter } from './adapters/gemini-extraction.adapter.js';
+import { StorageService } from '../storage/storage.service.js';
 import {
   UserRole,
   ImportType,
@@ -25,6 +27,7 @@ import {
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { CreateImportBatchDto } from './dto/create-import-batch.dto.js';
 import { UpdateImportRowDto } from './dto/update-import-row.dto.js';
+import { SubmitImportBatchDto } from './dto/submit-import-batch.dto.js';
 import {
   ApproveImportBatchDto,
   RejectImportBatchDto,
@@ -38,6 +41,7 @@ export class ImportsService {
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
     private readonly extractor: GeminiExtractionAdapter,
+    @Optional() private readonly storageService?: StorageService,
   ) {}
 
   // ==========================================
@@ -45,10 +49,9 @@ export class ImportsService {
   // ==========================================
 
   async createBatch(dto: CreateImportBatchDto, user: AuthenticatedUser) {
-    if (user.role === UserRole.STORE_ADMIN && dto.importType === ImportType.PRODUCT_CATALOG) {
-      throw new ForbiddenException('Store Admin is not authorized to import product catalogs');
+    if (dto.importType !== ImportType.STOCK_IN && dto.importType !== ImportType.STOCK_OUT) {
+      throw new BadRequestException(`Import type ${dto.importType} is not supported for posting yet`);
     }
-
     // 1. File Security & Validation (Test Plan Section 4: Unsupported/oversize/malicious file rejected)
     const buffer = Buffer.from(dto.fileContent, 'utf-8');
     const maxSizeBytes = 10 * 1024 * 1024; // 10MB limit
@@ -88,6 +91,21 @@ export class ImportsService {
         uploadedById: user.id,
       },
     });
+
+    // 2b. Persist file payload to Neon Object Storage / storage driver
+    if (this.storageService) {
+      try {
+        await this.storageService.uploadFile(
+          storageKey,
+          buffer,
+          attachment.mimeType,
+        );
+      } catch (storageErr: any) {
+        this.logger.warn(
+          `Failed to persist file buffer to storage driver: ${storageErr.message}`,
+        );
+      }
+    }
 
     // 3. Extract data via AI extraction adapter (or deterministic fallback)
     const extractionResult = await this.extractor.extractFromDocument(
@@ -222,8 +240,8 @@ export class ImportsService {
   ) {
     const batch = await this.getBatch(batchId, user);
 
-    if (batch.status === ImportBatchStatus.APPROVED) {
-      throw new ConflictException('Cannot edit rows of an approved batch');
+    if (batch.status !== ImportBatchStatus.DRAFT && batch.status !== ImportBatchStatus.VALIDATED) {
+      throw new ConflictException('Only draft or validated import batches can be edited');
     }
 
     const row = batch.rows.find((r) => r.id === rowId);
@@ -248,9 +266,15 @@ export class ImportsService {
 
   async validateBatch(batchId: string, user: AuthenticatedUser) {
     const batch = await this.getBatch(batchId, user);
+    if (batch.status !== ImportBatchStatus.DRAFT && batch.status !== ImportBatchStatus.VALIDATED) {
+      throw new ConflictException('Only draft or validated import batches can be validated');
+    }
 
     let hasInvalidRows = false;
     let mixedWarehouseLocations = new Set<string>();
+    const dbUser = user.role === UserRole.SUPER_ADMIN
+      ? null
+      : await this.prisma.user.findUnique({ where: { id: user.id }, select: { warehouseId: true, clientId: true } });
 
     for (const row of batch.rows) {
       const data = row.normalizedDataJson as Record<string, any>;
@@ -322,6 +346,8 @@ export class ImportsService {
           });
           if (!loc) {
             errors.push(`Stock location ${data.locationId} not found`);
+          } else if (!this.canUseLocation(loc, user, dbUser)) {
+            errors.push('Stock location is outside your authorized organization scope');
           } else {
             mixedWarehouseLocations.add(loc.id);
           }
@@ -377,6 +403,49 @@ export class ImportsService {
     return this.getBatch(batchId, user);
   }
 
+  async submitBatch(batchId: string, dto: SubmitImportBatchDto, user: AuthenticatedUser) {
+    const batch = await this.getBatch(batchId, user);
+    if (batch.status !== ImportBatchStatus.DRAFT && batch.status !== ImportBatchStatus.VALIDATED) {
+      throw new ConflictException('Only draft or validated batches can be submitted');
+    }
+
+    const validatedBatch = await this.validateBatch(batchId, user);
+    const mode = dto.approvalMode ?? validatedBatch.approvalMode;
+    const invalidRows = validatedBatch.rows.filter((row) => row.validationStatus === ImportRowStatus.INVALID);
+    const validRows = validatedBatch.rows.filter((row) => row.validationStatus === ImportRowStatus.VALID);
+
+    if (validatedBatch.errorSummary) {
+      throw new BadRequestException(validatedBatch.errorSummary);
+    }
+    if (mode === ImportApprovalMode.ALL_OR_NOTHING && invalidRows.length > 0) {
+      throw new BadRequestException('Correct every invalid row before submitting an all-or-nothing batch');
+    }
+    if (validRows.length === 0) {
+      throw new BadRequestException('At least one valid row is required to submit this batch');
+    }
+
+    return this.prisma.importBatch.update({
+      where: { id: batchId },
+      data: { status: ImportBatchStatus.SUBMITTED, approvalMode: mode },
+      include: { rows: { orderBy: { rowNumber: 'asc' } } },
+    });
+  }
+
+  private canUseLocation(
+    location: { locationType: string; warehouseId: string | null; clientId: string | null },
+    user: AuthenticatedUser,
+    dbUser: { warehouseId: string | null; clientId: string | null } | null,
+  ): boolean {
+    if (user.role === UserRole.SUPER_ADMIN) return true;
+    if (user.role === UserRole.STORE_ADMIN) {
+      return location.locationType === 'WAREHOUSE' && location.warehouseId === dbUser?.warehouseId;
+    }
+    if (user.role === UserRole.CLIENT_ADMIN) {
+      return location.locationType === 'CLIENT' && location.clientId === dbUser?.clientId;
+    }
+    return false;
+  }
+
   // ==========================================
   // BATCH APPROVAL & STOCK POSTING
   // ==========================================
@@ -394,6 +463,9 @@ export class ImportsService {
 
     if (batch.status === ImportBatchStatus.APPROVED) {
       throw new ConflictException('Import batch has already been approved');
+    }
+    if (batch.status !== ImportBatchStatus.SUBMITTED) {
+      throw new ConflictException('Import batch must be submitted before Super Admin approval');
     }
 
     const mode = dto.approvalMode || batch.approvalMode;
@@ -478,7 +550,7 @@ export class ImportsService {
                 : TransactionType.STOCK_OUT,
             sourceRefType: 'IMPORT_BATCH',
             sourceRefId: batch.id,
-            idempotencyKey: dto.idempotencyKey ?? `import-batch-${batch.id}-${Date.now()}`,
+            idempotencyKey: dto.idempotencyKey ?? `import-batch-${batch.id}`,
             lines,
           },
           user.id,
@@ -524,8 +596,8 @@ export class ImportsService {
 
     const batch = await this.getBatch(batchId, user);
 
-    if (batch.status === ImportBatchStatus.APPROVED) {
-      throw new ConflictException('Cannot reject an already approved batch');
+    if (batch.status !== ImportBatchStatus.SUBMITTED) {
+      throw new ConflictException('Only submitted import batches can be rejected');
     }
 
     // Mark all rows REJECTED

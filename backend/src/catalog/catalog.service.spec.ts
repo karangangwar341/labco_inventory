@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CategoriesService } from './categories.service.js';
 import { ProductsService, computeDuplicateKey } from './products.service.js';
 import { ApprovalDecision } from './dto/approve-product.dto.js';
-import { UserRole, CatalogScope, ProductStatus, TrackingMode } from '@prisma/client';
+import { UserRole, CatalogScope, ProductKind, ProductStatus, TrackingMode } from '@prisma/client';
 import {
   ForbiddenException,
   ConflictException,
@@ -14,9 +14,11 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
   let categoriesService: CategoriesService;
   let productsService: ProductsService;
   let mockPrisma: any;
+  let mockNotificationsService: any;
 
   beforeEach(() => {
     mockPrisma = {
+      $transaction: vi.fn().mockImplementation((cb) => cb(mockPrisma)),
       category: {
         findUnique: vi.fn(),
         findFirst: vi.fn(),
@@ -29,13 +31,20 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         findMany: vi.fn(),
         update: vi.fn(),
       },
+      productVersion: {
+        updateMany: vi.fn(),
+      },
       user: {
         findUnique: vi.fn(),
       },
     };
+    mockNotificationsService = {
+      notifySuperAdmins: vi.fn(),
+      notifyClientAdmins: vi.fn(),
+    };
 
     categoriesService = new CategoriesService(mockPrisma as any);
-    productsService = new ProductsService(mockPrisma as any);
+    productsService = new ProductsService(mockPrisma as any, mockNotificationsService as any);
   });
 
   describe('CategoriesService', () => {
@@ -95,6 +104,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
 
   describe('ProductsService & Duplicate Detection', () => {
     const validProductDto = {
+      kind: ProductKind.RAW_MATERIAL,
       name: 'Beaker 250ml',
       brand: 'Borosil',
       categoryId: 'cat-glass',
@@ -110,6 +120,21 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         { unitName: 'Box of 10', isBaseUnit: false, conversionToBase: 10 },
       ],
     };
+
+    it('limits Store Admin catalog results to approved company raw materials', async () => {
+      const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN };
+      mockPrisma.product.findMany.mockResolvedValue([]);
+
+      await productsService.findAll(storeAdmin);
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          ownerScope: CatalogScope.COMPANY,
+          kind: ProductKind.RAW_MATERIAL,
+          status: ProductStatus.APPROVED,
+        }),
+      }));
+    });
 
     it('blocks Store Admin from creating products', async () => {
       const storeAdmin: any = { id: 'sm-1', role: UserRole.STORE_ADMIN };
@@ -172,7 +197,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
 
     it('blocks exact duplicate product creation with ConflictException', async () => {
       const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
-      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass' });
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass', ownerScope: CatalogScope.COMPANY });
       mockPrisma.product.findUnique.mockResolvedValue({ id: 'existing-p-1' });
 
       await expect(
@@ -182,7 +207,8 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
 
     it('creates client product in PENDING_APPROVAL status', async () => {
       const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass' });
+      const clientProductDto = { ...validProductDto, kind: ProductKind.MANUFACTURED_PRODUCT };
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass', ownerScope: CatalogScope.CLIENT, clientId: 'client-1' });
       mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-1' });
       mockPrisma.product.findUnique.mockResolvedValue(null);
       mockPrisma.product.create.mockResolvedValue({
@@ -193,7 +219,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         status: ProductStatus.PENDING_APPROVAL,
       });
 
-      const res = await productsService.create(validProductDto as any, clientAdmin);
+      const res = await productsService.create(clientProductDto as any, clientAdmin);
 
       expect(res.status).toBe(ProductStatus.PENDING_APPROVAL);
       expect(mockPrisma.product.create).toHaveBeenCalledWith(

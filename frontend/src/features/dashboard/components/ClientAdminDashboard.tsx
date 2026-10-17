@@ -1,287 +1,325 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/query/query-keys';
+import { useAuth } from '@/features/auth/auth.store';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/feedback/LoadingState';
-import { StatWidget } from './shared/StatWidget';
-import { DashboardQueueCard } from './shared/DashboardQueueCard';
-import { AlertNotice } from './shared/AlertNotice';
+import { ErrorState } from '@/components/feedback/ErrorState';
+import { requestsService } from '@/features/requests/requests.service';
 import { shipmentsService } from '@/features/shipments/shipments.service';
-import { departmentsService } from '@/features/departments/departments.service';
-import { manufacturingService } from '@/features/manufacturing/manufacturing.service';
 import { inventoryService } from '@/features/inventory/inventory.service';
-import { Shipment } from '@/features/shipments/shipments.types';
-import { DepartmentIssue } from '@/features/departments/departments.types';
-import { ProductionRun } from '@/features/manufacturing/manufacturing.types';
-import { StockBalance } from '@/features/inventory/inventory.types';
-import { useAuth } from '@/features/auth/auth.store';
 
 export function ClientAdminDashboard() {
   const { user } = useAuth();
-  const [inboundShipments, setInboundShipments] = useState<Shipment[]>([]);
-  const [departmentIssues, setDepartmentIssues] = useState<DepartmentIssue[]>([]);
-  const [productionRuns, setProductionRuns] = useState<ProductionRun[]>([]);
-  const [facilityLowStock, setFacilityLowStock] = useState<StockBalance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  const fetchClientData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [shipmentsRes, issuesRes, runsRes, balancesRes] = await Promise.all([
-        shipmentsService.getShipments({ limit: 50 }).catch(() => []),
-        departmentsService.getIssues({ clientId: user?.clientId ?? undefined }).catch(() => []),
-        manufacturingService.getProductionRuns().catch(() => []),
-        inventoryService.getBalances({ limit: 100 }).catch(() => []),
-      ]);
+  const {
+    data: rawRequests = [],
+    isLoading: isReqLoading,
+    error: reqError,
+    refetch: refetchReq,
+  } = useQuery({
+    queryKey: queryKeys.requests.list(user?.clientId || user?.id, { limit: 5 }),
+    queryFn: () => requestsService.getRequests({ limit: 5 }),
+    staleTime: 2 * 60 * 1000,
+  });
 
-      const allShipments = Array.isArray(shipmentsRes) ? shipmentsRes : [];
-      const pendingInbound = allShipments.filter(
-        (s) => s.status === 'IN_TRANSIT' || s.status === 'PENDING',
-      );
-      setInboundShipments(pendingInbound.slice(0, 5));
+  const {
+    data: rawShipments = [],
+    isLoading: isShipLoading,
+    error: shipError,
+    refetch: refetchShip,
+  } = useQuery({
+    queryKey: queryKeys.shipments.list(user?.clientId || user?.id, { limit: 5 }),
+    queryFn: () => shipmentsService.getShipments({ limit: 5 }),
+    staleTime: 2 * 60 * 1000,
+  });
 
-      const allIssues = Array.isArray(issuesRes) ? issuesRes : [];
-      setDepartmentIssues(allIssues.slice(0, 5));
+  const { data: rawBalances = [] } = useQuery({
+    queryKey: queryKeys.inventory.balances(user?.id || user?.role),
+    queryFn: () => inventoryService.getBalances(),
+    staleTime: 2 * 60 * 1000,
+  });
 
-      const allRuns = Array.isArray(runsRes) ? runsRes : [];
-      setProductionRuns(allRuns.slice(0, 5));
+  const requests = Array.isArray(rawRequests) ? rawRequests : [];
+  const inboundShipments = (Array.isArray(rawShipments) ? rawShipments : []).filter(
+    (shipment) => shipment.status === 'IN_TRANSIT' || shipment.status === 'PENDING',
+  );
 
-      const allBalances = Array.isArray(balancesRes) ? balancesRes : [];
-      const low = allBalances.filter((b) => {
-        const avail = Number(b.availableQty ?? 0);
-        const thresh = Number(b.minThreshold ?? 0);
-        return thresh > 0 && avail <= thresh;
-      });
-      setFacilityLowStock(low.slice(0, 5));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.clientId]);
+  const lowStockBalances = (Array.isArray(rawBalances) ? rawBalances : []).filter(
+    (b) => Number(b.minThreshold ?? 0) > 0 && Number(b.availableQty ?? 0) <= Number(b.minThreshold ?? 0)
+  );
 
-  useEffect(() => {
-    fetchClientData();
-  }, [fetchClientData]);
+  const pendingRequestsCount = requests.filter((r) => r.status === 'PENDING_APPROVAL').length;
 
-  if (isLoading) {
-    return <LoadingState message="Connecting to client facility operations, departments, and manufacturing..." />;
-  }
+  const isLoading = (isReqLoading || isShipLoading) && (requests.length === 0 && inboundShipments.length === 0);
+  const error = reqError ? (reqError as Error).message : shipError ? (shipError as Error).message : null;
+
+  const fetchDashboard = () => {
+    void refetchReq();
+    void refetchShip();
+  };
+
+  if (isLoading) return <LoadingState message="Loading client workspace…" />;
+  if (error) return <ErrorState title="Stock activity could not be loaded" message={error} onRetry={fetchDashboard} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Client Facility Dashboard"
-        description="Patient testing continuity, internal department supply requisitions, formulation runs, and dock deliveries."
+        title="Client stock"
+        description="Record incoming stock, send items to departments, or check deliveries."
         actions={
-          <div className="flex items-center gap-2">
-            <Link href="/requests/new">
-              <Button variant="primary">+ Requisition Supplies</Button>
+          <div className="flex flex-wrap gap-2.5">
+            <Link href="/requests/new?type=STOCK_IN">
+              <Button variant="secondary">
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  <span>Stock in</span>
+                </span>
+              </Button>
             </Link>
-            <Link href="/departments">
-              <Button variant="secondary">Departments</Button>
-            </Link>
-            <Link href="/manufacturing">
-              <Button variant="secondary">Manufacturing</Button>
+            <Link href="/requests/new?type=STOCK_OUT">
+              <Button variant="primary">
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                  <span>Stock out</span>
+                </span>
+              </Button>
             </Link>
           </div>
         }
       />
 
-      {/* Facility Privacy & Tenancy Notice */}
-      <AlertNotice
-        variant="info"
-        title="Client Facility Tenant Scope Active"
-        message="Patient diagnostic stock and formulation records are strictly isolated. Inbound supply origins are masked as [REDACTED] to preserve source warehouse privacy invariants."
-      />
+      {/* Low-Stock Threshold Alert Notice */}
+      {lowStockBalances.length > 0 && (
+        <div className="p-4 rounded-xl border border-rose-200 bg-rose-50/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-rose-100 text-rose-700 font-bold text-base shrink-0">
+              ⚠️
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-rose-900">
+                Low Stock Threshold Alert: {lowStockBalances.length} item{lowStockBalances.length > 1 ? 's' : ''} below safety minimum
+              </h4>
+              <p className="text-xs text-rose-700 mt-0.5">
+                Supplies or manufactured finished goods are running low at your client location.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/inventory?filter=LOW_STOCK">
+              <Button variant="secondary" size="sm">
+                View Low Stock
+              </Button>
+            </Link>
+            <Link href="/requests/new?type=STOCK_IN">
+              <Button variant="primary" size="sm">
+                Request Restock
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
-      {/* KPI Stats Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatWidget
-          label="Inbound Supplies"
-          value={inboundShipments.length}
-          subtext="En route to facility dock"
-          badge={{
-            text: inboundShipments.length > 0 ? 'EN ROUTE' : 'NONE',
-            variant: inboundShipments.length > 0 ? 'primary' : 'neutral',
-          }}
-          href="/shipments"
-        />
-        <StatWidget
-          label="Dept Requisitions"
-          value={departmentIssues.length}
-          subtext="Internal issues requested"
-          badge={{
-            text: departmentIssues.length > 0 ? 'ACTIVE' : 'CLEAR',
-            variant: departmentIssues.length > 0 ? 'warning' : 'neutral',
-          }}
-          href="/departments"
-        />
-        <StatWidget
-          label="Formulation Runs"
-          value={productionRuns.length}
-          subtext="Active BOM batch assemblies"
-          badge={{
-            text: productionRuns.length > 0 ? 'RUNNING' : 'IDLE',
-            variant: productionRuns.length > 0 ? 'primary' : 'neutral',
-          }}
-          href="/manufacturing"
-        />
-        <StatWidget
-          label="Reagent Shortages"
-          value={facilityLowStock.length}
-          subtext="At or below buffer threshold"
-          badge={{
-            text: facilityLowStock.length > 0 ? 'ALERT' : 'OPTIMAL',
-            variant: facilityLowStock.length > 0 ? 'danger' : 'success',
-          }}
-          href="/inventory"
-        />
+      {/* KPI Metric Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="saas-card p-5">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Incoming Deliveries</span>
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">{inboundShipments.length}</span>
+            <span className="text-xs text-slate-500">active shipments</span>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {inboundShipments.length > 0 ? 'Awaiting receiving confirmation' : 'No in-transit shipments'}
+          </p>
+        </div>
+
+        <div className="saas-card p-5">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Pending Review</span>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">{pendingRequestsCount}</span>
+            <span className="text-xs text-slate-500">requests submitted</span>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Under Super Admin governance</p>
+        </div>
+
+        <div className="saas-card p-5">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Product Catalog</span>
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <Link href="/inventory" className="text-sm font-semibold text-blue-600 hover:underline">
+              Inspect Stock Balances →
+            </Link>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Real-time lot &amp; usable ledger</p>
+        </div>
+
+        <div className="saas-card p-5">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Staff &amp; Workforce</span>
+            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+              👥
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <Link href="/staff" className="text-sm font-semibold text-blue-600 hover:underline">
+              Staff Portal &amp; Logs →
+            </Link>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Manage team &amp; record daily work</p>
+        </div>
       </div>
 
+      {/* Main Content: Shipments & Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Inbound Supply Shipments (Source Redacted) */}
-        <DashboardQueueCard
-          title="Inbound Supply Shipments (Source Redacted)"
-          description="Incoming supplies arriving at facility dock. Source warehouse identity is strictly masked"
-          viewAllHref="/shipments"
-          viewAllLabel="Receive Shipments →"
-          isEmpty={inboundShipments.length === 0}
-          emptyMessage="No incoming shipments currently en route to this facility."
-        >
-          {inboundShipments.map((s) => (
-            <div key={s.id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-[#172033] font-mono">{s.shipmentNumber}</span>
-                  <Badge variant={s.status === 'IN_TRANSIT' ? 'warning' : 'neutral'}>
-                    {s.status}
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-[#5b6678] mt-0.5">
-                  Origin: <strong className="font-mono text-slate-500">[REDACTED]</strong> · Destination: {s.destinationName || 'Local Stock Room'}
-                </p>
-                <p className="text-[11px] text-[#5b6678]">
-                  {s.lines?.length || 0} line items dispatched
-                </p>
-              </div>
-              <Link href={`/shipments/${s.id}`}>
-                <Button variant="primary" size="sm">
-                  Verify &amp; Receive
-                </Button>
-              </Link>
+        {/* Incoming Deliveries */}
+        <section aria-labelledby="incoming-heading" className="saas-card overflow-hidden flex flex-col">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white">
+            <div className="flex items-center gap-2">
+              <h2 id="incoming-heading" className="text-sm font-semibold text-slate-900">
+                Incoming Deliveries
+              </h2>
+              {inboundShipments.length > 0 && (
+                <Badge variant="warning" size="sm" withDot>
+                  {inboundShipments.length}
+                </Badge>
+              )}
             </div>
-          ))}
-        </DashboardQueueCard>
-
-        {/* Internal Department Requisitions */}
-        <DashboardQueueCard
-          title="Internal Department Requisitions"
-          description="Reagents and consumables issued to internal testing units (Hematology, Biochemistry, PCR)"
-          viewAllHref="/departments"
-          viewAllLabel="Manage Requisitions →"
-          isEmpty={departmentIssues.length === 0}
-          emptyMessage="No pending department requisitions."
-        >
-          {departmentIssues.map((issue) => (
-            <div key={issue.id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-[#172033] font-mono">{issue.issueNumber}</span>
-                  <span className="text-[11px] font-medium text-[#172033]">
-                    {issue.departmentName || 'Department'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#5b6678] mt-0.5">
-                  {issue.items?.length || 0} items requested · Reason: {issue.reason || 'Routine testing'}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  issue.status === 'APPROVED'
-                    ? 'success'
-                    : issue.status === 'REJECTED'
-                    ? 'danger'
-                    : 'warning'
-                }
-              >
-                {issue.status}
-              </Badge>
-            </div>
-          ))}
-        </DashboardQueueCard>
-
-        {/* Active Formulation & Production Runs */}
-        <DashboardQueueCard
-          title="Active Formulation & Production Runs"
-          description="BOM reagent assembly runs with yield targets and ingredient consumption"
-          viewAllHref="/manufacturing"
-          viewAllLabel="Open BOM Console →"
-          action={
-            <Link href="/manufacturing">
-              <Button variant="secondary" size="sm">+ New Run</Button>
+            <Link href="/shipments" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">
+              View all
             </Link>
-          }
-          isEmpty={productionRuns.length === 0}
-          emptyMessage="No active formulation or manufacturing runs in progress."
-        >
-          {productionRuns.map((run) => (
-            <div key={run.id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-[#172033] font-mono">{run.runNumber}</span>
-                  <span className="text-[11px] font-medium text-[#172033]">
-                    Yield SKU: {run.yieldProductId}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#5b6678] mt-0.5">
-                  Planned Target: {run.plannedQuantity} units · Actual: {run.actualQuantity ?? 'Pending'}
-                </p>
-              </div>
-              <Badge
-                variant={
-                  run.status === 'COMPLETED'
-                    ? 'success'
-                    : run.status === 'APPROVED'
-                    ? 'primary'
-                    : run.status === 'PENDING_APPROVAL'
-                    ? 'warning'
-                    : 'neutral'
-                }
-              >
-                {run.status}
-              </Badge>
-            </div>
-          ))}
-        </DashboardQueueCard>
+          </div>
 
-        {/* Diagnostic Reagent Shortages */}
-        <DashboardQueueCard
-          title="Facility Reagent Shortages & Reorders"
-          description="Diagnostic cartridges, reagents, and test kits low in local stock room"
-          viewAllHref="/inventory"
-          viewAllLabel="Facility Inventory →"
-          action={
-            <Link href="/requests/new">
-              <Button variant="primary" size="sm">+ Requisition</Button>
-            </Link>
-          }
-          isEmpty={facilityLowStock.length === 0}
-          emptyMessage="✓ All diagnostic consumables and test kits are stocked above safety levels."
-        >
-          {facilityLowStock.map((item) => (
-            <div key={item.id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold text-[#172033] truncate">{item.productName || item.productId}</p>
-                <p className="text-[11px] text-[#5b6678] font-mono mt-0.5">
-                  Available: {Number(item.availableQty)} | Safety Buffer: {item.minThreshold}
-                </p>
+          <div className="flex-1 bg-white">
+            {inboundShipments.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                </div>
+                <p className="text-xs font-semibold text-slate-800">No shipments in transit</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Dispatched deliveries will appear here for receiving.</p>
               </div>
-              <Badge variant="danger">LOW STOCK</Badge>
-            </div>
-          ))}
-        </DashboardQueueCard>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {inboundShipments.map((shipment) => (
+                  <li
+                    key={shipment.id}
+                    className="p-4 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-4"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-slate-900">
+                          {shipment.shipmentNumber || 'Shipment'}
+                        </span>
+                        <Badge variant="warning" size="sm">In Transit</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {shipment.lines?.length ?? 0} items · Waiting for receiving dock
+                      </p>
+                    </div>
+                    <Link href={`/shipments/${shipment.id}`} className="shrink-0">
+                      <Button variant="secondary" size="sm">
+                        Review Delivery
+                      </Button>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {/* Recent Requests */}
+        <section aria-labelledby="request-status-heading" className="saas-card overflow-hidden flex flex-col">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white">
+            <h2 id="request-status-heading" className="text-sm font-semibold text-slate-900">
+              Recent Stock Requests
+            </h2>
+            <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">
+              View all
+            </Link>
+          </div>
+
+          <div className="flex-1 bg-white">
+            {requests.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <p className="text-xs font-semibold text-slate-800">No requests submitted yet</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Use the action buttons above to submit a new stock request.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {requests.map((request) => (
+                  <li
+                    key={request.id}
+                    className="p-4 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-4"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-semibold text-slate-900">
+                          {request.requestNumber || 'Stock request'}
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 uppercase font-mono">
+                          {(request.type || 'STOCK_REQUEST').replaceAll('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500 truncate">
+                        {request.lines?.map((line) => `${line.quantity} ${line.unit || line.unitNameSnapshot || 'units'} ${line.productName || line.product?.name || 'item'}`).join(', ') || 'No line details'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <Badge
+                        variant={request.status === 'APPROVED' ? 'success' : request.status === 'REJECTED' ? 'danger' : 'warning'}
+                        size="sm"
+                      >
+                        {request.status.replaceAll('_', ' ').toLowerCase()}
+                      </Badge>
+                      <Link href={`/requests/${request.id}`}>
+                        <Button variant="ghost" size="sm">
+                          Details →
+                        </Button>
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

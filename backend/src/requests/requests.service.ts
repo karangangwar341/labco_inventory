@@ -10,6 +10,7 @@ import { AuthorizationService } from '../auth/authorization.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
 import { ReservationsService } from './reservations.service.js';
 import { ShipmentsService } from '../shipments/shipments.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import {
   UserRole,
   RequestStatus,
@@ -19,6 +20,8 @@ import {
   Prisma,
   StockCondition,
   ProductStatus,
+  ProductKind,
+  CatalogScope,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import {
@@ -39,7 +42,42 @@ export class RequestsService {
     private readonly ledgerService: LedgerService,
     private readonly reservationsService: ReservationsService,
     private readonly shipmentsService: ShipmentsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  /**
+   * Helper to format human-readable details for notifications (what items, from where to where).
+   */
+  private formatMovementSummary(request: any): { whatText: string; fromText: string; toText: string; reqCode: string } {
+    const linesSummary = (request.lines || [])
+      .slice(0, 2)
+      .map((l: any) => `${Number(l.quantity)} ${l.unitNameSnapshot || 'units'} of ${l.product?.name || 'Item'}`)
+      .join(', ');
+    const extraCount = (request.lines?.length || 0) > 2 ? ` (+${request.lines.length - 2} more)` : '';
+    const whatText = linesSummary ? `${linesSummary}${extraCount}` : 'Stock items';
+
+    let fromText = 'Central Warehouse';
+    if (request.sourceLocation?.warehouse?.name) {
+      fromText = request.sourceLocation.warehouse.name;
+    } else if (request.sourceLocation?.client?.name) {
+      fromText = request.sourceLocation.client.name;
+    } else if (request.sourceType) {
+      fromText = request.sourceType;
+    }
+
+    let toText = 'Client Facility';
+    if (request.destinationLocation?.client?.name) {
+      toText = request.destinationLocation.client.name;
+    } else if (request.destinationLocation?.warehouse?.name) {
+      toText = request.destinationLocation.warehouse.name;
+    } else if (request.client?.name) {
+      toText = request.client.name;
+    }
+
+    const reqCode = request.requestNumber || `REQ-${request.id.slice(0, 8).toUpperCase()}`;
+
+    return { whatText, fromText, toText, reqCode };
+  }
 
   /**
    * Helper to validate and calculate line base quantities and snapshots.
@@ -48,6 +86,7 @@ export class RequestsService {
     lines: CreateStockRequestLineDto[],
     tx: Prisma.TransactionClient,
     locationId?: string | null,
+    user?: AuthenticatedUser,
   ) {
     if (!lines || lines.length === 0) {
       throw new BadRequestException('At least one request line is required');
@@ -71,27 +110,14 @@ export class RequestsService {
         );
       }
 
-      // Tracking mode validation (BATCH_ONLY, EXPIRY_ONLY, BOTH)
-      if (
-        (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH') &&
-        !line.batchId &&
-        !line.batchNumber
-      ) {
-        throw new BadRequestException(
-          `Product "${product.name}" requires batch/lot tracking. batchNumber or batchId is required.`,
-        );
+      if (user?.role === UserRole.STORE_ADMIN && (
+        product.kind !== ProductKind.RAW_MATERIAL || product.ownerScope !== CatalogScope.COMPANY
+      )) {
+        throw new ForbiddenException('Store Admins can only request company raw materials');
       }
 
-      if (
-        (product.trackingMode === 'EXPIRY_ONLY' || product.trackingMode === 'BOTH') &&
-        !line.batchId &&
-        !line.expiryDate
-      ) {
-        throw new BadRequestException(
-          `Product "${product.name}" requires expiry tracking. expiryDate is required.`,
-        );
-      }
-
+      // Batch and expiry details are optional on stock requests. When supplied,
+      // they are retained for traceability; their absence must not block stock movement.
       let batchId = line.batchId || null;
       let batchNumber = line.batchNumber || null;
       let expiryDate = line.expiryDate ? new Date(line.expiryDate) : null;
@@ -137,6 +163,12 @@ export class RequestsService {
       if (product.quantityPrecision === 0 && !baseQuantity.isInteger()) {
         throw new BadRequestException(
           `Product "${product.name}" requires integer whole units. Calculated base quantity ${baseQuantity} is fractional.`,
+        );
+      }
+
+      if (product.minOrderQuantity && Number(product.minOrderQuantity) > 1 && baseQuantity.lessThan(product.minOrderQuantity)) {
+        throw new BadRequestException(
+          `Order quantity for "${product.name}" (${baseQuantity} ${unit.unitName}) is below the Minimum Order Quantity (MOQ) of ${product.minOrderQuantity}.`,
         );
       }
 
@@ -197,31 +229,98 @@ export class RequestsService {
   async createDraft(user: AuthenticatedUser, dto: CreateStockRequestDto) {
     // Role-scoped location validation
     if (user.role === UserRole.STORE_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.warehouseId) {
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
+      if (!warehouseId) {
         throw new ForbiddenException('Store Admin is not assigned to any warehouse');
       }
-      if (dto.sourceLocationId) {
-        const sourceLoc = await this.prisma.stockLocation.findUnique({
-          where: { id: dto.sourceLocationId },
-        });
-        if (sourceLoc?.warehouseId !== dbUser.warehouseId) {
-          throw new ForbiddenException('Cannot create request for another warehouse');
+      const warehouseLocation = await this.prisma.stockLocation.findUnique({
+        where: { warehouseId },
+      });
+      if (!warehouseLocation) {
+        throw new ForbiddenException('Assigned warehouse has no stock location');
+      }
+      if (dto.sourceLocationId && dto.sourceLocationId !== warehouseLocation.id) {
+        throw new ForbiddenException('Stock requests must use your assigned warehouse');
+      }
+      if (dto.requestType === RequestType.STOCK_IN) {
+        const targetLocId = dto.destinationLocationId || dto.sourceLocationId;
+        if (targetLocId && targetLocId !== warehouseLocation.id) {
+          throw new ForbiddenException('Stock-in must be added to your assigned warehouse');
         }
       }
+      if (dto.requestType === RequestType.STOCK_OUT && dto.sourceLocationId !== warehouseLocation.id) {
+        throw new ForbiddenException('Stock-out must come from your assigned warehouse');
+      }
+      if (dto.requestType === RequestType.DISPATCH) {
+        if (dto.sourceLocationId !== warehouseLocation.id) {
+          throw new ForbiddenException('Dispatch must come from your assigned warehouse');
+        }
+        const destination = dto.destinationLocationId
+          ? await this.prisma.stockLocation.findUnique({ where: { id: dto.destinationLocationId } })
+          : null;
+        if (!destination?.clientId) {
+          throw new ForbiddenException('Dispatch must be sent to an assigned client');
+        }
+        const assignment = await this.prisma.clientWarehouseAssignment.findFirst({
+          where: {
+            warehouseId,
+            clientId: destination.clientId,
+            isActive: true,
+          },
+        });
+        if (!assignment) {
+          throw new ForbiddenException('Warehouse is not assigned to this client');
+        }
+      }
+      if (dto.requestType === RequestType.TRANSFER) {
+        if (dto.sourceLocationId !== warehouseLocation.id) {
+          throw new ForbiddenException('Transfer must come from your assigned warehouse');
+        }
+        const destination = dto.destinationLocationId
+          ? await this.prisma.stockLocation.findUnique({ where: { id: dto.destinationLocationId } })
+          : null;
+        if (!destination?.warehouseId || destination.id === warehouseLocation.id) {
+          throw new ForbiddenException('Choose another warehouse as the transfer destination');
+        }
+      }
+      if (dto.requestType === RequestType.ADJUSTMENT &&
+        dto.sourceLocationId !== warehouseLocation.id &&
+        dto.destinationLocationId !== warehouseLocation.id) {
+        throw new ForbiddenException('Stock adjustment must use your assigned warehouse');
+      }
     } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.clientId) {
+      const clientId = user.clientId !== undefined
+        ? user.clientId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
+      if (!clientId) {
         throw new ForbiddenException('Client Admin is not assigned to any client');
       }
-      if (dto.clientId && dto.clientId !== dbUser.clientId) {
+      if (dto.clientId && dto.clientId !== clientId) {
         throw new ForbiddenException('Cannot create request for another client');
+      }
+      const clientLocation = await this.prisma.stockLocation.findUnique({
+        where: { clientId },
+      });
+      if (dto.requestType === RequestType.DISPATCH || dto.requestType === RequestType.TRANSFER) {
+        throw new ForbiddenException('Client Admins can request stock-in and stock-out only');
+      }
+      if (!clientLocation ||
+        (dto.sourceLocationId && dto.sourceLocationId !== clientLocation.id) ||
+        (dto.destinationLocationId && dto.destinationLocationId !== clientLocation.id) ||
+        (dto.requestType === RequestType.STOCK_IN && dto.destinationLocationId !== clientLocation.id) ||
+        (dto.requestType === RequestType.STOCK_OUT && dto.sourceLocationId !== clientLocation.id) ||
+        (dto.requestType === RequestType.ADJUSTMENT &&
+          dto.sourceLocationId !== clientLocation.id &&
+          dto.destinationLocationId !== clientLocation.id)) {
+        throw new ForbiddenException('Stock requests must use your client location');
       }
     }
 
     return this.prisma.$transaction(async (tx) => {
       const locationId = dto.sourceLocationId || dto.destinationLocationId || null;
-      const processedLines = await this.processLines(dto.lines, tx, locationId);
+      const processedLines = await this.processLines(dto.lines, tx, locationId, user);
 
       return tx.stockRequest.create({
         data: {
@@ -252,7 +351,26 @@ export class RequestsService {
   async submitRequest(user: AuthenticatedUser, requestId: string, idempotencyKey?: string) {
     const request = await this.prisma.stockRequest.findUnique({
       where: { id: requestId },
-      include: { lines: true },
+      include: {
+        lines: {
+          include: {
+            product: { select: { name: true, kind: true, ownerScope: true } },
+          },
+        },
+        sourceLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        destinationLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        client: { select: { name: true } },
+      },
     });
 
     if (!request) {
@@ -268,8 +386,13 @@ export class RequestsService {
     if (user.role !== UserRole.SUPER_ADMIN && request.requesterId !== user.id) {
       throw new ForbiddenException('Only the requester can submit this draft');
     }
+    if (user.role === UserRole.STORE_ADMIN && request.lines.some((line) => (
+      line.product?.kind !== ProductKind.RAW_MATERIAL || line.product?.ownerScope !== CatalogScope.COMPANY
+    ))) {
+      throw new ForbiddenException('Store Admins can only submit requests for company raw materials');
+    }
 
-    return this.prisma.$transaction(async (tx) => {
+    const submitted = await this.prisma.$transaction(async (tx) => {
       // Stock-out and Dispatch require source location and reserve usable stock atomically
       if (
         request.requestType === RequestType.STOCK_OUT ||
@@ -300,6 +423,17 @@ export class RequestsService {
         },
       });
     });
+
+    const { whatText, fromText, toText, reqCode } = this.formatMovementSummary(request);
+    const typeLabel = request.requestType.replaceAll('_', ' ').toLowerCase();
+
+    await this.notificationsService.notifySuperAdmins(
+      'Approval requested',
+      `[${reqCode}] ${typeLabel}: ${whatText} · From: ${fromText} → To: ${toText}`,
+      'STOCK_REQUEST',
+      request.id,
+    );
+    return submitted;
   }
 
   /**
@@ -351,7 +485,7 @@ export class RequestsService {
         });
 
         // 3. Process and create new lines
-        const processedLines = await this.processLines(dto.lines, tx);
+        const processedLines = await this.processLines(dto.lines, tx, undefined, user);
         const createdLines = [];
         for (const pl of processedLines) {
           const l = await tx.stockRequestLine.create({
@@ -373,7 +507,7 @@ export class RequestsService {
         }
       } else if (request.status === RequestStatus.DRAFT && dto.lines) {
         await tx.stockRequestLine.deleteMany({ where: { requestId } });
-        const processedLines = await this.processLines(dto.lines, tx);
+        const processedLines = await this.processLines(dto.lines, tx, undefined, user);
         for (const pl of processedLines) {
           await tx.stockRequestLine.create({
             data: {
@@ -450,6 +584,26 @@ export class RequestsService {
 
     const request = await this.prisma.stockRequest.findUnique({
       where: { id: requestId },
+      include: {
+        lines: {
+          include: {
+            product: { select: { name: true, kind: true, ownerScope: true } },
+          },
+        },
+        sourceLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        destinationLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        client: { select: { name: true } },
+      },
     });
 
     if (!request) {
@@ -462,7 +616,7 @@ export class RequestsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const rejected = await this.prisma.$transaction(async (tx) => {
       // Release reservations
       await this.reservationsService.releaseReservationsForRequest(tx, requestId);
 
@@ -482,6 +636,17 @@ export class RequestsService {
         include: { approvals: true },
       });
     });
+
+    const { whatText, fromText, toText, reqCode } = this.formatMovementSummary(request);
+
+    await this.notificationsService.notifyUser(
+      request.requesterId,
+      'Request rejected',
+      `[${reqCode}] Rejected: ${whatText} (From: ${fromText} → To: ${toText}). Reason: ${dto.reason}`,
+      'STOCK_REQUEST',
+      request.id,
+    );
+    return rejected;
   }
 
   /**
@@ -499,7 +664,27 @@ export class RequestsService {
 
     const request = await this.prisma.stockRequest.findUnique({
       where: { id: requestId },
-      include: { lines: true, approvals: true },
+      include: {
+        lines: {
+          include: {
+            product: { select: { name: true, kind: true, ownerScope: true } },
+          },
+        },
+        sourceLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        destinationLocation: {
+          include: {
+            warehouse: { select: { name: true } },
+            client: { select: { name: true } },
+          },
+        },
+        client: { select: { name: true } },
+        approvals: true,
+      },
     });
 
     if (!request) {
@@ -517,7 +702,13 @@ export class RequestsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    if (request.sourceLocation?.warehouseId && request.lines.some((line) => (
+      line.product?.kind !== ProductKind.RAW_MATERIAL || line.product?.ownerScope !== CatalogScope.COMPANY
+    ))) {
+      throw new BadRequestException('Warehouse stock requests can only contain company raw materials');
+    }
+
+    const approved = await this.prisma.$transaction(async (tx) => {
       // 1. Consume reservations if stock-out, dispatch or transfer
       if (
         request.requestType === RequestType.STOCK_OUT ||
@@ -643,7 +834,29 @@ export class RequestsService {
           approvals: true,
         },
       });
+    }, {
+      maxWait: 10000,
+      timeout: 30000,
     });
+    const { whatText, fromText, toText, reqCode } = this.formatMovementSummary(request);
+
+    await this.notificationsService.notifyUser(
+      request.requesterId,
+      'Request approved',
+      `[${reqCode}] Approved: ${whatText} · From: ${fromText} → To: ${toText}. Inventory posted.`,
+      'STOCK_REQUEST',
+      request.id,
+    );
+    if (request.requestType === RequestType.DISPATCH || request.requestType === RequestType.TRANSFER) {
+      await this.notificationsService.notifyClientAdmins(
+        request.clientId,
+        'Stock shipment dispatched',
+        `[${reqCode}] Dispatch on the way: ${whatText} to ${toText}. Confirm receipt upon arrival.`,
+        'STOCK_REQUEST',
+        request.id,
+      );
+    }
+    return approved;
   }
 
   /**
@@ -660,20 +873,20 @@ export class RequestsService {
     }
 
     if (user.role === UserRole.STORE_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.warehouseId) return [];
-      const location = await this.prisma.stockLocation.findUnique({
-        where: { warehouseId: dbUser.warehouseId },
-      });
-      if (!location) return [];
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
+      if (!warehouseId) return [];
       where.OR = [
-        { sourceLocationId: location.id },
-        { destinationLocationId: location.id },
+        { sourceLocation: { warehouseId } },
+        { destinationLocation: { warehouseId } },
       ];
     } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.clientId) return [];
-      where.clientId = dbUser.clientId;
+      const clientId = user.clientId !== undefined
+        ? user.clientId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
+      if (!clientId) return [];
+      where.clientId = clientId;
     }
 
     const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
@@ -685,9 +898,23 @@ export class RequestsService {
       take: pageSize,
       skip: (pageNumber - 1) * pageSize,
       include: {
-        lines: true,
+        lines: {
+          include: { product: { select: { id: true, name: true } } },
+        },
         approvals: true,
         requester: { select: { id: true, username: true } },
+        sourceLocation: {
+          include: {
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
+        destinationLocation: {
+          include: {
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
       },
     });
   }
@@ -697,14 +924,34 @@ export class RequestsService {
       where: { id: requestId },
       include: {
         lines: {
-          include: { reservations: true },
+          include: {
+            reservations: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                brand: true,
+                category: { select: { id: true, name: true } },
+              },
+            },
+          },
         },
         approvals: {
           include: { approver: { select: { id: true, username: true } } },
         },
         requester: { select: { id: true, username: true } },
-        sourceLocation: true,
-        destinationLocation: true,
+        sourceLocation: {
+          include: {
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
+        destinationLocation: {
+          include: {
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
       },
     });
 
@@ -712,21 +959,24 @@ export class RequestsService {
       throw new NotFoundException(`Stock request ${requestId} not found`);
     }
 
-    // Tenancy checks
+    // Tenancy checks without redundant DB queries
     if (user.role === UserRole.STORE_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      const location = await this.prisma.stockLocation.findUnique({
-        where: { warehouseId: dbUser?.warehouseId || '' },
-      });
-      if (
-        request.sourceLocationId !== location?.id &&
-        request.destinationLocationId !== location?.id
-      ) {
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
+      if (!warehouseId) {
+        throw new ForbiddenException('Store Admin is not assigned to any warehouse');
+      }
+      const isSourceMatch = request.sourceLocation?.warehouseId === warehouseId || request.sourceLocation?.warehouse?.id === warehouseId;
+      const isDestMatch = request.destinationLocation?.warehouseId === warehouseId || request.destinationLocation?.warehouse?.id === warehouseId;
+      if (!isSourceMatch && !isDestMatch) {
         throw new ForbiddenException('Access denied to requests from another warehouse');
       }
     } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (request.clientId && request.clientId !== dbUser?.clientId) {
+      const clientId = user.clientId !== undefined
+        ? user.clientId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
+      if (request.clientId && request.clientId !== clientId) {
         throw new ForbiddenException('Access denied to requests from another client');
       }
     }

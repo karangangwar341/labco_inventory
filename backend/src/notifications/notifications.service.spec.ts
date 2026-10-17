@@ -51,6 +51,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
   beforeEach(() => {
     mockPrisma = {
+      $transaction: vi.fn(async (cb) => cb(mockPrisma)),
       notification: {
         create: vi.fn().mockImplementation((args) => Promise.resolve({ id: 'notif-1', ...args.data })),
         findMany: vi.fn(),
@@ -58,6 +59,9 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
         count: vi.fn(),
         update: vi.fn(),
         updateMany: vi.fn(),
+      },
+      auditEvent: {
+        create: vi.fn().mockResolvedValue({}),
       },
       stockAlertState: {
         findFirst: vi.fn(),

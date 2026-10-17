@@ -43,8 +43,12 @@ export class ReservationsService {
       });
 
       if (!balance) {
+        const product = await tx.product.findUnique({
+          where: { id: line.productId },
+          select: { name: true },
+        });
         throw new BadRequestException(
-          `No inventory balance exists at source location for product ${line.productId}`,
+          `No available stock for "${product?.name || line.productId}" at the selected location. Available: 0, requested: ${line.baseQuantity} base units.`,
         );
       }
 
@@ -61,8 +65,12 @@ export class ReservationsService {
 
       const availableQty = balance.usableQty.minus(balance.reservedQty);
       if (availableQty.lessThan(line.baseQuantity)) {
+        const product = await tx.product.findUnique({
+          where: { id: line.productId },
+          select: { name: true },
+        });
         throw new BadRequestException(
-          `Insufficient available stock for product ${line.productId}. Available: ${availableQty}, Requested: ${line.baseQuantity}`,
+          `Not enough available stock for "${product?.name || line.productId}". Available: ${availableQty}, requested: ${line.baseQuantity} base units. Reduce the quantity or choose another product.`,
         );
       }
 

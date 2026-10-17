@@ -5,6 +5,11 @@ import { Providers } from './providers';
 export const metadata: Metadata = {
   title: 'Labco Instruments - AI Warehouse & Operations',
   description: 'Enterprise ACID warehouse, manufacturing, and AI inventory ledger platform',
+  icons: {
+    icon: '/labco-logo.png',
+    shortcut: '/labco-logo.png',
+    apple: '/labco-logo.png',
+  },
 };
 
 export default function RootLayout({

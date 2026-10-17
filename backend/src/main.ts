@@ -27,7 +27,42 @@ async function bootstrap() {
       'Authorization',
       'X-Requested-With',
       'Idempotency-Key',
+      'X-Request-ID',
     ],
+    exposedHeaders: ['X-Request-ID', 'X-Response-Time'],
+  });
+
+  // Request correlation and duration timing middleware (P-001)
+  app.use((req: any, res: any, next: any) => {
+    const correlationId =
+      req.headers['x-request-id'] ||
+      `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    req.id = correlationId;
+    res.setHeader('X-Request-ID', correlationId);
+
+    const startTime = process.hrtime();
+    const originalWriteHead = res.writeHead;
+    res.writeHead = function (...args: any[]) {
+      const diff = process.hrtime(startTime);
+      const durationMs = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
+      if (!res.headersSent) {
+        res.setHeader('X-Response-Time', `${durationMs}ms`);
+      }
+      return originalWriteHead.apply(res, args);
+    };
+
+    res.on('finish', () => {
+      const diff = process.hrtime(startTime);
+      const durationMs = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
+      if (process.env.NODE_ENV !== 'test') {
+        const method = req.method;
+        const path = req.originalUrl || req.url;
+        const status = res.statusCode;
+        console.log(`[HTTP ${status}] ${method} ${path} (${durationMs}ms) [${correlationId}]`);
+      }
+    });
+
+    next();
   });
 
   // Secure HTTP Headers (Runbook Section 7 & Security Baseline)
@@ -40,6 +75,12 @@ async function bootstrap() {
       'Permissions-Policy',
       'camera=(), microphone=(), geolocation=()',
     );
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains; preload',
+    );
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     next();
   });
 

@@ -8,12 +8,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import {
   UserRole,
   DepartmentStatus,
   DepartmentIssueStatus,
   DepartmentReturnStatus,
   ProductStatus,
+  ProductKind,
   StockCondition,
   TransactionType,
   Prisma,
@@ -39,6 +41,7 @@ export class DepartmentsService {
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
     private readonly inventoryService: InventoryService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async getClientForUser(user: AuthenticatedUser): Promise<string | null> {
@@ -91,7 +94,7 @@ export class DepartmentsService {
 
     const isSuperAdmin = user.role === UserRole.SUPER_ADMIN;
 
-    return this.prisma.department.create({
+    const created = await this.prisma.department.create({
       data: {
         clientId,
         name: dto.name.trim(),
@@ -101,6 +104,15 @@ export class DepartmentsService {
         approvedAt: isSuperAdmin ? new Date() : null,
       },
     });
+    if (!isSuperAdmin) {
+      await this.notificationsService.notifySuperAdmins(
+        'Department awaiting approval',
+        'A client proposed a new department for review.',
+        'DEPARTMENT',
+        created.id,
+      );
+    }
+    return created;
   }
 
   async getDepartments(clientId?: string, user?: AuthenticatedUser) {
@@ -216,7 +228,7 @@ export class DepartmentsService {
         ? DepartmentStatus.ACTIVE
         : (dept.proposedStatus ?? dept.status);
 
-    return this.prisma.department.update({
+    const approved = await this.prisma.department.update({
       where: { id },
       data: {
         name: finalName,
@@ -227,6 +239,14 @@ export class DepartmentsService {
         approvedAt: new Date(),
       },
     });
+    await this.notificationsService.notifyUser(
+      dept.createdById,
+      'Department approved',
+      `Your department “${finalName}” was approved.`,
+      'DEPARTMENT',
+      dept.id,
+    );
+    return approved;
   }
 
   async rejectDepartment(
@@ -241,7 +261,7 @@ export class DepartmentsService {
     const dept = await this.getDepartment(id);
 
     if (dept.status === DepartmentStatus.PENDING_APPROVAL) {
-      return this.prisma.department.update({
+      const rejected = await this.prisma.department.update({
         where: { id },
         data: {
           status: DepartmentStatus.INACTIVE,
@@ -249,6 +269,14 @@ export class DepartmentsService {
           proposedStatus: null,
         },
       });
+      await this.notificationsService.notifyUser(
+        dept.createdById,
+        'Department rejected',
+        `Your department proposal “${dept.name}” was rejected. ${dto.reason || ''}`.trim(),
+        'DEPARTMENT',
+        dept.id,
+      );
+      return rejected;
     }
 
     // Clear proposed changes
@@ -305,6 +333,9 @@ export class DepartmentsService {
       throw new BadRequestException(
         `Product "${product.name}" is not approved (status: ${product.status})`,
       );
+    }
+    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT) {
+      throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is a raw material`);
     }
 
     // Resolve unit
@@ -365,7 +396,7 @@ export class DepartmentsService {
       );
     }
 
-    return this.prisma.departmentIssue.create({
+    const issue = await this.prisma.departmentIssue.create({
       data: {
         clientId,
         departmentId: department.id,
@@ -386,6 +417,13 @@ export class DepartmentsService {
         unit: { select: { id: true, unitName: true } },
       },
     });
+    await this.notificationsService.notifySuperAdmins(
+      'Department issue awaiting approval',
+      'A client requested manufactured stock for a department.',
+      'DEPARTMENT_ISSUE',
+      issue.id,
+    );
+    return issue;
   }
 
   async getIssues(
@@ -409,7 +447,7 @@ export class DepartmentsService {
     if (query.departmentId) where.departmentId = query.departmentId;
     if (query.status) where.status = query.status;
 
-    return this.prisma.departmentIssue.findMany({
+    const issues = await this.prisma.departmentIssue.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -420,6 +458,14 @@ export class DepartmentsService {
         approvedBy: { select: { id: true, username: true, role: true } },
       },
     });
+
+    return issues.map((i) => ({
+      ...i,
+      issueNumber: `ISSUE-${i.id.slice(0, 8).toUpperCase()}`,
+      departmentName: i.department?.name || 'Department',
+      productName: i.product?.name || 'Product',
+      unitName: i.unit?.unitName || i.unitNameSnapshot || 'units',
+    }));
   }
 
   async getIssue(id: string, user: AuthenticatedUser) {
@@ -476,11 +522,14 @@ export class DepartmentsService {
         `Department issue is not pending approval (current status: ${issue.status})`,
       );
     }
+    if (issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT || issue.product.status !== ProductStatus.APPROVED) {
+      throw new BadRequestException('Department issue product must remain an approved manufactured product');
+    }
 
     const clientLocation = await this.inventoryService.getOrCreateLocationForClient(issue.clientId);
 
     // Atomic transaction: deduct central client usable stock and update issue status in single transaction
-    return this.prisma.$transaction(async (tx) => {
+    const approved = await this.prisma.$transaction(async (tx) => {
       // 1. Post ledger transaction for stock out from client central stock
       await this.ledgerService.postTransaction(
         {
@@ -519,6 +568,14 @@ export class DepartmentsService {
         },
       });
     });
+    await this.notificationsService.notifyUser(
+      issue.issuedById,
+      'Department issue approved',
+      'Your department stock issue was approved and inventory was updated.',
+      'DEPARTMENT_ISSUE',
+      issue.id,
+    );
+    return approved;
   }
 
   async rejectIssue(
@@ -544,7 +601,7 @@ export class DepartmentsService {
       );
     }
 
-    return this.prisma.departmentIssue.update({
+    const rejected = await this.prisma.departmentIssue.update({
       where: { id: issue.id },
       data: {
         status: DepartmentIssueStatus.REJECTED,
@@ -552,6 +609,14 @@ export class DepartmentsService {
         approvedById: user.id,
       },
     });
+    await this.notificationsService.notifyUser(
+      issue.issuedById,
+      'Department issue rejected',
+      `Your department stock issue was rejected. Reason: ${dto.reason}`,
+      'DEPARTMENT_ISSUE',
+      issue.id,
+    );
+    return rejected;
   }
 
   // ==========================================

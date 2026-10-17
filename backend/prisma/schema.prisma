@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -38,6 +39,17 @@ enum CatalogScope {
 
 enum ProductStatus {
   DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum ProductKind {
+  RAW_MATERIAL
+  MANUFACTURED_PRODUCT
+}
+
+enum ProductVersionStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED
@@ -240,6 +252,8 @@ model Client {
   departments          Department[]
   departmentIssues     DepartmentIssue[]
   departmentReturns    DepartmentReturn[]
+  staffMembers         ClientStaffMember[]
+  staffWorkLogs        ClientStaffWorkLog[]
 
   @@map("clients")
 }
@@ -303,6 +317,7 @@ model Product {
   ownerScope        CatalogScope       @map("owner_scope")
   clientId          String?            @map("client_id")
   categoryId        String             @map("category_id")
+  kind              ProductKind        @default(RAW_MATERIAL)
   name              String
   brand             String?
   description       String?
@@ -312,6 +327,7 @@ model Product {
   allowFractional   Boolean            @default(false) @map("allow_fractional")
   trackingMode      TrackingMode       @default(NONE) @map("tracking_mode")
   minQuantity       Decimal            @default(0) @map("min_quantity") @db.Decimal(18, 2)
+  minOrderQuantity  Decimal            @default(1) @map("min_order_quantity") @db.Decimal(18, 2)
   duplicateKey      String             @unique @map("duplicate_key")
   rejectionReason   String?            @map("rejection_reason")
   approvedById      String?            @map("approved_by_id")
@@ -335,12 +351,36 @@ model Product {
   departmentIssues  DepartmentIssue[]
   departmentReturns DepartmentReturn[]
   alertStates       StockAlertState[]
+  versions          ProductVersion[]
 
   @@index([ownerScope])
   @@index([clientId])
   @@index([categoryId])
   @@index([status])
   @@map("products")
+}
+
+model ProductVersion {
+  id              String               @id @default(uuid())
+  productId       String               @map("product_id")
+  versionNumber   Int                  @map("version_number")
+  status          ProductVersionStatus @default(PENDING_APPROVAL)
+  specification   Json
+  changeReason    String?              @map("change_reason")
+  submittedById   String               @map("submitted_by_id")
+  reviewedById    String?              @map("reviewed_by_id")
+  reviewedAt      DateTime?            @map("reviewed_at")
+  effectiveFrom   DateTime?            @map("effective_from")
+  rejectionReason String?              @map("rejection_reason")
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  submittedBy User    @relation("ProductVersionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  reviewedBy  User?   @relation("ProductVersionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([productId, versionNumber])
+  @@index([status, createdAt])
+  @@map("product_versions")
 }
 
 model ProductAttribute {
@@ -511,6 +551,8 @@ model User {
   loginEvents         LoginEvent[]
   assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
   approvedProducts    Product[]                   @relation("ProductApprovedBy")
+  submittedProductVersions ProductVersion[]       @relation("ProductVersionSubmittedBy")
+  reviewedProductVersions  ProductVersion[]       @relation("ProductVersionReviewedBy")
   postedTransactions  LedgerTransaction[]
   requests            StockRequest[]              @relation("RequestRequester")
   approvals           Approval[]                  @relation("ApprovalApprover")
@@ -1034,4 +1076,40 @@ model BackupRecord {
   @@index([retentionUntil])
   @@index([drillStatus])
   @@map("backups")
+}
+
+model ClientStaffMember {
+  id          String               @id @default(uuid())
+  clientId    String               @map("client_id")
+  staffNumber String               @map("staff_number")
+  fullName    String               @map("full_name")
+  roleTitle   String?              @map("role_title")
+  contact     String?
+  status      UserStatus           @default(ACTIVE)
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  client      Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workLogs    ClientStaffWorkLog[]
+
+  @@unique([clientId, staffNumber])
+  @@map("client_staff_members")
+}
+
+model ClientStaffWorkLog {
+  id             String            @id @default(uuid())
+  staffMemberId  String            @map("staff_member_id")
+  clientId       String            @map("client_id")
+  logDate        DateTime          @default(now()) @map("log_date")
+  shiftType      String?           @map("shift_type")
+  hoursWorked    Decimal?          @map("hours_worked") @db.Decimal(5, 2)
+  tasksCompleted String            @map("tasks_completed")
+  notes          String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  staffMember    ClientStaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, logDate])
+  @@map("client_staff_work_logs")
 }

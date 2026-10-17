@@ -1,7 +1,7 @@
 import { apiClient } from '../../lib/api/client';
 import { endpoints } from '../../lib/api/endpoints';
 import { setSessionToken, clearSessionToken } from '../../lib/auth/session';
-import { AuthResponseDto, CurrentUserProfile } from '../../types/api';
+import { AuthResponseDto, AppBootstrap, CurrentUserProfile } from '../../types/api';
 import { LoginCredentials } from './auth.types';
 
 export const authService = {
@@ -38,4 +38,7 @@ export const authService = {
       return null;
     }
   },
+
+  getBootstrap: async (): Promise<AppBootstrap> =>
+    apiClient.get<AppBootstrap>(endpoints.auth.bootstrap()),
 };

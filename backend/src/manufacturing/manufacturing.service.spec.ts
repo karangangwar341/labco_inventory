@@ -5,6 +5,8 @@ import {
   ProductionStatus,
   ProductionMode,
   ProductStatus,
+  ProductKind,
+  CatalogScope,
   TransactionType,
   Prisma,
 } from '@prisma/client';
@@ -18,6 +20,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   let manufacturingService: ManufacturingService;
   let mockPrisma: any;
   let mockLedgerService: any;
+  let mockNotificationsService: any;
 
   const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
   const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN };
@@ -26,6 +29,8 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   const rawMaterialProduct = {
     id: 'prod-raw',
     name: 'Chemical Reagent A',
+    kind: ProductKind.RAW_MATERIAL,
+    ownerScope: CatalogScope.COMPANY,
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
     trackingMode: 'NONE',
@@ -42,6 +47,9 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   const finishedGoodProduct = {
     id: 'prod-finished',
     name: 'Diagnostic Assay Kit',
+    kind: ProductKind.MANUFACTURED_PRODUCT,
+    ownerScope: CatalogScope.CLIENT,
+    clientId: 'client-123',
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
     trackingMode: 'BATCH_ONLY',
@@ -69,9 +77,14 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       },
       inventoryBalance: {
         findFirst: vi.fn(),
+        findMany: vi.fn(),
+      },
+      ledgerEntry: {
+        findMany: vi.fn(),
       },
       product: {
         findUnique: vi.fn(),
+        findMany: vi.fn(),
       },
       stockBatch: {
         findUnique: vi.fn(),
@@ -85,13 +98,21 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     mockLedgerService = {
       postTransaction: vi.fn(),
     };
+    mockNotificationsService = {
+      notifySuperAdmins: vi.fn(),
+      notifyClientAdmins: vi.fn(),
+      notifyUser: vi.fn(),
+    };
 
-    manufacturingService = new ManufacturingService(mockPrisma as any, mockLedgerService as any);
+    manufacturingService = new ManufacturingService(mockPrisma as any, mockLedgerService as any, mockNotificationsService as any);
   });
 
   describe('1. Production Run Draft Creation', () => {
     it('creates draft production run without affecting stock', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([{ productId: 'prod-raw' }]);
+      mockPrisma.ledgerEntry.findMany.mockResolvedValue([]);
       mockPrisma.product.findUnique
         .mockResolvedValueOnce(rawMaterialProduct)
         .mockResolvedValueOnce(finishedGoodProduct);
@@ -234,6 +255,24 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       };
       mockPrisma.productionRun.findUnique.mockResolvedValue(pendingRun);
       mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.product.findMany.mockResolvedValue([
+        {
+          id: 'prod-raw',
+          name: rawMaterialProduct.name,
+          kind: ProductKind.RAW_MATERIAL,
+          status: ProductStatus.APPROVED,
+          ownerScope: CatalogScope.COMPANY,
+          clientId: null,
+        },
+        {
+          id: 'prod-finished',
+          name: finishedGoodProduct.name,
+          kind: ProductKind.MANUFACTURED_PRODUCT,
+          status: ProductStatus.APPROVED,
+          ownerScope: CatalogScope.CLIENT,
+          clientId: 'client-123',
+        },
+      ]);
       mockPrisma.stockBatch.findUnique.mockResolvedValue(null);
       mockPrisma.stockBatch.create.mockResolvedValue({ id: 'batch-kit-99' });
 

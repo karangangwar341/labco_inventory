@@ -2,6 +2,7 @@
 **Version:** 1.0 | Use this file as the single source of truth for decisions not yet finalized.
 
 ## Confirmed baseline decisions & architecture
+- **D-016 (Catalog ownership and product kind):** The company catalog is for raw materials; each client owns a separate catalog for manufactured products and categories. Client Admins create manufactured products only; Super Admins create raw materials. Existing products default to raw material. Manufacturing inputs must be approved raw materials with current or historical stock at that client; outputs must belong to that client’s approved manufactured-product catalog. Product kind is immutable after creation.
 - Design baseline approved; Phase 1 implementation authorized by owner.
 - Online-only; no offline mode.
 - No barcode scanning.
@@ -35,13 +36,13 @@
 ### Finalized Technology Stack (Approved)
 - **Backend:** Node.js + TypeScript + NestJS (modular architecture, dependency injection, guards, validation pipes).
 - **Frontend:** Next.js + React + TypeScript (modern responsive UI, accessible, themeable).
-- **Database:** PostgreSQL (ACID transactions, row-level locking `FOR UPDATE` for reservation and ledger concurrency, continuous WAL).
+- **Database:** Neon Serverless PostgreSQL (ACID transactions, pessimistic row locking `FOR UPDATE`, PgBouncer connection pooling via `DATABASE_URL`, direct connection via `DIRECT_URL` for Prisma migrations, copy-on-write branching, and continuous WAL / PITR).
 - **ORM / Data Access:** Prisma ORM, supplemented with explicit raw SQL for pessimistic row locking and serializable ledger transactions.
 - **Authentication & Authorization:** Short-lived JWT access tokens with secure refresh, session invalidation on login/password reset, and NestJS RBAC guards + service-level authorization.
 - **AI Document Extraction:** Google Gemini API, abstracted behind a provider-independent adapter (multimodal extraction & field mapping only).
-- **File Storage:** Private local disk storage during development; private S3-compatible object storage for production (provider deferred).
+- **File Storage:** Neon Object Storage (branch-aware, S3-compatible blob storage) with local directory fallback for offline development.
 - **API Standard:** REST API with OpenAPI (Swagger) documentation under `/api/v1`.
-- **Hosting / Cloud Vendor:** Deferred until full system design and core implementation are completed.
+- **Infrastructure & Deployment:** Direct Node.js execution and serverless hosting; Docker is explicitly not required.
 
 ### Finalized Business Rules & Gates
 - **D-001 (Receipt confirmation disabled):** When disabled, on Super Admin dispatch approval, warehouse stock decreases and client stock increases atomically in the same database transaction. In-transit tracking is bypassed.
@@ -52,14 +53,17 @@
   $$\text{Available Qty} = \text{Usable} - \text{Reserved} \ge 0$$
   Reservations are an active hold on usable stock, avoiding double-counting.
 - **D-008 (Client account model):** One shared account per client organization initially (password reset on staff turnover). Schema designed to cleanly support named individual accounts (`client_users`) in the future. Audit trail accurately identifies the account.
+- **D-009 (Database & Object Storage Platform):** Neon Serverless PostgreSQL selected for primary relational storage (ACID transactions, continuous WAL, branching); Neon Object Storage selected for S3-compatible file/document storage.
+- **D-010 (Runtime & Container Architecture):** Docker container requirements removed. Direct Node.js runtime and serverless deployment models approved for development, CI and production.
 - **D-013 & D-014 (Conversion and specification changes):** Historical transactions permanently preserve the snapshot conversion ratio and specification version at transaction time. Material changes require a new version, effective date, and Super Admin approval before applying to future transactions. Never silently recalculate history.
 
 ## Deferred / Open during development
-**D-005 / D-006 Batch approval semantics:** Support selective approval with bulk "Approve All Valid" option; batch rejection and all-or-nothing rollback enforced for atomic production runs and all-or-nothing import batches.
-**D-007 Client Admin permissions:** Scoped strictly to client's own inventory, reports, and import drafts.
-**D-009 / D-010 Cloud hosting & deployment:** Provider, region, and production infrastructure targets deferred.
-**D-011 Data retention & legal review:** Configure default retention schedules for audit logs, drafts, and attachments.
-**D-015 Source types & file constraints:** Configure initial source types and upload constraints (MIME, size limits).
+- **D-005 / D-006 Batch approval semantics — confirmed baseline:** Super Admin may approve selected valid rows or all valid rows in partial mode; invalid rows remain unposted. All-or-nothing batches post all eligible rows atomically or none. Rejection applies to the submitted batch. The UI/API must not imply a decision that is not persisted.
+- **D-007 Client Admin permissions — confirmed baseline:** Client Admin access is strictly scoped to its own organization for inventory, reports, audit visibility and import drafts; server authorization is mandatory.
+- **D-011 Data retention & legal review:** Configure default retention schedules for audit logs, drafts, and attachments.
+- **D-015 Source types & file constraints:** Configure initial source types and upload constraints (MIME, size limits).
+
+The owner authorized implementation on 2026-10-15. Authorization does not resolve D-011 or D-015. See `16_IMPLEMENTATION_AUDIT.md` for implementation status and gaps verified against code.
 
 ## Change control
 Any new business rule must be recorded with ID, decision, rationale, date, owner and impacted documents. Update all affected documents together. The coding agent must not invent a value for an open decision; it should flag/block affected implementation until resolved.

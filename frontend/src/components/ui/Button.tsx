@@ -17,37 +17,42 @@ export function Button({
   ...props
 }: ButtonProps) {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium rounded-md transition select-none disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-1';
+    'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-150 select-none disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1';
 
   const sizeStyles = {
-    sm: 'px-2.5 py-1.5 text-xs',
-    md: 'px-3.5 py-2 text-xs',
-    lg: 'px-4 py-2.5 text-sm',
+    sm: 'px-3 py-1.5 text-xs gap-1.5 font-medium',
+    md: 'px-3.5 py-2 text-xs gap-2 font-medium',
+    lg: 'px-4 py-2.5 text-sm gap-2.5 font-medium',
   };
 
-  // Standard variants: primary, secondary, destructive, quiet
   let variantClasses = '';
   switch (variant) {
     case 'secondary':
-      variantClasses = 'bg-white hover:bg-[#f8fafc] text-[#172033] border border-[#dbe3ee] shadow-xs focus:ring-[#2563eb]';
+      variantClasses =
+        'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 shadow-xs hover:border-slate-300 hover:shadow-sm focus-visible:ring-blue-500/30';
       break;
     case 'destructive':
     case 'danger':
-      variantClasses = 'bg-[#b42318] hover:bg-[#911b12] text-white shadow-xs focus:ring-[#b42318]';
+      variantClasses =
+        'bg-red-600 hover:bg-red-700 text-white shadow-xs hover:shadow-sm focus-visible:ring-red-500/40 border border-transparent';
       break;
     case 'quiet':
     case 'ghost':
-      variantClasses = 'bg-transparent hover:bg-[#f1f5f9] text-[#5b6678] hover:text-[#172033] focus:ring-[#2563eb]';
+      variantClasses =
+        'bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 focus-visible:ring-blue-500/30';
       break;
     case 'warning':
-      variantClasses = 'bg-[#a15c00] hover:bg-[#854d00] text-white shadow-xs focus:ring-[#a15c00]';
+      variantClasses =
+        'bg-amber-600 hover:bg-amber-700 text-white shadow-xs hover:shadow-sm focus-visible:ring-amber-500/40 border border-transparent';
       break;
     case 'success':
-      variantClasses = 'bg-[#18794e] hover:bg-[#13613e] text-white shadow-xs focus:ring-[#18794e]';
+      variantClasses =
+        'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs hover:shadow-sm focus-visible:ring-emerald-500/40 border border-transparent';
       break;
     case 'primary':
     default:
-      variantClasses = 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs focus:ring-[#2563eb]';
+      variantClasses =
+        'bg-blue-600 hover:bg-blue-700 text-white shadow-xs hover:shadow-sm shadow-blue-500/10 focus-visible:ring-blue-500/40 border border-transparent';
       break;
   }
 

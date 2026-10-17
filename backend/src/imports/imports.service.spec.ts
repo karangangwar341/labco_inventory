@@ -277,7 +277,7 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
       mockPrisma.importBatch.findUnique.mockResolvedValue({
         id: 'batch-aon',
         importType: ImportType.STOCK_IN,
-        status: ImportBatchStatus.DRAFT,
+        status: ImportBatchStatus.SUBMITTED,
         approvalMode: ImportApprovalMode.ALL_OR_NOTHING,
         rows: [
           { id: 'r1', validationStatus: ImportRowStatus.VALID, normalizedDataJson: { productName: 'Cartridge A', quantity: 10 } },
@@ -297,7 +297,7 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
       mockPrisma.importBatch.findUnique.mockResolvedValue({
         id: 'batch-partial',
         importType: ImportType.STOCK_IN,
-        status: ImportBatchStatus.DRAFT,
+        status: ImportBatchStatus.SUBMITTED,
         approvalMode: ImportApprovalMode.PARTIAL,
         rows: [
           {
@@ -365,7 +365,7 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
       mockPrisma.importBatch.findUnique.mockResolvedValue({
         id: 'batch-mixed-wh',
         importType: ImportType.STOCK_OUT,
-        status: ImportBatchStatus.DRAFT,
+        status: ImportBatchStatus.SUBMITTED,
         approvalMode: ImportApprovalMode.PARTIAL,
         rows: [
           { id: 'r1', validationStatus: ImportRowStatus.VALID, normalizedDataJson: { locationId: 'loc-wh-1' } },

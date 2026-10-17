@@ -1,6 +1,6 @@
 import { apiClient } from '../../lib/api/client';
 import { endpoints } from '../../lib/api/endpoints';
-import { NotificationsResponse } from './notifications.types';
+import { NotificationSettings, NotificationsResponse } from './notifications.types';
 
 export const notificationsService = {
   getNotifications: async (params?: {
@@ -19,4 +19,10 @@ export const notificationsService = {
   markAllAsRead: async (): Promise<void> => {
     return apiClient.post(endpoints.notifications.markAllRead());
   },
+
+  getSettings: async (): Promise<NotificationSettings> =>
+    apiClient.get(endpoints.notifications.settings()),
+
+  updateSettings: async (settings: Partial<NotificationSettings>): Promise<NotificationSettings> =>
+    apiClient.patch(endpoints.notifications.settings(), settings),
 };

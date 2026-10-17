@@ -2,7 +2,8 @@
 **Version:** 0.1 | **Status:** Conceptual model, not executable migration SQL. Finalize after the open decisions in `DECISIONS.md`.
 
 ## 1. Design principles
-- Relational database with foreign keys and transactional writes.
+- Relational database using Neon Serverless PostgreSQL with foreign keys and transactional writes.
+- Concurrency control via explicit row-level locking (`FOR UPDATE`) and PgBouncer connection pooling.
 - Ledger entries are append-only; current balance tables are derived/maintained transactionally.
 - Store quantities as fixed-precision decimals, not binary floating point.
 - Snapshot unit conversion and relevant product specifications on each transaction line.
@@ -18,8 +19,9 @@
 | clients | Client organizations | id, name, status, created_at |
 | warehouses | Company warehouses | id, name, location_description, status |
 | client_warehouse_assignments | Many-to-many scope | id, client_id, warehouse_id, active_from, inactive_from, changed_by |
-| categories | Product taxonomy | id, parent_id nullable, name, owner_scope |
-| products | Company/client catalog | id, owner_scope, client_id nullable, category_id, name, description, image_ref, status, quantity_precision, allow_fractional, batch_tracking, expiry_tracking, min_quantity |
+  | categories | Product taxonomy; one main category level with brand/subcategory children | id, parent_id nullable, name, owner_scope |
+| products | Company/client catalog | id, owner_scope, client_id nullable, category_id, kind (RAW_MATERIAL or MANUFACTURED_PRODUCT), name, description, image_ref, status, quantity_precision, allow_fractional, batch_tracking, expiry_tracking, min_quantity |
+| product_versions | Immutable proposed/approved product specification snapshots | id, product_id, version_number, status, specification_json, change_reason, submitted_by, reviewed_by, effective_from |
 | product_attributes | Flexible physical specs | id, product_id, attribute_name, value, unit, sort_order |
 | product_units | Units/conversions | id, product_id, unit_name, is_base_unit, conversion_to_base, effective_from, effective_to, status |
 | stock_locations | Inventory scope | id, location_type, warehouse_id nullable, client_id nullable |
@@ -53,6 +55,9 @@
 - Client warehouse assignment has a unique active pair; preserve historical assignment changes.
 - A request has one source warehouse for stock-out batches.
 - Product units/conversion ratios must be positive and valid; effective-dated conversion rules preserve historical interpretation.
+- Existing products migrate as `RAW_MATERIAL`; product kind cannot be changed after creation.
+- Company catalog products are raw materials. Client catalog products created after this rule are manufactured products and must use categories owned by the same client.
+- Product specification edits are stored as version snapshots and remain pending until Super Admin approval; approval sets the effective date and updates future catalog use. Historical request and ledger snapshots remain unchanged.
 - `quantity_precision` is 0–2; quantity must conform to product precision.
 - Reservations cannot exceed eligible available stock; enforce under row lock/serializable or equivalent concurrency-safe strategy.
 - Idempotency keys unique within an appropriate actor/operation scope.

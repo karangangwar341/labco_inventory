@@ -15,7 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { TrackingMode } from '@prisma/client';
+import { ProductKind, TrackingMode } from '@prisma/client';
 
 export class ProductAttributeDto {
   @ApiProperty({ example: 'Volume' })
@@ -56,6 +56,10 @@ export class ProductUnitDto {
 }
 
 export class CreateProductDto {
+  @ApiProperty({ enum: ProductKind, description: 'Raw materials are consumed in manufacturing; manufactured products are production outputs.' })
+  @IsEnum(ProductKind)
+  kind!: ProductKind;
+
   @ApiProperty({ example: 'Erlenmeyer Flask 500ml', description: 'Product name' })
   @IsString()
   @IsNotEmpty({ message: 'Product name is required' })
@@ -96,6 +100,12 @@ export class CreateProductDto {
   @Min(0)
   minQuantity?: number;
 
+  @ApiPropertyOptional({ example: 1, description: 'Minimum Order Quantity (MOQ) per order line' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  minOrderQuantity?: number;
+
   @ApiPropertyOptional({ type: [ProductAttributeDto] })
   @IsOptional()
   @IsArray()
@@ -108,4 +118,11 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductUnitDto)
   units!: ProductUnitDto[];
+}
+
+export class ProposeProductVersionDto extends CreateProductDto {
+  @ApiPropertyOptional({ example: 'Corrected unit conversion for supplier cartons' })
+  @IsOptional()
+  @IsString()
+  changeReason?: string;
 }

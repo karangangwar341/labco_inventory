@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "Write(backend/*)",
+      "Write(frontend/*)",
+      "Write(docs/*)",
+      "Edit(backend/*)",
+      "Edit(frontend/*)",
+      "Edit(docs/*)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(sudo *)",
+      "Bash(format *)",
+      "Bash(del /f /s /q *)",
+      "Bash(chmod 777 *)",
+      "Bash(ssh *)",
+      "Bash(* > /dev/*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash && command matches 'rm -rf|del /f|format|chmod 777|ssh'",
+        "hook": "echo 'Blocked destructive/unauthorized command by AgentShield policy' >&2 && exit 1"
+      }
+    ],
+    "Stop": [
+      {
+        "hook": "echo 'Session verification completed.'"
+      }
+    ]
+  }
+}

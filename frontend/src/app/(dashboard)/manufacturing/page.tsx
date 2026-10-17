@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function ManufacturingPage() {
   return (
-    <RoleGuard allowedRoles={['SUPER_ADMIN', 'CLIENT_ADMIN']}>
+    <RoleGuard allowedRoles={['CLIENT_ADMIN']}>
       <ManufacturingView />
     </RoleGuard>
   );

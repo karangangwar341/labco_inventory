@@ -20,7 +20,7 @@
 7. Unit conversion 1 box = 12 pieces; 10 boxes converts to 120 pieces and the conversion snapshot is retained.
 8. Whole-unit product rejects 1.5; decimal-enabled product accepts only configured precision up to two decimals.
 9. Product threshold changes flag low stock but do not alter quantity.
-10. Batch/expiry fields are required only when tracking is enabled.
+10. Lot number is required only when batch tracking is enabled; expiry date remains optional for every tracking mode.
 11. Expired stock is excluded from usable stock and blocked from routine issue/dispatch.
 12. Damaged/expired stock is excluded from usable quantity; write-off requires approval.
 13. Physical count adjustment and historical correction follow separate workflows.

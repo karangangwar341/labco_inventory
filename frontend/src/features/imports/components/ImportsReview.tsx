@@ -9,9 +9,14 @@ import { EmptyState } from '../../../components/feedback/EmptyState';
 import { useAuth } from '../../../features/auth/auth.store';
 import { importsService } from '../imports.service';
 import { ImportBatch, ImportRow } from '../imports.types';
+import { inventoryService } from '../../inventory/inventory.service';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../../../lib/query/query-keys';
 
 export function ImportsReview() {
   const { user } = useAuth();
+  const userId = user?.id;
+  const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   const [batches, setBatches] = useState<ImportBatch[]>([]);
@@ -22,7 +27,9 @@ export function ImportsReview() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [importIntent, setImportIntent] = useState<'STOCK_IN' | 'STOCK_OUT' | 'INVENTORY_COUNT'>('STOCK_IN');
+  const [importIntent, setImportIntent] = useState<'STOCK_IN' | 'STOCK_OUT'>('STOCK_IN');
+  const [locations, setLocations] = useState<Awaited<ReturnType<typeof inventoryService.getLocations>>>([]);
+  const [defaultLocationId, setDefaultLocationId] = useState('');
   const [approvalMode, setApprovalMode] = useState<'ALL_OR_NOTHING' | 'PARTIAL'>('ALL_OR_NOTHING');
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -30,18 +37,28 @@ export function ImportsReview() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load batches on mount
-  const fetchBatches = useCallback(async (selectId?: string) => {
+  const fetchBatches = useCallback(async (selectId?: string, refresh = false) => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const data = await importsService.getBatches().catch(() => []);
+      if (refresh) await queryClient.invalidateQueries({ queryKey: queryKeys.imports.batches(userId) });
+      const data = await queryClient.fetchQuery({
+        queryKey: queryKeys.imports.batches(userId),
+        queryFn: () => importsService.getBatches(),
+        staleTime: 60 * 1000,
+      }).catch(() => []);
       const batchList = Array.isArray(data) ? data : [];
       setBatches(batchList);
 
       const targetId = selectId || selectedBatchId || (batchList.length > 0 ? batchList[0].id : null);
       if (targetId) {
         setSelectedBatchId(targetId);
-        const details = await importsService.getBatchById(targetId).catch(() => null);
+        if (refresh) await queryClient.invalidateQueries({ queryKey: queryKeys.imports.batch(targetId) });
+        const details = await queryClient.fetchQuery({
+          queryKey: queryKeys.imports.batch(targetId),
+          queryFn: () => importsService.getBatchById(targetId),
+          staleTime: 60 * 1000,
+        }).catch(() => null);
         setActiveBatch(details);
       } else {
         setActiveBatch(null);
@@ -51,11 +68,27 @@ export function ImportsReview() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedBatchId]);
+  }, [queryClient, selectedBatchId, userId]);
 
   useEffect(() => {
     fetchBatches();
   }, [fetchBatches]);
+
+  useEffect(() => {
+    queryClient.fetchQuery({
+      queryKey: queryKeys.inventory.locations(userId),
+      queryFn: () => inventoryService.getLocations(),
+      staleTime: 5 * 60 * 1000,
+    }).then((items) => {
+      const allowed = user?.role === 'STORE_ADMIN'
+        ? items.filter((location) => location.locationType === 'WAREHOUSE')
+        : user?.role === 'CLIENT_ADMIN'
+          ? items.filter((location) => location.locationType === 'CLIENT')
+          : items;
+      setLocations(allowed);
+      if (allowed.length === 1) setDefaultLocationId(allowed[0].id);
+    }).catch((err: Error) => setErrorMessage(err.message || 'Could not load stock locations'));
+  }, [queryClient, userId, user?.role]);
 
   const handleSelectBatch = async (batchId: string) => {
     setSelectedBatchId(batchId);
@@ -63,7 +96,11 @@ export function ImportsReview() {
     setErrorMessage(null);
     setStatusMessage(null);
     try {
-      const details = await importsService.getBatchById(batchId);
+      const details = await queryClient.fetchQuery({
+        queryKey: queryKeys.imports.batch(batchId),
+        queryFn: () => importsService.getBatchById(batchId),
+        staleTime: 60 * 1000,
+      });
       setActiveBatch(details);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to load batch details');
@@ -82,11 +119,14 @@ export function ImportsReview() {
       const text = await file.text();
       const newBatch = await importsService.createBatch({
         importType: importIntent,
-        fileName: file.name,
+        sourceFilename: file.name,
         fileContent: text,
+        mimeType: file.type || 'text/csv',
+        defaultLocationId: defaultLocationId || undefined,
+        approvalMode,
       });
       setStatusMessage(`Import draft created: ${file.name} (${newBatch.totalRows ?? 0} rows).`);
-      await fetchBatches(newBatch.id);
+      await fetchBatches(newBatch.id, true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to upload and parse CSV document');
     } finally {
@@ -111,9 +151,13 @@ export function ImportsReview() {
       const targetRow = updatedRows.find((r) => r.id === rowId);
       if (targetRow && targetRow.mappedData) {
         await importsService.updateRow(activeBatch.id, rowId, targetRow.mappedData);
+        const refreshed = await importsService.getBatchById(activeBatch.id);
+        setActiveBatch(refreshed);
+        queryClient.setQueryData(queryKeys.imports.batch(activeBatch.id), refreshed);
       }
-    } catch {
-      // Background sync failure handled quietly
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Could not save row changes');
+      await fetchBatches(activeBatch.id, true);
     }
   };
 
@@ -131,9 +175,9 @@ export function ImportsReview() {
     try {
       await importsService.commitBatch(activeBatch.id, approvalMode);
       setStatusMessage(
-        `Batch ${activeBatch.id} APPROVED: Ledger transactions posted atomically by Super Admin.`,
+        'Batch approved. Stock changes are recorded.',
       );
-      await fetchBatches(activeBatch.id);
+      await fetchBatches(activeBatch.id, true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to commit batch to inventory ledger.');
     } finally {
@@ -152,10 +196,10 @@ export function ImportsReview() {
     setErrorMessage(null);
     try {
       await importsService.rejectBatch(activeBatch.id, rejectReason);
-      setStatusMessage(`Batch ${activeBatch.id} rejected by Super Admin. Zero stock affected.`);
+      setStatusMessage('Batch rejected. Stock was not changed.');
       setShowRejectModal(false);
       setRejectReason('');
-      await fetchBatches(activeBatch.id);
+      await fetchBatches(activeBatch.id, true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to reject batch.');
     } finally {
@@ -163,8 +207,19 @@ export function ImportsReview() {
     }
   };
 
-  const handleSubmitDraftForApproval = () => {
-    setStatusMessage('Batch draft submitted to Super Admin approvals queue. Awaiting dual-control authorization.');
+  const handleSubmitDraftForApproval = async () => {
+    if (!activeBatch) return;
+    setIsProcessing(true);
+    setErrorMessage(null);
+    try {
+      await importsService.submitBatch(activeBatch.id, approvalMode);
+      setStatusMessage('Batch submitted for Super Admin approval.');
+      await fetchBatches(activeBatch.id, true);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Could not submit this batch');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDownloadErrors = () => {
@@ -191,18 +246,13 @@ export function ImportsReview() {
     URL.revokeObjectURL(url);
   };
 
-  const targetLocationLabel =
-    user?.role === 'CLIENT_ADMIN'
-      ? 'Client Diagnostic Facility Stock Room'
-      : user?.role === 'STORE_ADMIN'
-      ? 'Central Warehouse Stock Location (loc-wh-1)'
-      : 'Central Warehouse Hub (Super Admin Scoped)';
+  const editableBatch = activeBatch?.status === 'DRAFT' || activeBatch?.status === 'VALIDATED';
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="AI Document Ingestion & Verification"
-        description="Editable review grid for extracted documents. AI outputs are untrusted candidates; stock posts only upon Super Admin batch approval."
+        title="Scan &amp; Review Stock Bills"
+        description="Upload a supplier bill, invoice, or packing list. Review the scanned items and counts before sending to your Admin for approval."
         actions={
           <div className="flex items-center gap-2">
             <input
@@ -217,18 +267,18 @@ export function ImportsReview() {
               onClick={() => fileInputRef.current?.click()}
               isLoading={isProcessing}
             >
-              + Upload CSV / Document
+              + Upload Stock Bill (CSV)
             </Button>
           </div>
         }
       />
 
       {statusMessage && (
-        <div className="p-3 rounded-lg bg-[#eff6ff] border border-[#bfdbfe] text-[#2563eb] text-xs flex items-center justify-between">
-          <span>{statusMessage}</span>
+        <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
+          <span>✓ {statusMessage}</span>
           <button
             onClick={() => setStatusMessage(null)}
-            className="text-xs text-[#2563eb] hover:underline font-medium"
+            className="text-xs text-emerald-800 hover:underline font-medium"
           >
             Dismiss
           </button>
@@ -236,11 +286,11 @@ export function ImportsReview() {
       )}
 
       {errorMessage && (
-        <div className="p-3 rounded-lg bg-[#fef3f2] border border-[#fee4e2] text-[#b42318] text-xs flex items-center justify-between">
+        <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
           <span>⚠️ {errorMessage}</span>
           <button
             onClick={() => setErrorMessage(null)}
-            className="text-xs text-[#b42318] hover:underline font-medium"
+            className="text-xs text-rose-700 hover:underline font-medium"
           >
             Dismiss
           </button>
@@ -249,17 +299,17 @@ export function ImportsReview() {
 
       {/* Batch Selector Strip */}
       {batches.length > 0 && (
-        <div className="p-3 bg-white border border-[#dbe3ee] rounded-xl flex items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between gap-3 text-xs shadow-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#172033]">Active Batch:</span>
+            <span className="font-semibold text-slate-900">Current Upload:</span>
             <select
               value={selectedBatchId || ''}
               onChange={(e) => handleSelectBatch(e.target.value)}
-              className="bg-white border border-[#dbe3ee] rounded-md px-2 py-1 text-xs font-mono text-[#172033] focus:outline-none focus:border-[#2563eb]"
+              className="bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
             >
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.fileName} ({b.status}) - {b.totalRows} rows
+                  {b.fileName} ({b.status}) - {b.totalRows} items scanned
                 </option>
               ))}
             </select>
@@ -267,7 +317,7 @@ export function ImportsReview() {
 
           {activeBatch && (
             <div className="flex items-center gap-2">
-              <span className="text-[#5b6678]">Status:</span>
+              <span className="text-slate-500">Status:</span>
               <Badge
                 variant={
                   activeBatch.status === 'APPROVED' || activeBatch.status === 'PARTIALLY_APPROVED'
@@ -277,7 +327,13 @@ export function ImportsReview() {
                     : 'warning'
                 }
               >
-                {activeBatch.status}
+                {activeBatch.status === 'DRAFT'
+                  ? 'Draft (Needs Review)'
+                  : activeBatch.status === 'SUBMITTED'
+                  ? 'Waiting for Approval'
+                  : activeBatch.status === 'APPROVED'
+                  ? 'Approved & Added to Stock'
+                  : activeBatch.status}
               </Badge>
             </div>
           )}
@@ -286,24 +342,35 @@ export function ImportsReview() {
 
       {/* Control Strip */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="p-4 rounded-xl bg-white border border-[#dbe3ee] space-y-2 shadow-xs">
-          <label className="text-[11px] font-semibold text-[#5b6678] uppercase tracking-wider block">
-            Import Intent
+        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
+          <label className="text-xs font-semibold text-slate-800 block">
+            Type of Movement
           </label>
           <select
             value={importIntent}
             onChange={(e) => setImportIntent(e.target.value as any)}
-            className="w-full bg-white border border-[#dbe3ee] rounded-md p-2 text-xs text-[#172033] focus:outline-none focus:border-[#2563eb]"
+            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
           >
-            <option value="STOCK_IN">STOCK_IN (Direct Supply / Inward)</option>
-            <option value="STOCK_OUT">STOCK_OUT (Single-Warehouse Outward)</option>
-            <option value="INVENTORY_COUNT">INVENTORY_COUNT (Physical Stock Count)</option>
+            <option value="STOCK_IN">📥 Stock In (Supplier Delivery / Adding Items)</option>
+            <option value="STOCK_OUT">📤 Stock Out (Dispatch / Sending Items)</option>
           </select>
-          <p className="text-[11px] text-[#5b6678]">
-            Maps candidate fields to target warehouse movement schemas.
+          <p className="text-[11px] text-slate-500">
+            Choose whether this document is for receiving or dispatching.
           </p>
         </div>
 
+        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
+          <label className="text-xs font-semibold text-slate-800 block">Store Location</label>
+          <select
+            value={defaultLocationId}
+            onChange={(e) => setDefaultLocationId(e.target.value)}
+            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+          >
+            <option value="">Choose your store or warehouse...</option>
+            {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+          </select>
+          <p className="text-[11px] text-slate-500">Where should these items be placed once approved?</p>
+        </div>
         <div className="p-4 rounded-xl bg-white border border-[#dbe3ee] space-y-2 shadow-xs">
           <label className="text-[11px] font-semibold text-[#5b6678] uppercase tracking-wider block">
             Approval Mode
@@ -436,6 +503,7 @@ export function ImportsReview() {
                           <input
                             type="text"
                             value={productName}
+                            disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'productName', e.target.value)}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-full text-[#172033]"
                           />
@@ -445,6 +513,7 @@ export function ImportsReview() {
                           <input
                             type="number"
                             value={quantity}
+                            disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'quantity', Number(e.target.value))}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-20 text-[#172033] font-mono"
                           />
@@ -454,6 +523,7 @@ export function ImportsReview() {
                           <input
                             type="text"
                             value={unitName}
+                            disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'unitName', e.target.value)}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-16 text-[#172033]"
                           />
@@ -464,6 +534,7 @@ export function ImportsReview() {
                             type="text"
                             value={batchNumber}
                             placeholder="None"
+                            disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'batchNumber', e.target.value)}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-28 text-[#172033]"
                           />
@@ -474,6 +545,7 @@ export function ImportsReview() {
                             type="text"
                             value={expiryDate}
                             placeholder="None"
+                            disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'expiryDate', e.target.value)}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-24 text-[#172033]"
                           />
@@ -484,8 +556,8 @@ export function ImportsReview() {
                             variant={
                               row.status === 'VALID'
                                 ? 'success'
-                                : row.status === 'RESOLVED'
-                                ? 'primary'
+                                : row.status === 'PENDING' || row.status === 'POSTED'
+                                ? 'warning'
                                 : 'danger'
                             }
                           >
@@ -500,16 +572,7 @@ export function ImportsReview() {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[#a15c00]">
                               <div className="flex items-center gap-1.5">
                                 <span className="font-bold">⚠️ DUPLICATE SIGNATURE:</span>
-                                <span>Duplicate candidate detected. Explicitly choose Keep Separate or Resolve.</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="warning"
-                                  onClick={() => handleCellChange(row.id, 'duplicateResolution', 'SPLIT')}
-                                >
-                                  Keep Separate Row
-                                </Button>
+                                <span>Duplicate candidate detected. Review it against the source document before submitting.</span>
                               </div>
                             </div>
                           </td>
@@ -536,18 +599,18 @@ export function ImportsReview() {
       {/* Bottom Actions Strip */}
       <div className="p-4 rounded-xl bg-white border border-[#dbe3ee] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
         <div className="text-xs text-[#5b6678]">
-          Target Location: <strong className="text-[#172033]">{targetLocationLabel}</strong>
+          Default location: <strong className="text-[#172033]">{locations.find((location) => location.id === defaultLocationId)?.name || 'Not selected'}</strong>
         </div>
 
         {/* ROLE-GATED BUTTON CONTROLS */}
         <div className="flex items-center gap-3">
-          {isSuperAdmin ? (
+          {isSuperAdmin && activeBatch?.status === 'SUBMITTED' ? (
             /* Super Admin: Full Dual-Control Approval & Reject Powers */
             <>
               <Button
                 variant="secondary"
                 onClick={() => setShowRejectModal(true)}
-                disabled={!activeBatch || activeBatch.status === 'APPROVED' || activeBatch.status === 'REJECTED' || isProcessing}
+                disabled={!activeBatch || isProcessing}
               >
                 Reject Batch
               </Button>
@@ -556,17 +619,17 @@ export function ImportsReview() {
                 variant="primary"
                 onClick={handleApproveBatch}
                 isLoading={isProcessing}
-                disabled={!activeBatch || activeBatch.status === 'APPROVED' || activeBatch.status === 'REJECTED'}
+                disabled={!activeBatch || isProcessing}
               >
                 Approve &amp; Post Batch (Super Admin)
               </Button>
             </>
-          ) : (
+          ) : editableBatch ? (
             /* Store Admin & Client Admin: Draft Preparation Only - NO POSTING BUTTON */
             <>
               <Button
                 variant="secondary"
-                onClick={() => setStatusMessage('Import draft changes saved.')}
+                onClick={() => activeBatch && fetchBatches(activeBatch.id, true)}
                 disabled={!activeBatch || isProcessing}
               >
                 Save Draft
@@ -580,7 +643,7 @@ export function ImportsReview() {
                 Submit Batch for Super Admin Approval
               </Button>
             </>
-          )}
+          ) : <span className="text-xs text-[#5b6678]">{activeBatch?.status === 'SUBMITTED' ? 'Awaiting Super Admin review.' : 'This batch is read-only.'}</span>}
         </div>
       </div>
 

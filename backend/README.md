@@ -21,26 +21,45 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+## Infrastructure & Architecture (Neon Cloud)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+This backend is built on **Neon Serverless PostgreSQL** and **Neon Object Storage**. **Docker is not required.**
+
+- **Database:** Neon Serverless PostgreSQL with ACID transactions and pessimistic row locking (`FOR UPDATE`).
+  - `DATABASE_URL`: Connection string with PgBouncer pooling for app queries (`sslmode=require`).
+  - `DIRECT_URL`: Direct unpooled connection string for Prisma CLI migrations (`sslmode=require`).
+- **File Storage:** Neon Object Storage (branch-aware S3-compatible blob storage) with automated local directory fallback for offline development.
+- **Docker Requirement:** **None**. You do not need Docker or local containers to develop, test, or deploy this application.
 
 ## Project setup
 
+1. Copy `.env.example` to `.env`:
+```bash
+$ cp .env.example .env
+```
+
+2. Add your Neon database connection strings (`DATABASE_URL` and `DIRECT_URL`) and Neon Object Storage credentials in `.env`.
+
+3. Install dependencies:
 ```bash
 $ npm install
+```
+
+4. Push schema or apply migrations to your Neon database branch:
+```bash
+$ npx prisma db push
+# or for formal migration tracking:
+$ npx prisma migrate deploy
 ```
 
 ## Compile and run the project
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
+# development watch mode
 $ npm run start:dev
 
-# production mode
+# production build & run
+$ npm run build
 $ npm run start:prod
 ```
 
