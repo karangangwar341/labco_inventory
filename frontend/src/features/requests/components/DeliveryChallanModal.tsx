@@ -114,7 +114,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                 padding: 0;
                 background: #ffffff;
                 color: #0f172a;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
               }
               .print-wrapper {
                 width: 100%;
@@ -176,7 +176,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
             <style>
               @page { size: A4 portrait; margin: 8mm 10mm; }
               *, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-              body { margin: 0; padding: 10px; background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+              body { margin: 0; padding: 10px; background: #fff; font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif; }
               #printable-challan { border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }
             </style>
           </head>
@@ -448,7 +448,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
               color: '#0f172a',
               padding: '30px 34px',
               boxSizing: 'border-box',
-              fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+              fontFamily: 'IBM Plex Sans, system-ui, -apple-system, sans-serif',
               fontSize: '11px',
               lineHeight: '1.4',
               margin: '0 auto',
