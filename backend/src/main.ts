@@ -140,4 +140,4 @@ async function bootstrap() {
     console.log(`Swagger documentation: /api/v1/docs`);
   }
 }
-await bootstrap();
+void bootstrap();
