@@ -3,11 +3,7 @@ import { generateIdempotencyKey } from './idempotency';
 import { getSessionToken } from '../auth/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === 'development' ? 'http://localhost:4000/api/v1' : '');
-
-if (!API_BASE_URL) {
-  throw new Error('NEXT_PUBLIC_API_URL must be configured when building the production frontend.');
-}
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:4000/api/v1' : '/api/v1');
 
 export interface RequestOptions extends RequestInit {
   idempotencyKey?: string;

@@ -1,6 +1,6 @@
 # Deployment, Operations & Recovery Runbook
 
-**Status:** The application is prepared for a provider-neutral release pipeline. Hosting provider, region, public domain, RPO/RTO, monitoring destination, and production credentials still require owner decisions and setup. No production deployment has been performed.
+**Status:** Vercel multi-service configuration is prepared in the repository. Vercel account/project setup, region, public domain, RPO/RTO, monitoring destination, and production credentials still require owner decisions and setup. No production deployment has been performed.
 
 ## 1. Supported runtime and architecture
 
@@ -9,6 +9,7 @@
 - PostgreSQL is the application database. Use Neon or another supported PostgreSQL host. `DATABASE_URL` is the pooled runtime connection; `DIRECT_URL` is the direct connection reserved for migrations.
 - File uploads require durable S3-compatible object storage in production. `STORAGE_DRIVER=local` is rejected for production configuration.
 - Keep API and frontend origins on HTTPS. Configure the frontend build with the public API URL.
+- For the Vercel multi-service deployment, the root `vercel.json` routes `/api/*` to the NestJS service and all other paths to Next.js on one origin. The frontend defaults to `/api/v1` in production; no service binding is needed because browser requests use the public API route.
 
 ## 2. CI quality gate
 
@@ -56,7 +57,7 @@ Production configuration validation fails startup for missing/placeholder databa
 
 ### Frontend build/runtime
 
-- `NEXT_PUBLIC_API_URL`: full public API base URL including `/api/v1`, set at build time because Next.js embeds public variables in the client bundle.
+- `NEXT_PUBLIC_API_URL`: optional full public API base URL including `/api/v1`, set at build time when the API uses a different origin. For the Vercel multi-service deployment, omit it to use the same-origin `/api/v1` route.
 - Build and run the frontend as a Node.js server using `npm run build:frontend` and `npm run start --workspace frontend`.
 
 ## 4. Release procedure
@@ -71,7 +72,7 @@ Production configuration validation fails startup for missing/placeholder databa
    npm run prisma:migrate:deploy --workspace backend
    ```
 
-6. Build the frontend with the production `NEXT_PUBLIC_API_URL`; deploy the API and frontend artifacts using the chosen host's release process.
+6. For Vercel Services, connect the repository with the Vercel framework set to Services and use the root `vercel.json` routing. Set the required environment variables for both services, including an exact HTTPS `CORS_ALLOWED_ORIGINS` value for the public application origin. For other hosts, build the frontend with the production `NEXT_PUBLIC_API_URL` and deploy the API and frontend artifacts using the host's release process.
 7. If the production database is empty, provision the first Super Admin exactly once using temporary `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` secret values, then run:
 
    ```bash
