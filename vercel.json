@@ -3,7 +3,9 @@
   "services": {
     "backend": {
       "root": "backend/",
-      "framework": "nestjs"
+      "framework": "nestjs",
+      "entrypoint": "src/main.ts",
+      "outputDirectory": "."
     },
     "frontend": {
       "root": "frontend/",
