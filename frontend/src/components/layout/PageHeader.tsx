@@ -14,10 +14,10 @@ export function PageHeader({
   actions,
 }: PageHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-slate-200/80">
-      <div>
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+    <div className="flex min-w-0 flex-col gap-3 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-5">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <h2 className="min-w-0 text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             {title}
           </h2>
           {badge && (
@@ -27,12 +27,12 @@ export function PageHeader({
           )}
         </div>
         {description && (
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 sm:text-sm">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2.5 shrink-0">{actions}</div>}
+      {actions && <div className="page-header-actions flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{actions}</div>}
     </div>
   );
 }

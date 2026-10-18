@@ -102,13 +102,13 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
   );
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between transition-colors">
+    <header className="sticky top-0 z-20 flex h-16 min-w-0 items-center justify-between gap-1 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur-md transition-colors sm:gap-3 sm:px-6 lg:px-8">
       {/* 1. Left Region: Mobile Trigger + Active Domain Context */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex min-w-0 shrink items-center gap-1 sm:gap-3">
         {onOpenMobileMenu && (
           <button
             onClick={onOpenMobileMenu}
-            className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+            className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 lg:hidden"
             aria-label="Open navigation menu"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -117,11 +117,11 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
           </button>
         )}
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+          <span className="max-w-[8.5rem] truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:max-w-none sm:text-xs sm:tracking-wider">
             {activeDomain?.label || 'Workspace'}
           </span>
-          <span className="text-slate-300">/</span>
+          <span className="hidden text-slate-300 sm:inline">/</span>
         </div>
       </div>
 
@@ -152,7 +152,7 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
       </nav>
 
       {/* 3. Right Region: Actions + Operational Status + Notification Bell + Role */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-3">
         {actions && <div className="flex items-center gap-2">{actions}</div>}
 
         {/* Operational Telemetry Badge */}
@@ -165,14 +165,15 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
         {lowStockCount > 0 && (
           <Link
             href="/inventory?filter=LOW_STOCK"
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200/90 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs group"
+            className="group flex max-w-[7rem] items-center gap-1 rounded-full border border-rose-200/90 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 shadow-2xs transition-colors hover:bg-rose-100 sm:max-w-none sm:gap-1.5 sm:px-2.5 sm:text-[11px]"
             title={`${lowStockCount} item${lowStockCount > 1 ? 's' : ''} below minimum stock threshold! Click to view in inventory.`}
           >
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
             </span>
-            <span className="font-medium tracking-tight">⚠️ {lowStockCount} Low Stock</span>
+            <span className="font-medium tracking-tight sm:hidden">{lowStockCount} low</span>
+            <span className="hidden font-medium tracking-tight sm:inline">⚠️ {lowStockCount} Low Stock</span>
           </Link>
         )}
 
@@ -199,7 +200,7 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
           </button>
 
           {showNotifications && (
-            <div className="animate-popover absolute right-0 mt-2 w-96 sm:w-[420px] bg-white border border-slate-200 rounded-xl shadow-xl p-3.5 text-xs z-50 space-y-3 origin-top-right">
+            <div className="animate-popover absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-1rem))] origin-top-right space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 text-xs shadow-xl sm:w-[420px]">
               <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-800">Notifications</span>

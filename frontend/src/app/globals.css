@@ -39,6 +39,7 @@ body {
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 /* Monospace data display */
@@ -159,6 +160,36 @@ code, kbd, samp, pre, .font-mono {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .dashboard-content > * {
+    min-width: 0;
+  }
+
+  .dashboard-content :is(input, select, textarea) {
+    max-width: 100%;
+  }
+
+  .dashboard-content :is(button, select, input[type='text'], input[type='search'], input[type='date'], textarea) {
+    min-height: 40px;
+  }
+
+  .dashboard-content .page-header-actions > a,
+  .dashboard-content .page-header-actions > button {
+    width: 100%;
+  }
+
+  .dashboard-content pre,
+  .dashboard-content code {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-content img,
+  .dashboard-content video {
+    max-width: 100%;
+    height: auto;
   }
 }
 

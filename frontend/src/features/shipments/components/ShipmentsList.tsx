@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Shipment, ShipmentLine, ReceiveShipmentDto } from '../shipments.types';
 import { shipmentsService } from '../shipments.service';
@@ -38,6 +39,7 @@ function formatQty(qty: unknown): number {
 }
 
 export function ShipmentsList() {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
@@ -46,8 +48,13 @@ export function ShipmentsList() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
 
   // Filter and pagination states
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>(() => {
+    const status = searchParams.get('status');
+    return status && ['ACTIVE', 'IN_TRANSIT', 'AWAITING_RECEIPT_APPROVAL', 'COMPLETED', 'DISCREPANCY_HOLD'].includes(status)
+      ? status
+      : 'ALL';
+  });
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
   const [selectedOrigin, setSelectedOrigin] = useState('ALL');
   const [selectedDestination, setSelectedDestination] = useState('ALL');
   const [pageSize, setPageSize] = useState(10);
@@ -216,7 +223,10 @@ export function ShipmentsList() {
   const filteredShipments = useMemo(() => {
     return shipments.filter((s) => {
       // 1. Status Filter
-      if (statusFilter !== 'ALL' && s.status !== statusFilter) {
+      if (statusFilter === 'ACTIVE' && s.status !== 'IN_TRANSIT' && s.status !== 'PENDING') {
+        return false;
+      }
+      if (statusFilter !== 'ALL' && statusFilter !== 'ACTIVE' && s.status !== statusFilter) {
         return false;
       }
 
@@ -495,6 +505,7 @@ export function ShipmentsList() {
               {(
                 [
                   ['ALL', 'All Shipments', counts.all],
+                  ['ACTIVE', 'Active Deliveries', shipments.filter((shipment) => shipment.status === 'IN_TRANSIT' || shipment.status === 'PENDING').length],
                   ['IN_TRANSIT', 'In Transit', counts.inTransit],
                   ['AWAITING_RECEIPT_APPROVAL', 'Awaiting Approval', counts.awaitingApproval],
                   ['COMPLETED', 'Completed', counts.completed],
@@ -566,6 +577,7 @@ export function ShipmentsList() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="ALL">All Delivery Statuses</option>
+                <option value="ACTIVE">Active Deliveries</option>
                 <option value="IN_TRANSIT">In Transit Only</option>
                 <option value="AWAITING_RECEIPT_APPROVAL">Awaiting Receipt Approval</option>
                 <option value="COMPLETED">Completed Only</option>

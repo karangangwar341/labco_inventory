@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { StockRequest } from '../requests.types';
 import { requestsService } from '../requests.service';
@@ -41,16 +42,27 @@ function requestMeta(request: StockRequest): {
 }
 
 export function RequestsList() {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const isStoreAdmin = user?.role === 'STORE_ADMIN';
 
   // Filter States
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
-  const [typeFilter, setTypeFilter] = useState<RequestTypeFilter>('ALL');
-  const [selectedClientId, setSelectedClientId] = useState<string>('');
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const value = searchParams.get('status');
+    return value && ['PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'DRAFT'].includes(value)
+      ? (value as StatusFilter)
+      : 'ALL';
+  });
+  const [typeFilter, setTypeFilter] = useState<RequestTypeFilter>(() => {
+    const value = searchParams.get('type');
+    return value && ['STOCK_IN', 'STOCK_OUT', 'TRANSFER', 'ADJUSTMENT'].includes(value)
+      ? (value as RequestTypeFilter)
+      : 'ALL';
+  });
+  const [selectedClientId, setSelectedClientId] = useState(() => searchParams.get('clientId') || '');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
 
   // Query: Clients for dropdown filter
   const { data: clients = [] } = useQuery({

@@ -48,7 +48,21 @@ export function SuperAdminDashboard() {
   });
 
   const queue = toApprovalList(queueData);
-  const urgentCount = queue.filter((item) => item.priority === 'URGENT').length;
+  const urgentItems = queue.filter((item) => item.priority === 'URGENT');
+  const urgentCount = urgentItems.length;
+  const firstUrgentItem = urgentItems[0];
+  const urgentTab: ApprovalTab = firstUrgentItem?.type.startsWith('SHIPMENT')
+    ? 'SHIPMENTS'
+    : firstUrgentItem?.type.startsWith('PRODUCTION_RUN')
+      ? 'MANUFACTURING'
+      : firstUrgentItem?.type.startsWith('DEPARTMENT_ISSUE')
+        ? 'DEPARTMENTS'
+        : firstUrgentItem?.type.startsWith('LEDGER_CORRECTION')
+          ? 'CORRECTIONS'
+          : 'REQUESTS';
+  const urgentHref = firstUrgentItem
+    ? `/approvals?priority=URGENT&tab=${urgentTab}&id=${encodeURIComponent(firstUrgentItem.id)}`
+    : '/approvals?priority=URGENT';
 
   const {
     data: backupSummary = null,
@@ -130,7 +144,7 @@ export function SuperAdminDashboard() {
       {/* Metric Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Pending Approvals Card */}
-        <div className="saas-card p-5">
+        <Link href="/approvals" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Pending Approvals</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -146,10 +160,10 @@ export function SuperAdminDashboard() {
           <p className="mt-1 text-[11px] text-slate-400">
             {queue.length === 0 ? 'All transactions up to date' : 'Awaiting Super Admin decision'}
           </p>
-        </div>
+        </Link>
 
         {/* Urgent Items Card */}
-        <div className="saas-card p-5">
+        <Link href={urgentHref} className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Urgent Attention</span>
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -167,10 +181,10 @@ export function SuperAdminDashboard() {
           <p className="mt-1 text-[11px] text-slate-400">
             {urgentCount > 0 ? 'Priority transactions awaiting review' : 'No urgent bottlenecks'}
           </p>
-        </div>
+        </Link>
 
         {/* Active Client Tenants Card */}
-        <div className="saas-card p-5">
+        <Link href="/admin/organizations" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Client Tenants</span>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -184,10 +198,10 @@ export function SuperAdminDashboard() {
             <span className="text-xs text-slate-500">organizations</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Active tenant workspaces</p>
-        </div>
+        </Link>
 
         {/* System Health Card */}
-        <div className="saas-card p-5">
+        <Link href="/backups" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>System Resiliency</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -205,7 +219,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Continuous WAL &amp; PITR Active</p>
-        </div>
+        </Link>
       </div>
 
       {/* Main Grid: Needs Review & Client Operations */}

@@ -100,7 +100,7 @@ export function StoreAdminDashboard() {
       {/* KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* 1. Warehouse Stock on Shelves */}
-        <div className="saas-card p-5">
+        <Link href="/inventory" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Warehouse Stock</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -110,15 +110,13 @@ export function StoreAdminDashboard() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <Link href="/inventory" className="text-sm font-semibold text-blue-600 hover:underline">
-              Check All Items on Shelves →
-            </Link>
+            <span className="text-sm font-semibold text-blue-600">Check All Items on Shelves →</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">View good, reserved, and damaged units</p>
-        </div>
+        </Link>
 
         {/* 2. Outbound Dispatches to Clients */}
-        <div className="saas-card p-5">
+        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Dispatches to Clients</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -132,14 +130,12 @@ export function StoreAdminDashboard() {
             <span className="text-xs text-slate-500">in transit to clients</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
-            <Link href="/shipments" className="text-blue-600 hover:underline font-medium">
-              Track Dispatched Orders →
-            </Link>
+            <span className="font-medium text-blue-600">Track Dispatched Orders →</span>
           </p>
-        </div>
+        </Link>
 
         {/* 3. My Stock Requests Awaiting Approval */}
-        <div className="saas-card p-5">
+        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Requests Awaiting Approval</span>
             <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -153,11 +149,9 @@ export function StoreAdminDashboard() {
             <span className="text-xs text-slate-500">waiting for Super Admin</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
-            <Link href="/requests" className="text-amber-700 hover:underline font-medium">
-              View All Requests →
-            </Link>
+            <span className="font-medium text-amber-700">View Pending Requests →</span>
           </p>
-        </div>
+        </Link>
       </div>
 
       {/* Section 1: Recent Dispatches to Clients */}

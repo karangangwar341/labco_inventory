@@ -85,6 +85,10 @@ export function DataTable<T>({
   const displayedData = isPaginated
     ? data.slice((activePage - 1) * pageSize, activePage * pageSize)
     : data;
+  // Action columns already provide explicit controls (such as Inspect/Edit).
+  // Avoid making their containing mobile card a button, which would nest
+  // interactive controls and create ambiguous keyboard/screen-reader behavior.
+  const mobileCardsClickable = Boolean(onRowClick) && !columns.some((column) => column.id === 'actions');
 
   const startItem = totalItems === 0 ? 0 : (activePage - 1) * pageSize + 1;
   const endItem = Math.min(activePage * pageSize, totalItems);
@@ -103,8 +107,82 @@ export function DataTable<T>({
 
   return (
     <div className={`w-full flex flex-col rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden ${className}`}>
+      <div className="grid gap-3 p-3 md:hidden">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <div key={`mobile-skeleton-${index}`} className="animate-pulse rounded-xl border border-slate-200 p-4 space-y-3" aria-hidden="true">
+              <div className="h-4 w-2/5 rounded bg-slate-100" />
+              <div className="h-3 w-3/4 rounded bg-slate-100" />
+              <div className="h-3 w-1/2 rounded bg-slate-100" />
+            </div>
+          ))
+        ) : displayedData.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <h3 className="text-sm font-semibold text-slate-800">
+              {emptyState?.title || emptyTitle || 'No records found'}
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+              {emptyState?.description || emptyDescription || 'There are no items matching the active filters.'}
+            </p>
+            {emptyState?.action && <div className="pt-3">{emptyState.action}</div>}
+          </div>
+        ) : (
+          displayedData.map((item, rowIdx) => {
+            const rowKey = keyExtractor
+              ? keyExtractor(item, rowIdx)
+              : (item as any)?.id || `row-${rowIdx}`;
+            const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+              if (!mobileCardsClickable || (event.key !== 'Enter' && event.key !== ' ')) return;
+              event.preventDefault();
+              onRowClick?.(item);
+            };
+
+            return (
+              <article
+                key={`mobile-${rowKey}`}
+                onClick={mobileCardsClickable ? () => onRowClick?.(item) : undefined}
+                onKeyDown={handleKeyDown}
+                role={mobileCardsClickable ? 'button' : undefined}
+                tabIndex={mobileCardsClickable ? 0 : undefined}
+                className={`min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 ${
+                  mobileCardsClickable ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2' : ''
+                }`}
+              >
+                <div className="space-y-3">
+                  {columns.map((col, columnIndex) => {
+                    const header = typeof col.header === 'function' ? col.header({ data }) : col.header;
+                    let cellContent: React.ReactNode = null;
+                    if (col.cell) {
+                      cellContent = col.cell(item, rowIdx);
+                    } else if (col.accessorKey) {
+                      cellContent = String((item as any)[col.accessorKey] ?? '');
+                    }
+
+                    return (
+                      <div
+                        key={`${rowKey}-mobile-${col.id}`}
+                        className={`min-w-0 ${columnIndex === 0 ? 'border-b border-slate-100 pb-3' : ''} ${col.id === 'actions' ? 'pt-1' : ''}`}
+                      >
+                        {columnIndex !== 0 && (
+                          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            {header}
+                          </div>
+                        )}
+                        <div className="min-w-0 break-words text-sm text-slate-800 [&_*]:max-w-full [&_*]:break-words">
+                          {cellContent}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+            );
+          })
+        )}
+      </div>
+
       {/* Horizontal Scroll Viewport Container */}
-      <div className="w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+      <div className="hidden w-full overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent md:block">
         <table
           className={`w-full border-collapse text-xs ${minWidth} ${
             tableLayout === 'fixed' ? 'table-fixed' : 'table-auto'
@@ -254,7 +332,7 @@ export function DataTable<T>({
 
       {/* Pagination Footer */}
       {isPaginated && totalItems > 0 && (
-        <div className="py-2.5 px-4 bg-slate-50/70 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+        <div className="py-2.5 px-3 sm:px-4 bg-slate-50/70 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-3">
             <div>
               Showing <span className="font-semibold text-slate-700">{startItem}</span> to{' '}

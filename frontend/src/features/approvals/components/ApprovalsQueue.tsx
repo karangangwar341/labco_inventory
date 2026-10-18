@@ -33,6 +33,7 @@ export function ApprovalsQueue() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as ApprovalTab | null;
+  const priorityParam = searchParams.get('priority');
   const idParam = searchParams.get('id');
   const isAuthorized = canApproveWorkflows(user?.role);
 
@@ -42,7 +43,9 @@ export function ApprovalsQueue() {
     }
     return 'REQUESTS';
   });
-  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'NORMAL'>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'NORMAL'>(() =>
+    priorityParam === 'URGENT' || priorityParam === 'NORMAL' ? priorityParam : 'ALL',
+  );
   const [requesterSearch, setRequesterSearch] = useState('');
 
   const [rejectingItem, setRejectingItem] = useState<QueueItem | null>(null);
@@ -68,6 +71,10 @@ export function ApprovalsQueue() {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
+
+  useEffect(() => {
+    setPriorityFilter(priorityParam === 'URGENT' || priorityParam === 'NORMAL' ? priorityParam : 'ALL');
+  }, [priorityParam]);
 
   // Synchronize item inspection modal from URL id if present
   useEffect(() => {
@@ -373,12 +380,14 @@ export function ApprovalsQueue() {
       )}
 
       {/* Segmented Tab Bar */}
-      <div className="border-b border-slate-200 flex flex-wrap gap-2 text-xs">
+      <div className="flex gap-2 overflow-x-auto border-b border-slate-200 text-xs" role="tablist" aria-label="Approval categories">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`pb-2.5 px-3 font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            role="tab"
+            aria-selected={activeTab === t.key}
+            className={`shrink-0 pb-2.5 px-3 font-semibold border-b-2 transition-all flex items-center gap-2 ${
               activeTab === t.key
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'

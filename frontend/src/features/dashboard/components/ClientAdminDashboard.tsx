@@ -131,7 +131,7 @@ export function ClientAdminDashboard() {
 
       {/* KPI Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="saas-card p-5">
+        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Incoming Deliveries</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -147,9 +147,9 @@ export function ClientAdminDashboard() {
           <p className="mt-1 text-[11px] text-slate-400">
             {inboundShipments.length > 0 ? 'Awaiting receiving confirmation' : 'No in-transit shipments'}
           </p>
-        </div>
+        </Link>
 
-        <div className="saas-card p-5">
+        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Pending Review</span>
             <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -163,9 +163,9 @@ export function ClientAdminDashboard() {
             <span className="text-xs text-slate-500">requests submitted</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Under Super Admin governance</p>
-        </div>
+        </Link>
 
-        <div className="saas-card p-5">
+        <Link href="/catalog" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Product Catalog</span>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
@@ -175,14 +175,12 @@ export function ClientAdminDashboard() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <Link href="/inventory" className="text-sm font-semibold text-blue-600 hover:underline">
-              Inspect Stock Balances →
-            </Link>
+            <span className="text-sm font-semibold text-blue-600">Inspect Product Catalog →</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Real-time lot &amp; usable ledger</p>
-        </div>
+        </Link>
 
-        <div className="saas-card p-5">
+        <Link href="/staff" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
             <span>Staff &amp; Workforce</span>
             <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
@@ -190,12 +188,10 @@ export function ClientAdminDashboard() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <Link href="/staff" className="text-sm font-semibold text-blue-600 hover:underline">
-              Staff Portal &amp; Logs →
-            </Link>
+            <span className="text-sm font-semibold text-blue-600">Staff Portal &amp; Logs →</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Manage team &amp; record daily work</p>
-        </div>
+        </Link>
       </div>
 
       {/* Main Content: Shipments & Requests */}

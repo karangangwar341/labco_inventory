@@ -11,7 +11,7 @@ export function Table({
 }) {
   return (
     <div className={`overflow-x-auto rounded-xl border border-slate-200/90 bg-white shadow-2xs ${className}`}>
-      <table className={`w-full text-left border-collapse text-xs ${tableClassName}`}>
+      <table className={`w-full min-w-[720px] md:min-w-full text-left border-collapse text-xs ${tableClassName}`}>
         {children}
       </table>
     </div>
