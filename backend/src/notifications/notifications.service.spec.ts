@@ -379,6 +379,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
       expect(settings.soundEnabled).toBe(false);
       expect(settings.expiryWarningIntervals).toEqual([90, 30, 7]);
+      expect(settings.approvalRequirements.stockRequests.STOCK_OUT).toBe(true);
     });
 
     it('Super Admin updates notification settings successfully', async () => {
@@ -392,6 +393,33 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
       expect(updated.expiryWarningIntervals).toEqual([60, 15]);
       expect(updated.soundEnabled).toBe(true);
+    });
+
+    it('updates one approval rule while preserving other workflow defaults and audits the change', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+      mockPrisma.systemSetting.upsert.mockResolvedValue({});
+
+      const updated = await notificationsService.updateSettings({
+        approvalRequirements: { stockRequests: { STOCK_OUT: false } },
+      }, superAdminUser);
+
+      expect(updated.approvalRequirements.stockRequests.STOCK_OUT).toBe(false);
+      expect(updated.approvalRequirements.stockRequests.STOCK_IN).toBe(true);
+      expect(updated.approvalRequirements.departmentIssue).toBe(true);
+      expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ action: 'SYSTEM_SETTINGS_UPDATED', beforeJson: expect.any(Object), afterJson: expect.any(Object) }),
+      }));
+    });
+
+    it('rejects unknown approval workflows and non-boolean values', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      await expect(notificationsService.updateSettings({
+        approvalRequirements: { unknown: false },
+      }, superAdminUser)).rejects.toThrow('unknown workflow');
+      await expect(notificationsService.updateSettings({
+        approvalRequirements: { departmentIssue: 'false' },
+      } as any, superAdminUser)).rejects.toThrow('must be a boolean');
     });
 
     it('forbids Client Admin from updating global notification settings', async () => {

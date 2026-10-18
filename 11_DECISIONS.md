@@ -3,11 +3,13 @@
 
 ## Confirmed baseline decisions & architecture
 - **D-016 (Catalog ownership and product kind):** The company catalog is for raw materials; each client owns a separate catalog for manufactured products and categories. Client Admins create manufactured products only; Super Admins create raw materials. Existing products default to raw material. Manufacturing inputs must be approved raw materials with current or historical stock at that client; outputs must belong to that client’s approved manufactured-product catalog. Product kind is immutable after creation.
+- **D-017 (Configurable approvals and daily department issues, 2026-10-18):** Super Admin may configure approval requirement for each supported stock request type, shipment receipt, manufacturing, department issue/return, and stock-in/stock-out import. Every setting defaults to required. Existing drafts/pending submissions retain their state when settings change. When approval is disabled, the server validates and posts atomically with idempotency and audit. Each client has one open daily department issue draft, editable through the day and submitted as a single all-or-nothing transaction/decision; submitted lines reserve usable stock until approval or rejection. Physical-count imports remain approval-gated until immediate posting is fully supported.
 - Design baseline approved; Phase 1 implementation authorized by owner.
 - Online-only; no offline mode.
 - No barcode scanning.
 - No purchase/selling prices, currency or inventory valuation.
 - Super Admin approves all inventory-affecting requests.
+- Approval policy is configurable per supported workflow by Super Admin. All workflows default to approval required; disabling approval permits immediate validated/atomic posting for new submissions only. This supersedes the previous fixed-approval baseline.
 - Company product catalog is managed by Super Admin; client catalog by Client Admin with approval before transactions.
 - Client-to-warehouse assignment is many-to-many and Super-Admin-controlled.
 - No product SKU/code field.

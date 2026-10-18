@@ -29,7 +29,7 @@
 | inventory_balances | Fast current view | id, stock_location_id, product_id, batch_id nullable, physical_qty, reserved_qty, damaged_qty, expired_qty, updated_at, version |
 | stock_requests | Workflow header | id, request_type, requester_id, source_location_id nullable, destination_location_id nullable, client_id nullable, status, priority, reason, parent_batch_id nullable, idempotency_key, submitted_at |
 | stock_request_lines | Workflow details | id, request_id, product_id, quantity, unit_id, conversion_snapshot, base_quantity, batch_id nullable, expiry_date nullable, condition, line_status |
-| reservations | Active stock holds | id, request_line_id, stock_location_id, product_id, batch_id nullable, quantity_base, status, created_at, released_at |
+| reservations | Active stock holds | id, request_line_id nullable, department_issue_id nullable, stock_location_id, product_id, batch_id nullable, quantity_base, status, created_at, released_at; exactly one owner reference is required |
 | shipments | Dispatch/in-transit tracking | id, request_id, shipment_type, source_location_id, destination_location_id, status, dispatched_at, received_at |
 | shipment_lines | Dispatch/receipt quantities | id, shipment_id, product_id, batch_id nullable, dispatched_qty, received_qty nullable, discrepancy_qty nullable |
 | production_runs | Manufacturing header | id, client_id, mode, status, planned_output, actual_output, wastage, submitted_by, approved_by |
@@ -37,6 +37,7 @@
 | production_outputs | Finished products | id, production_run_id, product_id, quantity, unit_id, conversion_snapshot, base_quantity |
 | departments | Client department master | id, client_id, name, status, pending_change_id nullable |
 | department_issues | Issue history | id, client_id, department_id, product_id, quantity_base, request_id, issued_at |
+| department_issue_batches | Daily department issue decision | id, client_id, created_by_id, status, rejection_reason, approved_by_id, submitted_at, approved_at; one open DRAFT per client |
 | department_returns | Return history | id, department_issue_id nullable, product_id, quantity_base, condition, reason, request_id |
 | ledger_transactions | Posted movement header | id, transaction_type, source_ref_type, source_ref_id, posted_at, posted_by, idempotency_key |
 | ledger_entries | Immutable movement lines | id, transaction_id, location_id, product_id, batch_id nullable, qty_delta_base, condition, unit_snapshot, conversion_snapshot, reversal_of_entry_id nullable |
@@ -64,6 +65,8 @@
 - Posted ledger entries cannot be updated/deleted by application roles.
 - Use checks/foreign keys to prevent impossible states and orphan records.
 - All-or-nothing batches must be committed in one DB transaction.
+- Department issue batch submission reserves every line in one transaction; approval consumes every reservation and posts every line atomically, while rejection releases all holds. Immediate-post policy uses the same atomicity and creates an audit event.
+- Approval requirements are stored in the `system_settings` JSON value and default to required; only new submissions use the current setting.
 - Never use floating-point types for inventory quantities or conversion factors.
 
 ## 4. Inventory definitions

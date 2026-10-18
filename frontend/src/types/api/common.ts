@@ -6,6 +6,7 @@ export type RequestStatus =
   | 'DRAFT'
   | 'PENDING_APPROVAL'
   | 'APPROVED'
+  | 'POSTED'
   | 'REJECTED'
   | 'CANCELLED';
 
@@ -31,8 +32,10 @@ export type DepartmentStatus =
   | 'REJECTED';
 
 export type DepartmentIssueStatus =
+  | 'DRAFT'
   | 'PENDING_APPROVAL'
   | 'APPROVED'
+  | 'POSTED'
   | 'REJECTED';
 
 export type ImportBatchStatus =
@@ -40,6 +43,7 @@ export type ImportBatchStatus =
   | 'VALIDATED'
   | 'SUBMITTED'
   | 'APPROVED'
+  | 'POSTED'
   | 'PARTIALLY_APPROVED'
   | 'REJECTED';
 

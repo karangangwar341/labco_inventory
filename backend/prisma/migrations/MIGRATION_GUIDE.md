@@ -21,5 +21,6 @@
   # Generate down migration diff
   npx prisma migrate diff --from-schema-datamodel ./prisma/schema.prisma --to-empty --script > rollback.sql
   ```
+- **Department issue batch migration (`20261018120000_department_issue_batches`)**: Adds the `POSTED` enum variants and daily department issue batch table, links issue lines and reservations to a batch, and enforces exactly one reservation owner (request line or department issue). Apply after taking the usual database backup. Existing request reservations remain valid. This migration is additive; do not drop the reservation check, foreign keys, or batch table after batch data is created. Prefer an application rollback while retaining the schema, then forward-fix. A full down migration is unsafe once batch submissions or reservations exist.
 - **Pre-deployment backup**:
   As specified in Section 3 of `10_DEPLOYMENT_RUNBOOK.md`, take a full snapshot backup before applying migrations in production.

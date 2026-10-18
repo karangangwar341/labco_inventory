@@ -116,6 +116,80 @@ export class ReservationsService {
     }
   }
 
+  async reserveDepartmentIssues(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    lines: Array<{ id: string; productId: string; batchId?: string | null; baseQuantity: Prisma.Decimal }>,
+  ) {
+    for (const line of lines) {
+      const balance = await tx.inventoryBalance.findFirst({
+        where: { locationId, productId: line.productId, batchId: line.batchId || null },
+      });
+      if (!balance) throw new BadRequestException(`No available stock for product ${line.productId}`);
+      await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
+      const available = balance.usableQty.minus(balance.reservedQty);
+      if (available.lessThan(line.baseQuantity)) {
+        throw new BadRequestException(`Not enough available stock. Available: ${available}, requested: ${line.baseQuantity} base units.`);
+      }
+      await tx.reservation.create({ data: {
+        departmentIssueId: line.id,
+        locationId,
+        productId: line.productId,
+        batchId: line.batchId || null,
+        quantityBase: line.baseQuantity,
+        status: ReservationStatus.ACTIVE,
+      } });
+      const updated = await tx.inventoryBalance.updateMany({
+        where: { id: balance.id, version: balance.version },
+        data: { reservedQty: balance.reservedQty.add(line.baseQuantity), version: { increment: 1 } },
+      });
+      if (!updated.count) throw new ConflictException('Concurrent inventory change detected. Please retry.');
+    }
+  }
+
+  async consumeReservationsForDepartmentIssueBatch(tx: Prisma.TransactionClient, batchId: string) {
+    const reservations = await tx.reservation.findMany({
+      where: { departmentIssue: { issueBatchId: batchId }, status: ReservationStatus.ACTIVE },
+    });
+    for (const reservation of reservations) {
+      const balance = await tx.inventoryBalance.findFirst({
+        where: { locationId: reservation.locationId, productId: reservation.productId, batchId: reservation.batchId || null },
+      });
+      if (!balance) throw new ConflictException('Reserved inventory balance is missing.');
+      await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
+      const reservedQty = balance.reservedQty.minus(reservation.quantityBase);
+      if (reservedQty.isNegative()) throw new ConflictException('Reservation balance is inconsistent.');
+      const updated = await tx.inventoryBalance.updateMany({
+        where: { id: balance.id, version: balance.version },
+        data: { reservedQty, version: { increment: 1 } },
+      });
+      if (!updated.count) throw new ConflictException('Concurrent inventory change detected. Please retry.');
+      await tx.reservation.update({ where: { id: reservation.id }, data: { status: ReservationStatus.CONSUMED, releasedAt: new Date() } });
+    }
+  }
+
+  async releaseReservationsForDepartmentIssueBatch(tx: Prisma.TransactionClient, batchId: string) {
+    const reservations = await tx.reservation.findMany({
+      where: { departmentIssue: { issueBatchId: batchId }, status: ReservationStatus.ACTIVE },
+    });
+    for (const reservation of reservations) {
+      const balance = await tx.inventoryBalance.findFirst({
+        where: { locationId: reservation.locationId, productId: reservation.productId, batchId: reservation.batchId || null },
+      });
+      if (balance) {
+        await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
+        const reservedQty = balance.reservedQty.minus(reservation.quantityBase);
+        if (reservedQty.isNegative()) throw new ConflictException('Reservation balance is inconsistent.');
+        const updated = await tx.inventoryBalance.updateMany({
+          where: { id: balance.id, version: balance.version },
+          data: { reservedQty, version: { increment: 1 } },
+        });
+        if (!updated.count) throw new ConflictException('Concurrent inventory change detected. Please retry.');
+      }
+      await tx.reservation.update({ where: { id: reservation.id }, data: { status: ReservationStatus.RELEASED, releasedAt: new Date() } });
+    }
+  }
+
   /**
    * Atomically release all active reservations for a request.
    * Decrements reservedQty and marks status as RELEASED.

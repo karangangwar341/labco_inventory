@@ -264,6 +264,11 @@ export class ShipmentsService {
     const extraCount = shipment.lines.length > 2 ? ` (+${shipment.lines.length - 2} more)` : '';
     const itemsText = linesSummary ? `${linesSummary}${extraCount}` : 'Shipment items';
 
+    const settings = await this.notificationsService.getSettings?.();
+    if (settings?.approvalRequirements?.shipmentReceipt === false) {
+      return this.approveReceipt(user, shipment.id, { idempotencyKey: `shipment-receipt-auto-${shipment.id}` }, true);
+    }
+
     await this.notificationsService.notifySuperAdmins(
       'Shipment receipt submitted',
       `[${shpNumber}] ${destName} reported receipt of ${itemsText}. Review in Approvals to finalize.`,
@@ -281,8 +286,9 @@ export class ShipmentsService {
     user: AuthenticatedUser,
     shipmentId: string,
     dto: ApproveReceiptDto,
+    automated = false,
   ) {
-    if (user.role !== UserRole.SUPER_ADMIN) {
+    if (!automated && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only Super Admin can approve shipment receipt');
     }
 
@@ -359,6 +365,16 @@ export class ShipmentsService {
         hasDiscrepancy && dto.holdDiscrepancy !== false
           ? ShipmentStatus.DISCREPANCY_HOLD
           : ShipmentStatus.COMPLETED;
+
+      if (automated) {
+        await tx.auditEvent.create({ data: {
+          actorUserId: user.id,
+          action: 'SHIPMENT_RECEIPT_AUTO_POSTED',
+          entityType: 'SHIPMENT',
+          entityId: shipment.id,
+          reason: 'Super Admin approval settings allow immediate receipt posting.',
+        } });
+      }
 
       const updated = await tx.shipment.update({
         where: { id: shipmentId },

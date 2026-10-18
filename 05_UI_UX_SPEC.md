@@ -26,10 +26,11 @@
 - Client product approval and product-change review.
 - Client operations overview: Super Admin can open a separate, client-scoped view of posted stock, manufacturing runs, and department issue/return reports. Department and manufacturing workspaces remain in the Client Admin navigation; Super Admin reviews their pending inventory changes through Approvals.
 - Client Production Jobs page: show run counts and clear draft, waiting approval, approved, and rejected states. Client Admin can save, reopen, edit, or delete their own draft, then submit it for Super Admin approval from its details. Submitted and approved runs are retained. State clearly that drafts and pending approval do not change inventory; approval posts raw-material deductions and finished output atomically. Capture planned output, actual output when complete, wastage, optional reference/notes, and only product-configured lot/expiry fields.
+- Department issue page: provide one open daily draft per Client Admin, with editable/removable lines across multiple active departments and manufactured products. Show the reserved quantities only after submission, and present the batch as a single approval outcome. Super Admin settings expose a clear approval-required toggle for every supported workflow; all toggles default on.
 - Client/warehouse assignment management with effective history.
 - User account management: create, disable, reset password; sessions revoked on reset/disable.
 - Import review: extracted field mapping, confidence/uncertainty indicators, duplicate warnings, row-level edit, validation, approval-mode selection.
-- Global settings: expiry warnings, receipt-confirmation toggle, notification sound, quantity settings, source types.
+- Global settings: expiry warnings, receipt-confirmation toggle, notification sound, per-workflow approval requirements, quantity settings, source types.
 - Audit/security log, reports, backup health.
 
 ## 4. Store Admin screens
@@ -51,7 +52,8 @@
 - Stock-in form records items already received at the client location; it is not a warehouse replenishment request and remains approval-gated. Stock-out records product leaving client stock.
 - Manufacturing run form (linked and separate modes).
 - Department list and proposed changes.
-- Department issue and return forms with condition, reason and optional attachment.
+- One daily department-issue draft with editable/removable lines across departments and products; submission reserves all lines and creates one approval decision.
+- Department return forms with condition, reason and optional attachment.
 - Daily report/batch preparation, per-transaction statuses and row-level corrections.
 - Incoming shipment view must hide source warehouse identity.
 - Client inventory reports/exports according to final permissions.
@@ -84,7 +86,7 @@ Loading, empty state, network error, permission denied, session expired/replaced
 - Super Admin dashboard leads with the approval queue. Show a backup warning only when a persistent backup failure needs attention.
 - Stock request forms show only fields relevant to the selected direction: assigned location, approved product, quantity, unit, and tracking fields only when the product requires a lot number or expiry date. Warehouse stock-out is a dispatch to an assigned client; Client Admin stock-out is from the client's own location.
 - Optional notes remain collapsed. Standard priority is the default. Users can add further product lines without making advanced workflow settings part of the initial view.
-- After submission, state plainly that Super Admin approval is required. Stock-out availability is held while review is pending; stock-in is not added until approved. A saved draft is clearly labeled and can be submitted from its detail page.
+- After submission, state whether the configured workflow is awaiting Super Admin approval or posted immediately. Stock-out availability is held while review is pending; stock-in is not added until approved or immediately posted by policy. A saved draft is clearly labeled and can be submitted from its detail page.
 - Add a role-neutral **How to use this system** help page with task-first instructions for stock-in, stock-out, request status, and common problems.
 - The navigation keeps Home, Stock, and My requests visible. Specialist pages and administration are grouped under **More** and **Administration**; Help stays visible.
 

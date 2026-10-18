@@ -287,6 +287,67 @@ paths:
         "201": { description: Write-off adjustment posted }
         "403": { description: Super Admin only }
         "409": { description: Insufficient damaged or expired stock }
+  /departments/issues/draft:
+    post:
+      summary: Get or create the Client Admin's single open daily department issue draft for their client.
+      responses:
+        "200": { description: Existing editable draft }
+        "201": { description: New editable draft }
+        "403": { description: Client Admin only }
+  /departments/issues/batches:
+    get:
+      summary: List department issue batches, scoped to the caller's client where applicable.
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [DRAFT, PENDING_APPROVAL, APPROVED, POSTED, REJECTED] }
+      responses:
+        "200": { description: Scoped issue batches }
+  /departments/issues/batches/{id}/lines:
+    patch:
+      summary: Replace a Client Admin's draft issue lines. Revalidates all replacement lines; no stock is changed.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Saved daily draft }
+        "409": { description: Draft is no longer editable }
+  /departments/issues/batches/{id}/submit:
+    post:
+      summary: Revalidate and submit the entire daily draft; reserves all lines or posts all lines per current approval policy.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Batch pending approval or immediately posted }
+        "400": { description: Invalid line or insufficient stock; no partial submission }
+  /departments/issues/batches/{id}/approve:
+    post:
+      summary: Super Admin approves every line and posts the batch atomically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Approved and posted batch }
+        "403": { description: Super Admin only }
+  /departments/issues/batches/{id}/reject:
+    post:
+      summary: Super Admin rejects the complete batch and releases all reservations.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Rejected batch }
+        "403": { description: Super Admin only }
   /import-batches:
     post:
       summary: Create a private import draft; must not post inventory.
@@ -317,3 +378,25 @@ paths:
             wastage, and inputs and outputs arrays containing product name, quantity,
             and unit snapshots. Client-scoped report data remains restricted to the
             requested client by server-side location and ownership filters.
+  /notifications/settings:
+    get:
+      summary: Read notification and approval settings; approval requirements default to true when unset.
+      responses:
+        "200": { description: Current global system settings including per-workflow approval requirements }
+    patch:
+      summary: Super Admin updates global notification, expiry, receipt, and approval settings. Only new submissions use changed approval rules.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approvalRequirements:
+                  type: object
+                  additionalProperties: false
+                  description: Partial boolean map for stockRequests, shipmentReceipt, manufacturing, departmentIssue, departmentReturn, and imports.
+      responses:
+        "200": { description: Updated settings; change is audited }
+        "400": { description: Unknown workflow or invalid setting value }
+        "403": { description: Super Admin only }

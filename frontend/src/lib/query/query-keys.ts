@@ -61,6 +61,7 @@ export const queryKeys = {
     all: ['departments'] as const,
     list: (clientId?: string) => ['departments', 'list', clientId || 'default'] as const,
     issues: (clientId?: string) => ['departments', 'issues', clientId || 'default'] as const,
+    issueDraft: (clientId?: string) => ['departments', 'issue-draft', clientId || 'default'] as const,
   },
 
   // Manufacturing / Production Runs

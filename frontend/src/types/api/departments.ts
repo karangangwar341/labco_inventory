@@ -14,6 +14,7 @@ export interface DepartmentDto {
 
 export interface DepartmentIssueDto {
   id: string;
+  issueBatchId?: string | null;
   issueNumber: string;
   departmentId: string;
   departmentName?: string;
@@ -31,6 +32,16 @@ export interface DepartmentIssueDto {
   issuedAt?: string | null;
 }
 
+export interface DepartmentIssueBatchDto {
+  id: string;
+  clientId: string;
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'POSTED' | 'REJECTED';
+  createdById: string;
+  createdAt: string;
+  submittedAt?: string | null;
+  issues: DepartmentIssueDto[];
+}
+
 export interface CreateDepartmentDto {
   name: string;
   clientId?: string;
@@ -45,7 +56,7 @@ export interface CreateDepartmentIssueDto {
   notes?: string;
 }
 
-export type DepartmentReturnStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+export type DepartmentReturnStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'POSTED' | 'REJECTED';
 
 export interface DepartmentReturnDto {
   id: string;

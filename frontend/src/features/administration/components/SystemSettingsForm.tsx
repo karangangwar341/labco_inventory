@@ -14,7 +14,43 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   receiptConfirmationEnabled: true,
   expiryWarningIntervals: [90, 30, 7],
   soundEnabled: false,
+  approvalRequirements: {
+    stockRequests: { STOCK_IN: true, STOCK_OUT: true, DISPATCH: true, TRANSFER: true, ADJUSTMENT: true },
+    shipmentReceipt: true,
+    manufacturing: true,
+    departmentIssue: true,
+    departmentReturn: true,
+    imports: { stockIn: true, stockOut: true },
+  },
 };
+
+const APPROVAL_LABELS = [
+  ['stockRequests.STOCK_IN', 'Stock-in requests'],
+  ['stockRequests.STOCK_OUT', 'Stock-out requests'],
+  ['stockRequests.DISPATCH', 'Dispatches to clients'],
+  ['stockRequests.TRANSFER', 'Warehouse transfers'],
+  ['stockRequests.ADJUSTMENT', 'Physical count adjustments'],
+  ['shipmentReceipt', 'Shipment receipt confirmation'],
+  ['manufacturing', 'Manufacturing runs'],
+  ['departmentIssue', 'Department issue batches'],
+  ['departmentReturn', 'Department returns'],
+  ['imports.stockIn', 'Stock-in imports'],
+  ['imports.stockOut', 'Stock-out imports'],
+] as const;
+
+function setApprovalRequirement(settings: NotificationSettings, key: string, value: boolean): NotificationSettings {
+  const [group, field] = key.split('.');
+  if (group === 'stockRequests' && field) {
+    return { ...settings, approvalRequirements: { ...settings.approvalRequirements, stockRequests: { ...settings.approvalRequirements.stockRequests, [field]: value } } };
+  }
+  if (group === 'imports' && field) {
+    return { ...settings, approvalRequirements: { ...settings.approvalRequirements, imports: { ...settings.approvalRequirements.imports, [field]: value } } };
+  }
+  if (group === 'shipmentReceipt' || group === 'manufacturing' || group === 'departmentIssue' || group === 'departmentReturn') {
+    return { ...settings, approvalRequirements: { ...settings.approvalRequirements, [group]: value } };
+  }
+  return settings;
+}
 
 export function SystemSettingsForm() {
   const queryClient = useQueryClient();
@@ -50,11 +86,27 @@ export function SystemSettingsForm() {
 
   return (
     <div className="max-w-4xl space-y-5">
-      <PageHeader title="System settings" description="Control shipment receipt confirmation and in-app alerts." />
+      <PageHeader title="System settings" description="Set approval requirements and notification behavior for inventory workflows." />
       {notice && <div role="status" className="rounded-lg border border-[#bbf7d0] bg-[#ecfdf3] p-3 text-sm text-[#18794e]">{notice}</div>}
       {saveMutation.error && <div role="alert" className="rounded-lg border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[#b42318]">{saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save settings.'}</div>}
 
       <form onSubmit={save} className="space-y-4">
+        <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
+          <div>
+            <h2 className="text-base font-semibold text-[#172033]">Approval requirements</h2>
+            <p className="mt-1 text-sm text-[#5b6678]">Choose which inventory workflows wait for Super Admin review. When review is off, validated transactions post immediately and are recorded in the ledger.</p>
+          </div>
+          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            {APPROVAL_LABELS.map(([key, label]) => {
+              const [group, field] = key.split('.');
+              const enabled = field
+                ? Boolean((draft.approvalRequirements[group as 'stockRequests' | 'imports'] as Record<string, boolean>)[field])
+                : Boolean(draft.approvalRequirements[group as 'shipmentReceipt' | 'manufacturing' | 'departmentIssue' | 'departmentReturn']);
+              return <label key={key} className="flex min-h-11 items-center gap-3 text-sm text-[#172033]"><input type="checkbox" checked={enabled} onChange={(event) => setDraft((current) => setApprovalRequirement(current, key, event.target.checked))} />{label}</label>;
+            })}
+          </div>
+        </section>
+
         <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
           <div>
             <h2 className="text-base font-semibold text-[#172033]">Shipment receipt confirmation</h2>

@@ -36,7 +36,7 @@ export const approvalsService = {
 
     try {
       // Execute independent queue queries concurrently (P-005 / Phase 2)
-      const [requestsRes, shipmentsRes, productionRunsRes, departmentIssuesRes] =
+      const [requestsRes, shipmentsRes, productionRunsRes, departmentIssuesRes, departmentBatchesRes] =
         await Promise.all([
           apiClient
             .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL' }))
@@ -49,6 +49,9 @@ export const approvalsService = {
             .catch(() => []),
           apiClient
             .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL' }))
+            .catch(() => []),
+          apiClient
+            .get<any[]>(endpoints.departments.issueBatches({ status: 'PENDING_APPROVAL' }))
             .catch(() => []),
         ]);
 
@@ -143,6 +146,25 @@ export const approvalsService = {
         priority: 'NORMAL',
       }));
 
+      queue.DEPARTMENTS.push(...(Array.isArray(departmentBatchesRes) ? departmentBatchesRes : []).map((batch) => ({
+        id: `batch:${batch.id}`,
+        type: 'DEPARTMENT_ISSUE_BATCH',
+        requester: batch.createdBy?.username || 'Client Admin',
+        location: batch.client?.name || 'Client departments',
+        details: 'Review all department issues together. Approval posts every line atomically.',
+        quantitySummary: `${batch.issues?.length || 0} issue lines · one decision`,
+        lineItems: (batch.issues || []).map((issue: any, index: number) => ({
+          id: issue.id || `issue-${index}`,
+          productName: issue.product?.name || 'Product',
+          quantity: asDisplayQuantity(issue.quantity),
+          unitName: issue.unit?.unitName || issue.unitNameSnapshot,
+          batchNumber: issue.batch?.batchNumber || null,
+          label: issue.department?.name || 'Department',
+        })),
+        createdAt: batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : 'Recent',
+        priority: 'NORMAL' as const,
+      })));
+
       return queue;
     } catch {
       return queue;
@@ -161,7 +183,11 @@ export const approvalsService = {
       } else if (tab === 'MANUFACTURING') {
         await apiClient.post(endpoints.manufacturing.approve(id), {}, { idempotencyKey });
       } else if (tab === 'DEPARTMENTS') {
-        await apiClient.post(endpoints.departments.approveIssue(id), {}, { idempotencyKey });
+        if (id.startsWith('batch:')) {
+          await apiClient.post(endpoints.departments.approveIssueBatch(id.slice(6)), {}, { idempotencyKey });
+        } else {
+          await apiClient.post(endpoints.departments.approveIssue(id), {}, { idempotencyKey });
+        }
       }
       actionIdempotency.clearKey(actionKey);
     } catch (err) {
@@ -179,7 +205,11 @@ export const approvalsService = {
     } else if (tab === 'MANUFACTURING') {
       await apiClient.post(endpoints.manufacturing.reject(id), { reason });
     } else if (tab === 'DEPARTMENTS') {
-      await apiClient.post(endpoints.departments.rejectIssue(id), { reason });
+      if (id.startsWith('batch:')) {
+        await apiClient.post(endpoints.departments.rejectIssueBatch(id.slice(6)), { reason });
+      } else {
+        await apiClient.post(endpoints.departments.rejectIssue(id), { reason });
+      }
     }
   },
 };

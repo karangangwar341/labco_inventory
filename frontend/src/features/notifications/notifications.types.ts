@@ -20,4 +20,12 @@ export interface NotificationSettings {
   expiryWarningIntervals: number[];
   soundEnabled: boolean;
   receiptConfirmationEnabled: boolean;
+  approvalRequirements: {
+    stockRequests: Record<'STOCK_IN' | 'STOCK_OUT' | 'DISPATCH' | 'TRANSFER' | 'ADJUSTMENT', boolean>;
+    shipmentReceipt: boolean;
+    manufacturing: boolean;
+    departmentIssue: boolean;
+    departmentReturn: boolean;
+    imports: { stockIn: boolean; stockOut: boolean };
+  };
 }

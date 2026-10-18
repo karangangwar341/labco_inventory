@@ -1,6 +1,7 @@
 import {
   DepartmentDto,
   DepartmentIssueDto,
+  DepartmentIssueBatchDto,
   CreateDepartmentDto,
   CreateDepartmentIssueDto,
   DepartmentStatus,
@@ -11,6 +12,7 @@ import {
 
 export type Department = DepartmentDto;
 export type DepartmentIssue = DepartmentIssueDto;
+export type DepartmentIssueBatch = DepartmentIssueBatchDto;
 export type CreateDepartmentPayload = CreateDepartmentDto;
 export type CreateDepartmentIssuePayload = CreateDepartmentIssueDto;
 export type DepartmentReturn = DepartmentReturnDto;

@@ -101,6 +101,7 @@ describe('Requests & Reservations Service (T-007)', () => {
       notifySuperAdmins: vi.fn(),
       notifyUser: vi.fn(),
       notifyClientAdmins: vi.fn(),
+      getSettings: vi.fn().mockResolvedValue({ approvalRequirements: { stockRequests: { STOCK_IN: true, STOCK_OUT: true, DISPATCH: true, TRANSFER: true, ADJUSTMENT: true } } }),
     };
 
     const mockShipmentsService: any = {

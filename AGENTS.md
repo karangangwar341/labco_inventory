@@ -36,7 +36,7 @@ If documents conflict, stop and report the conflict. Do not silently choose one.
 - No negative usable stock. Available = Usable - Reserved >= 0. Physical = Usable + Damaged + Expired.
 - Stock posting, ledger entries, balance projections, reservations and request state changes must be transactionally consistent.
 - Posted ledger/audit entries are append-only; correct by linked reversal/replacement.
-- All inventory-affecting actions require Super Admin approval under the current baseline.
+- Super Admin approval is required by default for inventory-affecting workflows. Super Admin may disable approval per supported workflow; the server must still validate, atomically post, and audit those submissions. A policy change applies to new submissions only.
 - Server-side authorization is mandatory on every endpoint and object.
 - Use idempotency to prevent duplicate posting.
 - Never expose one client's data to another client.

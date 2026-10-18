@@ -212,8 +212,8 @@ export function ImportsReview() {
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      await importsService.submitBatch(activeBatch.id, approvalMode);
-      setStatusMessage('Batch submitted for Super Admin approval.');
+      const batch = await importsService.submitBatch(activeBatch.id, approvalMode);
+      setStatusMessage(batch.status === 'POSTED' ? 'Batch validated and posted to inventory.' : 'Batch submitted for Super Admin approval.');
       await fetchBatches(activeBatch.id, true);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Could not submit this batch');

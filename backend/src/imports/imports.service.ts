@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { LedgerService } from '../inventory/ledger.service.js';
 import { GeminiExtractionAdapter } from './adapters/gemini-extraction.adapter.js';
 import { StorageService } from '../storage/storage.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { importRequiresApproval, mergeApprovalRequirements } from '../notifications/approval-requirements.js';
 import {
   UserRole,
   ImportType,
@@ -42,6 +44,7 @@ export class ImportsService {
     private readonly ledgerService: LedgerService,
     private readonly extractor: GeminiExtractionAdapter,
     @Optional() private readonly storageService?: StorageService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   // ==========================================
@@ -424,11 +427,18 @@ export class ImportsService {
       throw new BadRequestException('At least one valid row is required to submit this batch');
     }
 
-    return this.prisma.importBatch.update({
+    const submitted = await this.prisma.importBatch.update({
       where: { id: batchId },
       data: { status: ImportBatchStatus.SUBMITTED, approvalMode: mode },
       include: { rows: { orderBy: { rowNumber: 'asc' } } },
     });
+    const settings = await this.notificationsService?.getSettings?.();
+    const requiresApproval = importRequiresApproval(
+      batch.importType,
+      mergeApprovalRequirements(settings?.approvalRequirements),
+    );
+    if (!requiresApproval) return this.approveBatch(batchId, { approvalMode: mode }, user, true);
+    return submitted;
   }
 
   private canUseLocation(
@@ -454,14 +464,15 @@ export class ImportsService {
     batchId: string,
     dto: ApproveImportBatchDto,
     user: AuthenticatedUser,
+    automated = false,
   ) {
-    if (user.role !== UserRole.SUPER_ADMIN) {
+    if (!automated && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only Super Admin can approve and post import batches');
     }
 
     const batch = await this.getBatch(batchId, user);
 
-    if (batch.status === ImportBatchStatus.APPROVED) {
+    if (batch.status === ImportBatchStatus.APPROVED || batch.status === ImportBatchStatus.POSTED) {
       throw new ConflictException('Import batch has already been approved');
     }
     if (batch.status !== ImportBatchStatus.SUBMITTED) {
@@ -569,13 +580,23 @@ export class ImportsService {
       const finalBatchStatus =
         invalidRows.length > 0
           ? ImportBatchStatus.PARTIALLY_APPROVED
-          : ImportBatchStatus.APPROVED;
+          : automated ? ImportBatchStatus.POSTED : ImportBatchStatus.APPROVED;
+
+      if (automated) {
+        await tx.auditEvent.create({ data: {
+          actorUserId: user.id,
+          action: 'IMPORT_AUTO_POSTED',
+          entityType: 'IMPORT_BATCH',
+          entityId: batch.id,
+          reason: 'Super Admin approval settings allow immediate posting for this import type.',
+        } });
+      }
 
       return tx.importBatch.update({
         where: { id: batch.id },
         data: {
           status: finalBatchStatus,
-          approvedById: user.id,
+          approvedById: automated ? null : user.id,
           approvedAt: new Date(),
         },
         include: {

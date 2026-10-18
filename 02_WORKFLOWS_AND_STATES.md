@@ -61,9 +61,12 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 
 ## 9. Department issue and return
 - Client Admin maintains department list; create/edit/deactivate requires Super Admin approval.
-- Department issue approval deducts client central stock and records issue history. No department stock balance is maintained.
+- Client Admin maintains one open daily department-issue draft per client and can add/edit/remove lines across departments and products throughout the day. Saving the draft has no inventory effect.
+- Submitting the daily draft revalidates every line and reserves all required usable stock atomically. If any line fails validation or availability, nothing is submitted or reserved.
+- If department-issue approval is enabled (default), the entire submitted draft is one Super Admin decision. Rejection releases all reservations; approval consumes all reservations and posts every line in one transaction. No department stock balance is maintained.
+- If approval is disabled in Super Admin settings, submission validates and posts every line atomically, marks the batch `POSTED`, and records an audit event. It never creates an unreviewed partial posting.
 - Return records product, quantity, unit, condition (usable/damaged/expired), reason, optional attachment and original issue link where available.
-- Super Admin approval required. Usable returns restore client usable stock; damaged/expired return quantities remain excluded from usable stock and may require separate approved write-off.
+- Department returns require Super Admin approval by default; the per-workflow setting may allow validated immediate posting. Usable returns restore client usable stock; damaged/expired return quantities remain excluded from usable stock and may require a separately approved write-off.
 
 ## 10. Batch and expiry
 - Tracking is configured per product: none, batch, expiry, or both.
@@ -96,4 +99,10 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 1. Receipt-disabled shipment completion and client stock-credit timing.
 2. Missing/damaged shipment quantities and whether separate discrepancy workflow is required for client shipments as well as warehouse transfers.
 3. Whether stock-in batches need the same all-or-nothing options as product creation and stock-out batches in every workflow.
-4. Whether the daily report is a grouping container or an approval unit; current baseline treats transaction decisions individually, with whole-batch rejection supported.
+4. Whether non-department daily reports should become approval units (department issue batches are resolved by D-017).
+
+## 15. Configurable approval policy
+- Super Admin controls approval requirements per stock-request type, shipment receipt, manufacturing, department issue, department return, and stock-in/stock-out import.
+- Every setting defaults to approval required. Physical-count imports remain approval-gated because immediate posting is not supported for that workflow.
+- Disabling approval affects only submissions made after the setting change. Existing drafts and pending approvals retain their current workflow and status.
+- For any no-approval workflow, all server-side validation, concurrency checks, ledger writes, balance projections, reservation transitions, state updates, and audit records must commit atomically. A failed transaction changes none of them.

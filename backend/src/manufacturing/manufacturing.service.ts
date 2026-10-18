@@ -453,6 +453,8 @@ export class ManufacturingService {
    * Validates raw material stock availability at the client's location.
    */
   async submitProductionRun(user: AuthenticatedUser, runId: string) {
+    const settings = await this.notificationsService.getSettings?.();
+    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
     const submitted = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM production_runs WHERE id = ${runId} FOR UPDATE`;
       const run = await tx.productionRun.findUnique({
@@ -542,6 +544,7 @@ export class ManufacturingService {
         include: { inputs: true, outputs: true },
       });
     });
+    if (!requiresApproval) return this.approveProductionRun(user, runId, {}, true);
     await this.notificationsService.notifySuperAdmins(
       'Production run awaiting approval',
       'A client submitted a manufacturing run for review.',
@@ -559,8 +562,9 @@ export class ManufacturingService {
     user: AuthenticatedUser,
     runId: string,
     dto: ApproveProductionRunDto,
+    automated = false,
   ) {
-    if (user.role !== UserRole.SUPER_ADMIN) {
+    if (!automated && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException(
         'Only Super Admin can approve production runs',
       );
@@ -576,7 +580,7 @@ export class ManufacturingService {
     }
 
     // Idempotency: if already approved, return without double-posting
-    if (run.status === ProductionStatus.APPROVED) {
+    if (run.status === ProductionStatus.APPROVED || run.status === ProductionStatus.POSTED) {
       return run;
     }
 
@@ -801,12 +805,22 @@ export class ManufacturingService {
         tx,
       );
 
-      // 4. Update production run status to APPROVED
+      if (automated) {
+        await tx.auditEvent.create({ data: {
+          actorUserId: user.id,
+          action: 'PRODUCTION_AUTO_POSTED',
+          entityType: 'PRODUCTION_RUN',
+          entityId: runId,
+          reason: 'Super Admin approval settings allow immediate posting for manufacturing.',
+        } });
+      }
+
+      // 4. Update production run status after the atomic ledger posting
       return tx.productionRun.update({
         where: { id: runId },
         data: {
-          status: ProductionStatus.APPROVED,
-          approvedById: user.id,
+          status: automated ? ProductionStatus.POSTED : ProductionStatus.APPROVED,
+          approvedById: automated ? null : user.id,
           approvedAt: new Date(),
         },
         include: {

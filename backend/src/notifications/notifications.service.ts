@@ -16,6 +16,11 @@ import {
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { QueryNotificationsDto } from './dto/query-notifications.dto.js';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto.js';
+import {
+  ApprovalRequirements,
+  DEFAULT_APPROVAL_REQUIREMENTS,
+  mergeApprovalRequirements,
+} from './approval-requirements.js';
 
 @Injectable()
 export class NotificationsService {
@@ -433,7 +438,7 @@ export class NotificationsService {
       this.prisma.systemSetting.findUnique({ where: { key: 'notification_settings' } }),
       this.prisma.systemSetting.findUnique({ where: { key: 'RECEIPT_CONFIRMATION_ENABLED' } }),
     ]);
-    const notificationSettings = setting?.valueJson as { expiryWarningIntervals?: number[]; soundEnabled?: boolean } | undefined;
+    const notificationSettings = setting?.valueJson as { expiryWarningIntervals?: number[]; soundEnabled?: boolean; approvalRequirements?: unknown } | undefined;
 
     return {
       expiryWarningIntervals: notificationSettings?.expiryWarningIntervals ?? [90, 30, 7],
@@ -441,6 +446,7 @@ export class NotificationsService {
       receiptConfirmationEnabled: receiptSetting?.valueJson === undefined
         ? true
         : Boolean(receiptSetting.valueJson),
+      approvalRequirements: mergeApprovalRequirements(notificationSettings?.approvalRequirements),
     };
   }
 
@@ -454,6 +460,9 @@ export class NotificationsService {
       expiryWarningIntervals: dto.expiryWarningIntervals ?? current.expiryWarningIntervals,
       soundEnabled: dto.soundEnabled ?? current.soundEnabled,
       receiptConfirmationEnabled: dto.receiptConfirmationEnabled ?? current.receiptConfirmationEnabled,
+      approvalRequirements: dto.approvalRequirements === undefined
+        ? current.approvalRequirements
+        : this.validateApprovalRequirements(dto.approvalRequirements, current.approvalRequirements),
     };
 
     const intervals = updated.expiryWarningIntervals;
@@ -470,18 +479,20 @@ export class NotificationsService {
         tx.systemSetting.upsert({
           where: { key: 'notification_settings' },
           update: {
-            valueJson: {
+            valueJson: JSON.parse(JSON.stringify({
               expiryWarningIntervals: updated.expiryWarningIntervals,
               soundEnabled: updated.soundEnabled,
-            },
+              approvalRequirements: updated.approvalRequirements,
+            })) as Prisma.InputJsonValue,
             updatedById: user.id,
           },
           create: {
             key: 'notification_settings',
-            valueJson: {
+            valueJson: JSON.parse(JSON.stringify({
               expiryWarningIntervals: updated.expiryWarningIntervals,
               soundEnabled: updated.soundEnabled,
-            },
+              approvalRequirements: updated.approvalRequirements,
+            })) as Prisma.InputJsonValue,
             updatedById: user.id,
           },
         }),
@@ -496,12 +507,53 @@ export class NotificationsService {
             action: 'SYSTEM_SETTINGS_UPDATED',
             entityType: 'SYSTEM_SETTINGS',
             entityId: 'global',
-            afterJson: updated,
+            beforeJson: JSON.parse(JSON.stringify(current)) as Prisma.InputJsonValue,
+            afterJson: JSON.parse(JSON.stringify(updated)) as Prisma.InputJsonValue,
           },
         }),
       ]);
     });
 
     return updated;
+  }
+
+  private validateApprovalRequirements(
+    value: Record<string, unknown>,
+    current: ApprovalRequirements,
+  ): ApprovalRequirements {
+    const validBooleanMap = (candidate: unknown, allowed: string[], label: string) => {
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+        throw new BadRequestException(`${label} must be an object`);
+      }
+      const entries = Object.entries(candidate as Record<string, unknown>);
+      if (entries.some(([key, setting]) => !allowed.includes(key) || typeof setting !== 'boolean')) {
+        throw new BadRequestException(`${label} contains an unknown workflow or a non-boolean value`);
+      }
+    };
+
+    const allowedTop = ['stockRequests', 'shipmentReceipt', 'manufacturing', 'departmentIssue', 'departmentReturn', 'imports'];
+    if (Object.keys(value).some((key) => !allowedTop.includes(key))) {
+      throw new BadRequestException('Approval requirements contain an unknown workflow');
+    }
+    for (const key of ['shipmentReceipt', 'manufacturing', 'departmentIssue', 'departmentReturn']) {
+      if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+        throw new BadRequestException(`${key} approval requirement must be a boolean`);
+      }
+    }
+    if (value.stockRequests !== undefined) {
+      validBooleanMap(value.stockRequests, Object.keys(DEFAULT_APPROVAL_REQUIREMENTS.stockRequests), 'stockRequests');
+    }
+    if (value.imports !== undefined) {
+      validBooleanMap(value.imports, Object.keys(DEFAULT_APPROVAL_REQUIREMENTS.imports), 'imports');
+    }
+
+    return {
+      stockRequests: { ...current.stockRequests, ...(value.stockRequests as Partial<Record<keyof ApprovalRequirements['stockRequests'], boolean>> | undefined) },
+      shipmentReceipt: (value.shipmentReceipt as boolean | undefined) ?? current.shipmentReceipt,
+      manufacturing: (value.manufacturing as boolean | undefined) ?? current.manufacturing,
+      departmentIssue: (value.departmentIssue as boolean | undefined) ?? current.departmentIssue,
+      departmentReturn: (value.departmentReturn as boolean | undefined) ?? current.departmentReturn,
+      imports: { ...current.imports, ...(value.imports as Partial<ApprovalRequirements['imports']> | undefined) },
+    };
   }
 }

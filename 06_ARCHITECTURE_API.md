@@ -53,6 +53,11 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 | POST | `/api/v1/stock-requests/{id}/cancel` | Requester cancels pending request |
 | POST | `/api/v1/stock-requests/{id}/approve` | Super Admin approval/posting |
 | POST | `/api/v1/stock-requests/{id}/reject` | Super Admin rejection/release reservation |
+| POST | `/api/v1/departments/issues/draft` | Get or create the Client Admin's one open daily issue draft |
+| GET | `/api/v1/departments/issues/batches` | List issue batches, scoped to the caller's client where applicable |
+| PATCH | `/api/v1/departments/issues/batches/{id}/lines` | Replace draft lines after full validation |
+| POST | `/api/v1/departments/issues/batches/{id}/submit` | Atomically validate/reserve and submit or immediately post by configured policy |
+| POST | `/api/v1/departments/issues/batches/{id}/approve` | Super Admin approves/rejects the whole batch; posts all lines or none |
 | POST | `/api/v1/shipments/{id}/receive` | Record receipt |
 | POST | `/api/v1/production-runs` | Create production draft |
 | PATCH | `/api/v1/production-runs/{id}` | Edit the caller’s own draft; no inventory effect |
@@ -88,8 +93,10 @@ Within one DB transaction:
 6. Mark request/lines posted or completed.
 7. Commit; emit notifications after commit through reliable outbox/job pattern.
 
+For workflows configured without approval, the same checks and ledger/projection/state/audit writes execute in one transaction without an approval record. Approval policy is read at submission time and does not retroactively alter drafts or pending items.
+
 ## 7. AI import contract
-AI extraction response should include proposed field values, source snippets/coordinates where available, confidence/uncertainty, warnings and raw extraction references. It must not call stock-posting endpoints or approve requests. A human reviews and submits; Super Admin approval remains mandatory.
+AI extraction response should include proposed field values, source snippets/coordinates where available, confidence/uncertainty, warnings and raw extraction references. It must not call stock-posting endpoints or approve requests. A human reviews and submits; the configured workflow approval policy then governs posting.
 
 ## 8. Selected infrastructure and open decisions
 - Selected: NestJS + TypeScript backend, Next.js frontend, Neon Serverless PostgreSQL, Neon Object Storage, Google Gemini extraction adapter. Zero Docker requirements.

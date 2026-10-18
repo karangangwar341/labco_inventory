@@ -43,6 +43,7 @@ export function DepartmentsView() {
   const [issueUnitId, setIssueUnitId] = useState('');
   const [issueQuantity, setIssueQuantity] = useState('');
   const [issueNotes, setIssueNotes] = useState('');
+  const [editingIssueId, setEditingIssueId] = useState<string | null>(null);
 
   const {
     data: departments = [],
@@ -70,6 +71,13 @@ export function DepartmentsView() {
       return Array.isArray(data) ? data : [];
     },
     staleTime: 2 * 60 * 1000,
+  });
+
+  const issueDraftQuery = useQuery({
+    queryKey: queryKeys.departments.issueDraft(user?.clientId || user?.id),
+    queryFn: () => departmentsService.getOpenIssueBatch(),
+    enabled: role === 'CLIENT_ADMIN',
+    staleTime: 0,
   });
 
   const {
@@ -137,27 +145,82 @@ export function DepartmentsView() {
     },
   });
 
-  const createIssueMutation = useMutation({
-    mutationFn: () => departmentsService.createIssue({
-      departmentId: effectiveIssueDepartmentId,
-      productId: effectiveIssueProductId,
-      quantity: Number(issueQuantity),
-      unitId: effectiveIssueUnitId,
-      batchId: selectedIssueBalance?.batchId || undefined,
-      notes: issueNotes.trim() || undefined,
-    }),
-    onSuccess: async () => {
-      setIsIssueModalOpen(false);
+  const saveIssueLineMutation = useMutation({
+    mutationFn: async () => {
+      const draft = issueDraftQuery.data ?? await departmentsService.getOpenIssueBatch();
+      const currentLines = draft.issues.map((line) => ({
+        departmentId: line.departmentId,
+        productId: line.productId,
+        quantity: Number(line.quantity),
+        unitId: line.unit?.id || (line as DepartmentIssue & { unitId?: string }).unitId,
+        batchId: line.batchId || undefined,
+        notes: line.notes || undefined,
+      }));
+      const nextLine = {
+        departmentId: effectiveIssueDepartmentId,
+        productId: effectiveIssueProductId,
+        quantity: Number(issueQuantity),
+        unitId: effectiveIssueUnitId,
+        batchId: selectedIssueBalance?.batchId || undefined,
+        notes: issueNotes.trim() || undefined,
+      };
+      const editingIndex = editingIssueId ? draft.issues.findIndex((line) => line.id === editingIssueId) : -1;
+      if (editingIndex >= 0) currentLines[editingIndex] = nextLine;
+      else currentLines.push(nextLine);
+      return departmentsService.saveIssueBatchLines(draft.id, currentLines);
+    },
+    onSuccess: async (draft) => {
+      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), draft);
+      setEditingIssueId(null);
+      setIssueDepartmentId('');
+      setIssueProductId('');
+      setIssueBalanceId('');
+      setIssueUnitId('');
       setIssueQuantity('');
       setIssueNotes('');
       setErrorMsg(null);
-      setActionSuccess('Request sent for Super Admin approval. Stock updates after approval.');
-      await invalidation.afterDepartmentMutation(queryClient);
-      setTimeout(() => setActionSuccess(null), 5000);
+      setActionSuccess('Line saved to the daily draft.');
+      setTimeout(() => setActionSuccess(null), 4000);
     },
     onError: (err: unknown) => {
       setErrorMsg(err instanceof Error ? err.message : 'Department stock request could not be sent.');
     },
+  });
+
+  const removeIssueLineMutation = useMutation({
+    mutationFn: async (lineId: string) => {
+      const draft = issueDraftQuery.data;
+      if (!draft) return null;
+      const lines = draft.issues.filter((line) => line.id !== lineId).map((line) => ({
+        departmentId: line.departmentId,
+        productId: line.productId,
+        quantity: Number(line.quantity),
+        unitId: (line as DepartmentIssue & { unitId?: string }).unitId || line.unit?.id,
+        batchId: line.batchId || undefined,
+        notes: line.notes || undefined,
+      }));
+      return departmentsService.saveIssueBatchLines(draft.id, lines);
+    },
+    onSuccess: (draft) => {
+      if (draft) queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), draft);
+    },
+    onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Draft line could not be removed.'),
+  });
+
+  const submitIssueBatchMutation = useMutation({
+    mutationFn: async () => {
+      const draft = issueDraftQuery.data;
+      if (!draft) throw new Error('Open the daily draft first.');
+      return departmentsService.submitIssueBatch(draft.id);
+    },
+    onSuccess: async (batch) => {
+      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), batch);
+      await invalidation.afterDepartmentMutation(queryClient);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.approvals.all });
+      setActionSuccess(batch.status === 'POSTED' ? 'Daily department issue was posted.' : 'Daily department issue was sent for approval.');
+      setTimeout(() => setActionSuccess(null), 5000);
+    },
+    onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Daily department issue could not be submitted.'),
   });
 
   const handleCreateDepartment = (e: React.FormEvent) => {
@@ -227,17 +290,22 @@ export function DepartmentsView() {
     <div className="space-y-4">
       <PageHeader
         title={activeTab === 'RETURNS' ? 'Department Returns & Write-offs' : 'Departments & Stock Issues'}
-        description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Request approved manufactured products for internal departments. Super Admin approval is required.'}
+        description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Build a daily department issue draft, then submit all lines together.'}
         actions={
           activeTab !== 'RETURNS' ? <div className="flex flex-wrap gap-2">
             {role === 'CLIENT_ADMIN' && (
-              <Button
-                variant="primary"
-                disabled={!activeDepartments.length}
-                onClick={() => { setErrorMsg(null); setIsIssueModalOpen(true); }}
-              >
-                + Issue stock to department
-              </Button>
+              <>
+                <Button variant="secondary" disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'} onClick={() => { setErrorMsg(null); setIsIssueModalOpen(true); }}>
+                  Add issue line{issueDraftQuery.data?.issues.length ? ` (${issueDraftQuery.data.issues.length})` : ''}
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data.issues.length || submitIssueBatchMutation.isPending}
+                  onClick={() => submitIssueBatchMutation.mutate()}
+                >
+                  {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit daily request'}
+                </Button>
+              </>
             )}
             <Button variant={role === 'CLIENT_ADMIN' ? 'secondary' : 'primary'} onClick={() => setIsModalOpen(true)}>
               + Add Department
@@ -373,7 +441,7 @@ export function DepartmentsView() {
         history.length === 0 ? (
           <EmptyState
             title="No department issues recorded"
-            description="Department stock requests will appear here after you send them for approval."
+            description="Department stock requests will appear here after you submit them."
           />
         ) : (
           <Table>
@@ -459,11 +527,36 @@ export function DepartmentsView() {
               setErrorMsg('Choose a department, an in-stock manufactured product, and a quantity within available stock.');
               return;
             }
-            createIssueMutation.mutate();
+            saveIssueLineMutation.mutate();
           }}
           className="space-y-3 text-xs"
         >
-          <p className="text-[#5b6678]">This sends the issue request for approval. Client stock is deducted only after Super Admin approval.</p>
+          <p className="text-[#5b6678]">Save lines as they come in, edit them during the day, and submit the complete request when ready.</p>
+          {issueDraftQuery.data?.issues.length ? (
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-[#dbe3ee] p-2">
+              <p className="font-semibold text-[#172033]">Daily draft · {issueDraftQuery.data.issues.length} lines</p>
+              {issueDraftQuery.data.issues.map((line) => (
+                <div key={line.id} className="flex items-center justify-between gap-3 border-t border-[#edf1f6] pt-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-[#172033]">{line.product?.name || 'Product'} · {line.department?.name || 'Department'}</p>
+                    <p className="text-[#5b6678]">{line.quantity} {line.unit?.unitName || line.unitNameSnapshot}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => {
+                      setEditingIssueId(line.id);
+                      setIssueDepartmentId(line.departmentId);
+                      setIssueProductId(line.productId);
+                      setIssueUnitId(line.unit?.id || '');
+                      setIssueBalanceId(balances.find((balance) => balance.productId === line.productId && balance.batchId === (line.batchId || null))?.id || '');
+                      setIssueQuantity(String(line.quantity));
+                      setIssueNotes(line.notes || '');
+                    }}>Edit</Button>
+                    <Button type="button" variant="danger" size="sm" disabled={removeIssueLineMutation.isPending} onClick={() => removeIssueLineMutation.mutate(line.id)}>Remove</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <p className="rounded-lg bg-slate-50 p-3 text-[#5b6678]">No saved lines yet. Add one below to start the daily request.</p>}
           <div>
             <label htmlFor="issue-department" className="mb-1 block font-medium text-[#172033]">Department</label>
             <select
@@ -555,9 +648,9 @@ export function DepartmentsView() {
             placeholder="What is this stock needed for?"
           />
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setIsIssueModalOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" disabled={createIssueMutation.isPending || isIssueDataLoading || !stockedManufacturedProducts.length}>
-              {createIssueMutation.isPending ? 'Sending…' : 'Send for approval'}
+            <Button type="button" variant="secondary" onClick={() => { setIsIssueModalOpen(false); setEditingIssueId(null); }}>Close</Button>
+            <Button type="submit" variant="primary" disabled={saveIssueLineMutation.isPending || isIssueDataLoading || !stockedManufacturedProducts.length}>
+              {saveIssueLineMutation.isPending ? 'Saving…' : editingIssueId ? 'Update line' : 'Save line'}
             </Button>
           </div>
         </form>

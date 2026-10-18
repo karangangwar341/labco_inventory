@@ -4,6 +4,7 @@ import { actionIdempotency } from '../../lib/api/idempotency';
 import {
   Department,
   DepartmentIssue,
+  DepartmentIssueBatch,
   CreateDepartmentPayload,
   CreateDepartmentIssuePayload,
   DepartmentIssueStatus,
@@ -12,6 +13,18 @@ import {
 } from './departments.types';
 
 export const departmentsService = {
+  getOpenIssueBatch: async (): Promise<DepartmentIssueBatch> =>
+    apiClient.post<DepartmentIssueBatch>(endpoints.departments.issueDraft()),
+
+  getIssueBatches: async (status?: string): Promise<DepartmentIssueBatch[]> =>
+    apiClient.get<DepartmentIssueBatch[]>(endpoints.departments.issueBatches({ status })),
+
+  saveIssueBatchLines: async (id: string, issues: CreateDepartmentIssuePayload[]): Promise<DepartmentIssueBatch> =>
+    apiClient.patch<DepartmentIssueBatch>(endpoints.departments.issueBatchLines(id), { issues }),
+
+  submitIssueBatch: async (id: string): Promise<DepartmentIssueBatch> =>
+    apiClient.post<DepartmentIssueBatch>(endpoints.departments.submitIssueBatch(id)),
+
   getDepartments: async (clientId?: string): Promise<Department[]> => {
     return apiClient.get<Department[]>(endpoints.departments.list({ clientId }));
   },

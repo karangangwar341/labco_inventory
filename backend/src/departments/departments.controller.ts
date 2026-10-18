@@ -18,6 +18,7 @@ import type { AuthenticatedUser } from '../auth/decorators/current-user.decorato
 import {
   UserRole,
   DepartmentIssueStatus,
+  DepartmentIssueBatchStatus,
   DepartmentReturnStatus,
   StockCondition,
 } from '@prisma/client';
@@ -35,6 +36,7 @@ import {
   RejectDepartmentActionDto,
 } from './dto/decide-department-request.dto.js';
 import { WriteOffStockDto } from './dto/write-off-stock.dto.js';
+import { SaveDepartmentIssueBatchDto } from './dto/save-department-issue-batch.dto.js';
 
 @ApiTags('Departments, Issues & Returns')
 @ApiBearerAuth()
@@ -103,6 +105,60 @@ export class DepartmentsController {
   // ==========================================
   // DEPARTMENT ISSUES ENDPOINTS
   // ==========================================
+
+  @Post('issues/draft')
+  @Roles(UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'Get or create the client daily department issue draft' })
+  async getOpenIssueBatch(@CurrentUser() user: AuthenticatedUser) {
+    return this.departmentsService.getOpenIssueBatch(user);
+  }
+
+  @Get('issues/batches')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'List department issue batches within caller scope' })
+  async getIssueBatches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('status') status?: DepartmentIssueBatchStatus,
+  ) {
+    return this.departmentsService.getIssueBatches(status, user);
+  }
+
+  @Patch('issues/batches/:id/lines')
+  @Roles(UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'Replace line items in an editable daily department issue draft' })
+  async saveIssueBatchLines(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SaveDepartmentIssueBatchDto,
+  ) {
+    return this.departmentsService.saveIssueBatchLines(id, dto, user);
+  }
+
+  @Post('issues/batches/:id/submit')
+  @Roles(UserRole.CLIENT_ADMIN)
+  @ApiOperation({ summary: 'Submit the daily department issue batch for posting or approval' })
+  async submitIssueBatch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.departmentsService.submitIssueBatch(id, user);
+  }
+
+  @Post('issues/batches/:id/approve')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  @ApiOperation({ summary: 'Approve and post every line in a department issue batch atomically' })
+  async approveIssueBatch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.departmentsService.decideIssueBatch(id, true, undefined, user);
+  }
+
+  @Post('issues/batches/:id/reject')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Reject every line in a department issue batch' })
+  async rejectIssueBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: RejectDepartmentActionDto,
+  ) {
+    return this.departmentsService.decideIssueBatch(id, false, dto.reason, user);
+  }
 
   @Post('issues')
   @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)

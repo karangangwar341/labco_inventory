@@ -11,6 +11,7 @@ import {
   TransactionType,
   Prisma,
 } from '@prisma/client';
+import { DepartmentIssueBatchStatus } from '@prisma/client';
 import {
   BadRequestException,
   ForbiddenException,
@@ -77,6 +78,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   beforeEach(() => {
     mockPrisma = {
       $transaction: vi.fn(async (cb) => cb(mockPrisma)),
+      $queryRaw: vi.fn(),
       client: {
         findUnique: vi.fn(),
       },
@@ -91,7 +93,17 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         findUnique: vi.fn(),
         findMany: vi.fn(),
         update: vi.fn(),
+        updateMany: vi.fn(),
+        deleteMany: vi.fn(),
       },
+      departmentIssueBatch: {
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+      auditEvent: { create: vi.fn().mockResolvedValue({}) },
       departmentReturn: {
         create: vi.fn(),
         findUnique: vi.fn(),
@@ -131,6 +143,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       notifySuperAdmins: vi.fn(),
       notifyUser: vi.fn(),
       notifyClientAdmins: vi.fn(),
+      getSettings: vi.fn().mockResolvedValue({ approvalRequirements: { departmentIssue: true } }),
     };
 
     departmentsService = new DepartmentsService(
@@ -138,7 +151,67 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       mockLedgerService as any,
       mockInventoryService as any,
       mockNotificationsService as any,
+      { reserveDepartmentIssues: vi.fn(), consumeReservationsForDepartmentIssueBatch: vi.fn(), releaseReservationsForDepartmentIssueBatch: vi.fn() } as any,
     );
+  });
+
+  describe('Daily department issue batches', () => {
+    it('creates one client-scoped daily draft for a Client Admin', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.departmentIssueBatch.findFirst.mockResolvedValue(null);
+      mockPrisma.departmentIssueBatch.create.mockResolvedValue({
+        id: 'issue-batch-1',
+        clientId: 'client-123',
+        createdById: 'ca-1',
+        status: DepartmentIssueBatchStatus.DRAFT,
+        issues: [],
+      });
+
+      const result = await departmentsService.getOpenIssueBatch(clientAdminUser);
+
+      expect(result.status).toBe(DepartmentIssueBatchStatus.DRAFT);
+      expect(mockPrisma.departmentIssueBatch.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: { clientId: 'client-123', createdById: 'ca-1' },
+      }));
+    });
+
+    it('does not expose daily issue drafts to Store Admins', async () => {
+      await expect(departmentsService.getOpenIssueBatch(storeAdminUser)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.departmentIssueBatch.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('auto-posts a submitted batch and records an audit event when approval is disabled', async () => {
+      const issue = {
+        id: 'issue-1', issueBatchId: 'issue-batch-1', productId: 'prod-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
+        quantity: new Prisma.Decimal(2), unitNameSnapshot: 'PIECE',
+        baseQuantity: new Prisma.Decimal(2), notes: null,
+      };
+      const batch = {
+        id: 'issue-batch-1', clientId: 'client-123', createdById: 'ca-1',
+        status: DepartmentIssueBatchStatus.DRAFT, issues: [issue],
+      };
+      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, clientId: 'client-123' });
+      mockPrisma.departmentIssueBatch.findUnique.mockResolvedValue(batch);
+      mockPrisma.departmentIssueBatch.update.mockResolvedValue({
+        ...batch, status: DepartmentIssueBatchStatus.POSTED,
+      });
+      mockNotificationsService.getSettings.mockResolvedValue({
+        approvalRequirements: { departmentIssue: false },
+      });
+
+      const result = await departmentsService.submitIssueBatch('issue-batch-1', clientAdminUser);
+
+      expect(result.status).toBe(DepartmentIssueBatchStatus.POSTED);
+      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(expect.objectContaining({
+        sourceRefType: 'DEPARTMENT_ISSUE_BATCH',
+        lines: [expect.objectContaining({ productId: 'prod-1', direction: 'OUT' })],
+      }), 'ca-1', mockPrisma);
+      expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ action: 'DEPARTMENT_ISSUE_BATCH_AUTO_POSTED' }),
+      }));
+    });
   });
 
   describe('1. Department Master CRUD and Approval Workflow', () => {

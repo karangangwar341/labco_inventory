@@ -14,6 +14,7 @@
 - [ ] D-011 retention/privacy/legal review complete (retention schedule for audit logs, drafts and attachments remains undefined)
 - [x] D-013 conversion-change policy approved (snapshots preserved; future changes require new version & approval)
 - [x] D-014 material product edit policy approved (spec versions effective-dated and approval-gated)
+- [x] D-017 configurable approval policy and daily department-issue batch semantics decided
 - [x] PRD/workflow/schema/permissions/UI reviewed and approved
 - [x] Owner explicitly authorizes implementation (Authorized to proceed with Phase 1)
 
@@ -28,7 +29,7 @@
 - [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
 - [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [x] T-010 Client manufacturing linked/separate workflows (production runs, planned/actual/wastage output tracking, raw material availability check, atomic input deductions and output additions with no partial posting)
-- [ ] T-011 Departments, issues, returns and condition handling (return/write-off and department proposal review UI added; role, condition-balance, and workflow acceptance remain outstanding)
+- [ ] T-011 Departments, issues, returns and condition handling (daily multi-line department issue draft, batch reservations/decision, and configurable approval policy implemented; broader role, return-condition, and workflow acceptance remains outstanding)
 - [ ] T-012 Bulk CSV/document extraction and review UI (stock-in/out submit and approval paths exist; physical count/catalog import posting, persisted duplicate decisions and malware scanning remain incomplete)
 - [x] T-013 Notifications, low-stock and expiry alerts (in-app notification center, downward crossing low-stock triggers, persistent low-stock state, recovery re-crossing, configurable 90/30/7 day expiry warnings, Store Admin exclusion policy, sound disabled by default)
 - [ ] T-014 Reports, exports and export audit (API/UI wired; full tenant/privacy/export-audit acceptance remains outstanding)

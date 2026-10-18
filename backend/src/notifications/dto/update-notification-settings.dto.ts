@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsObject, IsOptional, Min } from 'class-validator';
 
 export class UpdateNotificationSettingsDto {
   @ApiPropertyOptional({
@@ -25,4 +25,9 @@ export class UpdateNotificationSettingsDto {
   @IsOptional()
   @IsBoolean()
   receiptConfirmationEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Super Admin approval requirement per inventory workflow' })
+  @IsOptional()
+  @IsObject()
+  approvalRequirements?: Record<string, unknown>;
 }

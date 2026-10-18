@@ -31,7 +31,7 @@ Provide an online system for a company to manage warehouse inventory, client sup
 - Automated warehouse selection/allocation.
 
 ## 4. Core requirements
-**REQ-001** All inventory-changing operations require Super Admin approval unless a future signed decision explicitly changes this.
+**REQ-001** Super Admin approval is required by default for supported inventory-changing workflows. Super Admin may configure each supported workflow to post immediately after server validation; immediate posting must be atomic, idempotent, and audited. Policy changes apply only to new submissions; pending items retain their submitted policy/state.
 **REQ-002** Upload/import must never alter finalized inventory. Extracted rows must be reviewed, validated, submitted and approved.
 **REQ-003** Inventory movements must use an append-only ledger; corrections create compensating/reversal entries rather than editing historical movements.
 **REQ-004** No negative usable stock. Reservation and posting checks must be atomic under concurrent requests.
@@ -51,6 +51,7 @@ Provide an online system for a company to manage warehouse inventory, client sup
 **REQ-018** Low-stock alerts remain visible until recovered; notify once when crossing below threshold and again only after recovery then a new crossing.
 **REQ-019** Daily automatic backups are retained 90 days. Backup failure retries automatically and alerts Super Admin persistently until success.
 **REQ-020** All workflows and data access are server-authorized; frontend visibility is not an authorization boundary.
+**REQ-021** Client Admins can maintain one open daily department-issue draft per client, containing multiple departments and products, and submit the complete set as one all-or-nothing decision.
 
 ## 5. Product catalog
 - The company catalog contains raw materials; each client has a separate catalog for manufactured products. Client Admins can create manufactured products only, using categories owned by their client. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.

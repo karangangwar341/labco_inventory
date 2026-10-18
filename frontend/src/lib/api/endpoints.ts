@@ -145,6 +145,17 @@ export const endpoints = {
       return qs ? `/departments/issues?${qs}` : "/departments/issues";
     },
     issueById: (id: string) => `/departments/issues/${id}`,
+    issueDraft: () => "/departments/issues/draft",
+    issueBatches: (params?: { status?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.set("status", params.status);
+      const qs = q.toString();
+      return qs ? `/departments/issues/batches?${qs}` : "/departments/issues/batches";
+    },
+    issueBatchLines: (id: string) => `/departments/issues/batches/${id}/lines`,
+    submitIssueBatch: (id: string) => `/departments/issues/batches/${id}/submit`,
+    approveIssueBatch: (id: string) => `/departments/issues/batches/${id}/approve`,
+    rejectIssueBatch: (id: string) => `/departments/issues/batches/${id}/reject`,
     createIssue: () => "/departments/issues",
     approveIssue: (id: string) => `/departments/issues/${id}/approve`,
     rejectIssue: (id: string) => `/departments/issues/${id}/reject`,

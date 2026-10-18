@@ -85,9 +85,9 @@ export function DepartmentReturnsPanel({ issues }: Props) {
         notes: notes.trim() || undefined,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (ret) => {
       setSelectedIssueId(''); setQuantity(''); setReason(''); setNotes(''); setCondition('USABLE');
-      setSuccessMessage('Return submitted for Super Admin approval. Stock changes after approval.');
+      setSuccessMessage(ret.status === 'POSTED' ? 'Return validated and posted to inventory.' : 'Return submitted for Super Admin approval. Stock changes after approval.');
       setErrorMessage(null);
       await refreshDepartmentData();
     },

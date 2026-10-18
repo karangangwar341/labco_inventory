@@ -31,6 +31,12 @@
 16. Usable return restores central stock after approval; damaged/expired return remains unavailable.
 17. Low-stock alert triggers on downward crossing, persists while low, and triggers again only after recovery and a new crossing.
 18. Backup failure retries, alerts Super Admin and clears persistent warning only after successful backup.
+19. Approval policy defaults to required for all supported workflows; partial settings preserve unspecified defaults and reject malformed values.
+20. A Client Admin can maintain one client-scoped daily issue draft with multiple lines; other tenants and Store Admins cannot read or edit it.
+21. Daily issue submission reserves all lines or none; concurrent submissions cannot over-reserve available stock.
+22. Batch approval/rejection is atomic across all lines, and rejection releases every reservation.
+23. With department-issue approval disabled, submit posts all lines, marks `POSTED`, emits an audit event, and retries cannot duplicate ledger posting.
+24. Changing approval settings does not alter already-pending submissions.
 
 ## 3. Reservation and concurrency tests
 1. 100 available; submit request for 90 → reserved 90, available 10.

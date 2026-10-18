@@ -392,6 +392,9 @@ export class RequestsService {
       throw new ForbiddenException('Store Admins can only submit requests for company raw materials');
     }
 
+    const requirements = (await this.notificationsService.getSettings()).approvalRequirements;
+    const requiresApproval = requirements.stockRequests[request.requestType];
+
     const submitted = await this.prisma.$transaction(async (tx) => {
       // Stock-out and Dispatch require source location and reserve usable stock atomically
       if (
@@ -423,6 +426,10 @@ export class RequestsService {
         },
       });
     });
+
+    if (!requiresApproval) {
+      return this.approveRequest(user, requestId, { idempotencyKey }, true);
+    }
 
     const { whatText, fromText, toText, reqCode } = this.formatMovementSummary(request);
     const typeLabel = request.requestType.replaceAll('_', ' ').toLowerCase();
@@ -657,8 +664,9 @@ export class RequestsService {
     user: AuthenticatedUser,
     requestId: string,
     dto: ApproveStockRequestDto,
+    automated = false,
   ) {
-    if (user.role !== UserRole.SUPER_ADMIN) {
+    if (!automated && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only Super Admin can approve requests');
     }
 
@@ -692,7 +700,7 @@ export class RequestsService {
     }
 
     // Idempotency check: if already approved, return without duplicate posting
-    if (request.status === RequestStatus.APPROVED) {
+    if (request.status === RequestStatus.APPROVED || request.status === RequestStatus.POSTED) {
       return request;
     }
 
@@ -816,19 +824,29 @@ export class RequestsService {
       }
 
       // 3. Record approval record
-      await tx.approval.create({
-        data: {
-          requestId,
-          decision: ApprovalDecision.APPROVED,
-          approverId: user.id,
-          reason: 'Approved by Super Admin',
-        },
-      });
+      if (automated) {
+        await tx.auditEvent.create({ data: {
+          actorUserId: user.id,
+          action: 'REQUEST_AUTO_POSTED',
+          entityType: 'STOCK_REQUEST',
+          entityId: requestId,
+          reason: 'Super Admin approval settings allow immediate posting for this request type.',
+        } });
+      } else {
+        await tx.approval.create({
+          data: {
+            requestId,
+            decision: ApprovalDecision.APPROVED,
+            approverId: user.id,
+            reason: 'Approved by Super Admin',
+          },
+        });
+      }
 
       // 4. Update request status to APPROVED
       return tx.stockRequest.update({
         where: { id: requestId },
-        data: { status: RequestStatus.APPROVED },
+        data: { status: automated ? RequestStatus.POSTED : RequestStatus.APPROVED },
         include: {
           lines: true,
           approvals: true,
