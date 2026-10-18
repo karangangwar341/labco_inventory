@@ -28,7 +28,7 @@
 - [x] T-008 Stock-in/out and physical corrections (stock-in source types, lot/batch & expiry tracking validation, physical count snapshot/variance adjustments, historical transaction correction via linked reversal/replacement)
 - [x] T-009 Dispatch, transfers, receipt and discrepancies (in-transit tracking, D-001 immediate atomic transfer when receipt confirmation disabled, client receipt recording with variance, D-002 discrepancy holding, privacy interceptor source warehouse hiding)
 - [x] T-010 Client manufacturing linked/separate workflows (production runs, planned/actual/wastage output tracking, raw material availability check, atomic input deductions and output additions with no partial posting)
-- [ ] T-011 Departments, issues, returns and condition handling (backend endpoints exist; department return/write-off screens and proposal queue remain missing)
+- [ ] T-011 Departments, issues, returns and condition handling (return/write-off and department proposal review UI added; role, condition-balance, and workflow acceptance remain outstanding)
 - [ ] T-012 Bulk CSV/document extraction and review UI (stock-in/out submit and approval paths exist; physical count/catalog import posting, persisted duplicate decisions and malware scanning remain incomplete)
 - [x] T-013 Notifications, low-stock and expiry alerts (in-app notification center, downward crossing low-stock triggers, persistent low-stock state, recovery re-crossing, configurable 90/30/7 day expiry warnings, Store Admin exclusion policy, sound disabled by default)
 - [ ] T-014 Reports, exports and export audit (API/UI wired; full tenant/privacy/export-audit acceptance remains outstanding)

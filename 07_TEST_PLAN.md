@@ -25,6 +25,8 @@
 12. Damaged/expired stock is excluded from usable quantity; write-off requires approval.
 13. Physical count adjustment and historical correction follow separate workflows.
 14. Linked manufacturing posts all inputs/outputs atomically; simulated failure posts none.
+14a. A manufacturing draft can be reopened and edited by its original Client Admin; edits do not change stock, other clients cannot edit it, and non-draft runs are locked.
+14b. A production run cannot be submitted until actual output is recorded; submission rechecks available raw materials and leaves all balances unchanged pending Super Admin approval.
 15. Department issue reduces central client stock only after approval; no department balance is created.
 16. Usable return restores central stock after approval; damaged/expired return remains unavailable.
 17. Low-stock alert triggers on downward crossing, persists while low, and triggers again only after recovery and a new crossing.

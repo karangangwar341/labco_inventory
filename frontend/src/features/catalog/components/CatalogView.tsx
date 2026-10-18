@@ -18,6 +18,7 @@ import { DataTable, ColumnDef } from '@/components/ui/DataTable';
 import { ErrorState } from '@/components/feedback/ErrorState';
 import { catalogService } from '../catalog.service';
 import { CatalogProduct, CategoryDto } from '../catalog.types';
+import { inventoryService } from '@/features/inventory/inventory.service';
 
 type CatalogTab = 'PRODUCTS' | 'TAXONOMY';
 
@@ -72,15 +73,60 @@ export function CatalogView() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Cached inventory balances to display real-time stock without redundant server requests
+  const { data: rawBalances = [] } = useQuery({
+    queryKey: queryKeys.inventory.balances(user?.id || user?.role),
+    queryFn: () => inventoryService.getBalances(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const stockByProductId = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        availableQty: number;
+        usableQty: number;
+        reservedQty: number;
+        damagedQty: number;
+        expiredQty: number;
+        physicalQty: number;
+        unit?: string;
+      }
+    >();
+    if (Array.isArray(rawBalances)) {
+      for (const b of rawBalances) {
+        const existing = map.get(b.productId) || {
+          availableQty: 0,
+          usableQty: 0,
+          reservedQty: 0,
+          damagedQty: 0,
+          expiredQty: 0,
+          physicalQty: 0,
+          unit: b.unit,
+        };
+        existing.availableQty += Number(b.availableQty || 0);
+        existing.usableQty += Number(b.usableQty || 0);
+        existing.reservedQty += Number(b.reservedQty || 0);
+        existing.damagedQty += Number(b.damagedQty || 0);
+        existing.expiredQty += Number(b.expiredQty || 0);
+        existing.physicalQty += Number(b.physicalQty || 0);
+        if (!existing.unit && b.unit) existing.unit = b.unit;
+        map.set(b.productId, existing);
+      }
+    }
+    return map;
+  }, [rawBalances]);
+
   useEffect(() => {
-    if (!productIdFromNotification || role !== 'SUPER_ADMIN' || isLoading) return;
+    if (!productIdFromNotification || isLoading) return;
     const cachedProduct = products.find((product) => product.id === productIdFromNotification);
     if (cachedProduct) {
+      const requiresReview = role === 'SUPER_ADMIN' && cachedProduct.status === 'PENDING_APPROVAL';
       window.setTimeout(() => {
-        setSelectedStatus('PENDING_APPROVAL');
+        if (requiresReview) setSelectedStatus('PENDING_APPROVAL');
         setSelectedProductId(cachedProduct.id);
       }, 0);
-      router.replace('/catalog?status=PENDING_APPROVAL', { scroll: false });
+      router.replace(requiresReview ? '/catalog?status=PENDING_APPROVAL' : '/catalog', { scroll: false });
       return;
     }
     if (attemptedProductLookup.current === productIdFromNotification) return;
@@ -90,9 +136,10 @@ export function CatalogView() {
       queryClient.setQueryData<CatalogProduct[]>(key, (current = []) =>
         current.some((item) => item.id === product.id) ? current : [...current, product],
       );
-      setSelectedStatus('PENDING_APPROVAL');
+      const requiresReview = role === 'SUPER_ADMIN' && product.status === 'PENDING_APPROVAL';
+      if (requiresReview) setSelectedStatus('PENDING_APPROVAL');
       setSelectedProductId(product.id);
-      router.replace('/catalog?status=PENDING_APPROVAL', { scroll: false });
+      router.replace(requiresReview ? '/catalog?status=PENDING_APPROVAL' : '/catalog', { scroll: false });
     }).catch((error: unknown) => {
       setNotificationLoadError(error instanceof Error ? error.message : 'This product request could not be opened. Refresh the catalog and try again.');
     });
@@ -454,6 +501,36 @@ export function CatalogView() {
                   +{activeUnits.length - 1} pack {activeUnits.length - 1 === 1 ? 'unit' : 'units'}
                 </div>
               )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'availableStock',
+        header: 'Available Stock',
+        width: '12%',
+        minWidth: '110px',
+        valign: 'top',
+        cell: (product) => {
+          const stock = stockByProductId.get(product.id);
+          const available = Number(stock?.availableQty ?? 0);
+          const min = Number(product.minQuantity ?? product.minThreshold ?? 0);
+          const isOut = available <= 0;
+          const isLow = min > 0 && available <= min;
+          const unit = product.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName || product.baseUnit;
+
+          return (
+            <div className="text-xs">
+              <span className={`font-mono font-bold block ${
+                isOut ? 'text-slate-400' : isLow ? 'text-amber-700' : 'text-slate-900'
+              }`}>
+                {available} {unit}
+              </span>
+              <span className={`text-[10px] font-semibold block ${
+                isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-emerald-700'
+              }`}>
+                {isOut ? 'Out of stock' : isLow ? 'Low stock' : 'In stock'}
+              </span>
             </div>
           );
         },
@@ -1120,8 +1197,93 @@ export function CatalogView() {
               </p>
             )}
 
+            {/* Real-time Available Stock Card */}
+            {(() => {
+              const stock = stockByProductId.get(selectedProduct.id);
+              const available = Number(stock?.availableQty ?? 0);
+              const usable = Number(stock?.usableQty ?? 0);
+              const reserved = Number(stock?.reservedQty ?? 0);
+              const damaged = Number(stock?.damagedQty ?? 0);
+              const expired = Number(stock?.expiredQty ?? 0);
+              const minThreshold = Number(selectedProduct.minQuantity ?? selectedProduct.minThreshold ?? 0);
+              const isOut = available <= 0;
+              const isLow = minThreshold > 0 && available <= minThreshold;
+              const baseUnitName =
+                selectedProduct.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
+                selectedProduct.baseUnit ||
+                'Units';
+
+              return (
+                <div
+                  className={`p-3.5 rounded-xl border transition-all ${
+                    isOut
+                      ? 'bg-rose-50/70 border-rose-200'
+                      : isLow
+                        ? 'bg-amber-50/70 border-amber-200'
+                        : 'bg-emerald-50/60 border-emerald-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                        Warehouse Stock Availability
+                      </span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-2xl font-bold font-mono text-slate-900">
+                          {available}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">
+                          {baseUnitName} available
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <Badge variant={isOut ? 'danger' : isLow ? 'warning' : 'success'}>
+                        {isOut
+                          ? 'Out of Stock (0 Available)'
+                          : isLow
+                            ? `Low Stock (${available} / min ${minThreshold})`
+                            : `In Stock (${available} ${baseUnitName})`}
+                      </Badge>
+                      {minThreshold > 0 && (
+                        <p className="text-[10px] text-slate-500 mt-1 font-mono">
+                          Low stock threshold: {minThreshold} {baseUnitName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {(usable > 0 || reserved > 0 || damaged > 0 || expired > 0) && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-3 text-[11px] text-slate-600 font-mono">
+                      <span>Usable: <strong className="text-slate-900">{usable}</strong></span>
+                      {reserved > 0 && <span>Reserved: <strong className="text-amber-800">{reserved}</strong></span>}
+                      {damaged > 0 && <span>Damaged: <strong className="text-rose-700">{damaged}</strong></span>}
+                      {expired > 0 && <span>Expired: <strong className="text-rose-700">{expired}</strong></span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Core Metrics Grid */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50/70 rounded-xl border border-slate-100 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50/70 rounded-xl border border-slate-100 text-center">
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-400">Available Stock</div>
+                <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
+                  {stockByProductId.get(selectedProduct.id)?.availableQty ?? 0}{' '}
+                  <span className="text-[10px] font-normal text-slate-500">
+                    {selectedProduct.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
+                      selectedProduct.baseUnit}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-slate-400">Low Stock Threshold</div>
+                <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
+                  {selectedProduct.minQuantity ?? selectedProduct.minThreshold ?? 0}
+                </div>
+              </div>
               <div>
                 <div className="text-[10px] uppercase font-bold text-slate-400">Base Unit</div>
                 <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
@@ -1135,12 +1297,6 @@ export function CatalogView() {
                   <Badge variant="neutral" size="sm">
                     {(selectedProduct.trackingMode || 'NONE').replaceAll('_', ' ')}
                   </Badge>
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-slate-400">Low Stock Threshold</div>
-                <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
-                  {selectedProduct.minQuantity ?? selectedProduct.minThreshold ?? 0}
                 </div>
               </div>
             </div>

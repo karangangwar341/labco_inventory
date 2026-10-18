@@ -497,7 +497,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
             </div>
 
             {/* Movement Particulars (2 Columns) */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', marginBottom: '12px', fontSize: '11px' }}>
+            <table className="print-document-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', marginBottom: '12px', fontSize: '11px' }}>
               <tbody>
                 <tr>
                   <td style={{ width: '50%', borderRight: '1px solid #0f172a', padding: '10px 12px', verticalAlign: 'top', backgroundColor: '#f8fafc' }}>
@@ -531,7 +531,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
             </table>
 
             {/* Itemised Goods Table */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', marginBottom: '12px', fontSize: '11px' }}>
+            <table className="print-document-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', marginBottom: '12px', fontSize: '11px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #0f172a', textTransform: 'uppercase', fontSize: '10px', fontWeight: 700, color: '#0f172a', letterSpacing: '0.03em' }}>
                   <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '36px', textAlign: 'center' }}>#</th>
@@ -604,7 +604,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
             </div>
 
             {/* 3-Column Formal Signature Blocks */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', fontSize: '10px', marginBottom: '10px' }}>
+            <table className="print-document-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', fontSize: '10px', marginBottom: '10px' }}>
               <tbody>
                 <tr>
                   <td style={{ width: '33.33%', borderRight: '1px solid #0f172a', padding: '10px', verticalAlign: 'top', height: '100px' }}>

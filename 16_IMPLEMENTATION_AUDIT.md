@@ -4,6 +4,19 @@
 **Scope:** Requirements, state workflows, role matrix, UI/UX specification, API spec, repository routes/services/schema.  
 **Method:** Findings below are based on code paths and screens, not the completion markers in `13_TASKS.md`. This is a static audit; business flows were not exercised end-to-end.
 
+## Follow-up security hardening — 2026-10-18
+
+- Session validation no longer accepts a previously cached positive result after a revocation or database error. New requests check current session state in PostgreSQL; parallel requests for the same session still share an in-flight lookup. A database failure therefore fails closed. This can add a database read to authenticated requests and must be included in the outstanding performance benchmark (P-007).
+- Caller-provided `X-Request-ID` values are restricted to 1–128 safe printable characters; invalid values are replaced with a cryptographically generated UUID before being returned or logged.
+- This is a source review only. Automated tests and production deployment behavior were not validated in this follow-up.
+
+## Department workflow UI follow-up — 2026-10-18
+
+- Added a Client Admin return form linked to an approved department issue, return status/history, and Super Admin approve/reject controls. Approval remains the only path that posts returned stock; rejection requires a recorded reason.
+- Added a Super Admin write-off form limited to recorded damaged/expired client balances, with quantity bounds, reason, and idempotency key.
+- Super Admin department cards now show pending name/status proposals and expose the existing approve/reject service actions.
+- No schema migration was added. Automated tests and browser accessibility/responsive checks have not been run; keep T-011 open until those acceptance checks are complete.
+
 ## Status key
 
 - **Verified:** matching UI/API/service path exists by inspection; this does not mean runtime acceptance tests passed.
@@ -23,8 +36,8 @@
 | Stock-in/out, transfers, dispatch/receipt | Partial | Shipment and inventory pages/services exist. Workflow-state and privacy behavior require runtime acceptance review. |
 | Physical count | Missing in import posting | API enum has `PHYSICAL_COUNT`, but importer did not post count variances. New importer now rejects unsupported import types explicitly; a physical-count workflow is still required. |
 | Manufacturing | Partial | Production screens and backend service exist. Separate-vs-linked mode and full atomicity acceptance were not verified. |
-| Department issues | Partial | Department and issue screens exist. Department master change approval is not exposed in the screen. |
-| Department returns and write-offs | Partial | Backend endpoints/services exist, but no corresponding return/write-off UI was found. |
+| Department issues | Partial | Department and issue screens exist. Super Admin can now review pending department creations and proposed name/status changes; browser and role-acceptance checks remain open. |
+| Department returns and write-offs | Partial → UI added | Client Admin can submit returns linked to approved issues; Super Admin can approve/reject returns and post damaged/expired write-offs. Browser and role-acceptance checks remain open. |
 | Daily closing/report grouping | Missing | Workflow spec §12 requires grouped transaction drafts, per-item decisions, and whole-group rejection. No daily report entity, API, or screen exists. |
 | CSV imports | Partial → safer submission added | Import draft/review/validation, location scoping, submit-before-approve, and stock-in/out posting exist. Product catalog and physical count import are explicitly blocked until implemented. Duplicate merge/keep-separate resolution is not persisted; duplicate rows only warn. |
 | AI document extraction and file safety | Partial / open decision | Adapter and extraction path exist. Malware scanning is not present; current clean status must not be treated as a real scan. MIME/source constraints and retention are open under D-015/D-011. |
@@ -35,13 +48,13 @@
 
 ## Screens found
 
-Frontend routes found under `frontend/src/app/(dashboard)`: dashboard, inventory, requests/list/new/detail, approvals, shipments/list/detail, catalog/list/create/edit, manufacturing, departments, imports, reports, admin/users, admin/organizations, admin/settings, backups, and help. No daily closing screen was found. Department return/write-off and department master approval screens are also absent.
+Frontend routes found under `frontend/src/app/(dashboard)`: dashboard, inventory, requests/list/new/detail, approvals, shipments/list/detail, catalog/list/create/edit, manufacturing, departments, imports, reports, admin/users, admin/organizations, admin/settings, backups, and help. The department route now includes issue, return, write-off, and proposal-review panels. No daily closing screen was found.
 
 ## High-priority follow-up backlog
 
 1. Add daily closing batch model/API/UI only after reconciling its transaction types, grouping key, and whole-batch rejection semantics with the existing workflow spec.
 2. Implement physical-count variance posting and product-catalog imports; keep them unavailable until the posting paths are transactional and approved.
-3. Add department return and write-off screens, plus a Super Admin queue for department create/update proposals and returns.
+3. Complete department workflow acceptance for returns, write-offs, and department proposals, including browser, role-scope, approval/idempotency, and inventory-condition checks.
 4. Persist duplicate decisions (keep separate/merge) with explicit human choice and audit history; do not accept ignored client fields as resolution.
 5. Select and integrate malware scanning, then define MIME/size/source constraints and attachment retention (D-015/D-011).
 6. Complete API/schema/UI documentation synchronization and run authorized acceptance tests for role scope, privacy, ledger invariants, idempotency, migration, and key user journeys.

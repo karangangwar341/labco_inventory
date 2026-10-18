@@ -38,6 +38,12 @@ export class BackupsController {
     return this.backupsService.triggerBackup(dto, user);
   }
 
+  @Get('health')
+  @ApiOperation({ summary: 'Get detailed system health for authenticated Super Admins' })
+  async getSystemHealth() {
+    return this.backupsService.getHealth();
+  }
+
   @Get()
   @ApiOperation({ summary: 'List backup history records' })
   @ApiQuery({ name: 'status', enum: BackupStatus, required: false })

@@ -76,10 +76,22 @@ code, kbd, samp, pre, .font-mono {
 
 /* Subtle gridded background behind content */
 .bg-grid-pattern {
-  background-size: 24px 24px;
-  background-image: 
-    linear-gradient(to right, rgba(226, 232, 240, 0.5) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(226, 232, 240, 0.5) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+}
+
+/* Keep long identifiers and imported text inside dashboard table cells. */
+.dashboard-content table:not(.print-document-table) {
+  max-width: 100%;
+}
+
+.dashboard-content table:not(.print-document-table) th,
+.dashboard-content table:not(.print-document-table) td {
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 /* Polished Scrollbar */

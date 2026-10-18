@@ -8,11 +8,12 @@ export interface StockBalanceDto {
   warehouseId?: string | null;
   clientId?: string | null;
   productId: string;
+  batchId?: string | null;
+  batchNumber?: string;
   productName?: string;
   brand?: string | null;
   categoryName?: string | null;
   categoryId?: string | null;
-  batchNumber?: string;
   usableQty: number;
   reservedQty: number;
   damagedQty: number;

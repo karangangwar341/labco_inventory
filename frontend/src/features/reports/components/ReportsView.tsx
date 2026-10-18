@@ -389,9 +389,6 @@ export function ReportsView() {
                   Showing <strong className="text-slate-800 font-mono">{reportQuery.data?.rowCount ?? rows.length}</strong> records
                 </span>
                 <span className="h-4 w-px bg-slate-200" />
-                <Badge variant="primary" size="sm">
-                  Live snapshot
-                </Badge>
               </div>
             }
           >

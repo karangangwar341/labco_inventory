@@ -3,8 +3,11 @@ import { ProductionStatus } from './common';
 export interface BOMItemDto {
   productId: string;
   productName?: string;
-  quantity: number;
+  quantity: number | string;
   unit?: string;
+  unitId?: string;
+  batchNumber?: string | null;
+  expiryDate?: string | null;
 }
 
 export interface ProductionRunDto {
@@ -13,12 +16,17 @@ export interface ProductionRunDto {
   status: ProductionStatus;
   clientId: string;
   clientName?: string;
+  client?: { id: string; name: string };
   locationId: string;
   locationName?: string;
   yieldProductId: string;
   yieldProductName?: string;
-  plannedQuantity: number;
-  actualQuantity?: number;
+  plannedQuantity: number | string;
+  plannedOutput?: number | string | null;
+  actualOutput?: number | string | null;
+  wastage?: number | string | null;
+  productionReference?: string | null;
+  actualQuantity?: number | string | null;
   inputLines: BOMItemDto[];
   outputLines: BOMItemDto[];
   notes?: string;

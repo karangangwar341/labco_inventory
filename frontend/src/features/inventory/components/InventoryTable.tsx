@@ -1183,7 +1183,6 @@ export function InventoryTable() {
                         <TableRow key={p.productId}>
                           <TableCell className="font-semibold text-slate-900">
                             {p.productName}
-                            <div className="font-mono text-[10px] text-slate-400">SKU: #{p.productId.slice(0, 8).toUpperCase()}</div>
                           </TableCell>
                           {user?.role !== 'CLIENT_ADMIN' && (
                             <TableCell>
@@ -1303,7 +1302,6 @@ export function InventoryTable() {
                           <TableRow key={p.productId}>
                             <TableCell className="font-semibold text-slate-900">
                               {p.productName}
-                              <div className="font-mono text-[10px] text-slate-400">SKU: #{p.productId.slice(0, 8).toUpperCase()}</div>
                             </TableCell>
                             {user?.role !== 'CLIENT_ADMIN' && (
                               <TableCell>
@@ -1388,7 +1386,6 @@ export function InventoryTable() {
                         <TableRow key={p.productId}>
                           <TableCell className="font-semibold text-slate-900">
                             {p.productName}
-                            <div className="font-mono text-[10px] text-slate-400">SKU: {p.productId}</div>
                           </TableCell>
                           {user?.role !== 'CLIENT_ADMIN' && (
                             <TableCell>
@@ -1465,7 +1462,6 @@ export function InventoryTable() {
                         <TableRow key={p.productId}>
                           <TableCell className="font-semibold text-slate-900">
                             {p.productName}
-                            <div className="font-mono text-[10px] text-slate-400">SKU: {p.productId}</div>
                           </TableCell>
                           <TableCell>
                             <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60">
@@ -1536,11 +1532,6 @@ export function InventoryTable() {
                         <span className="font-semibold text-slate-900">{b.productName || 'Product'}</span>
                         {isLow && <Badge variant="warning" size="sm">LOW STOCK</Badge>}
                       </div>
-                      {b.productId && (
-                        <div className="font-mono text-[10px] text-slate-400">
-                          SKU: {b.productId}
-                        </div>
-                      )}
                     </div>
                   </TableCell>
 

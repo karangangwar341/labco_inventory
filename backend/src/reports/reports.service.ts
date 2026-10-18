@@ -168,7 +168,18 @@ export class ReportsService {
     const balances = await this.prisma.inventoryBalance.findMany({
       where,
       include: {
-        product: { select: { id: true, name: true, minQuantity: true, trackingMode: true } },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            minQuantity: true,
+            trackingMode: true,
+            units: {
+              where: { isBaseUnit: true },
+              select: { unitName: true },
+            },
+          },
+        },
         location: {
           select: {
             id: true,
@@ -190,6 +201,7 @@ export class ReportsService {
       const expired = b.expiredQty.toNumber();
       const physical = usable + damaged + expired;
       const minQty = b.product.minQuantity.toNumber();
+      const baseUnit = b.product.units?.[0]?.unitName || 'Units';
       const locationName =
         b.location.locationType === 'WAREHOUSE'
           ? b.location.warehouse?.name ?? 'Warehouse'
@@ -198,6 +210,7 @@ export class ReportsService {
       return {
         productId: b.product.id,
         productName: b.product.name,
+        baseUnit,
         locationName,
         locationType: b.location.locationType,
         batchNumber: b.batch?.batchNumber || 'NONE',
@@ -468,6 +481,16 @@ export class ReportsService {
         wastage: r.wastage ? r.wastage.toNumber() : 0,
         totalInputsCount: r.inputs.length,
         totalOutputsCount: r.outputs.length,
+        inputs: r.inputs.map((input) => ({
+          product: input.product.name,
+          quantity: input.quantity.toNumber(),
+          unit: input.unitNameSnapshot,
+        })),
+        outputs: r.outputs.map((output) => ({
+          product: output.product.name,
+          quantity: output.quantity.toNumber(),
+          unit: output.unitNameSnapshot,
+        })),
         createdAt: r.createdAt.toISOString().slice(0, 10),
       };
     });

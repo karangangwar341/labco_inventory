@@ -335,7 +335,7 @@ export function ClientsManagement() {
 
                       <div className="flex items-center gap-2">
                         <Link
-                          href={`/admin/organizations/${client.id}`}
+                          href={`/admin/clients/${client.id}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50/60 hover:bg-blue-50 rounded-lg border border-blue-200/80 transition-colors"
                         >
                           <span>Client Overview</span>

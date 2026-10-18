@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../features/auth/auth.store';
 import { getActiveDomain, SubNavItem } from './navigation';
 import { notificationsService } from '../../features/notifications/notifications.service';
@@ -16,6 +16,7 @@ interface TopBarProps {
 
 export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, role } = useAuth();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -236,7 +237,21 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                     // Determine direct action link based on entity and user role
                     let targetLink: { href: string; label: string } | null = null;
 
-                    if (n.entityType === 'DEPARTMENT' || n.title.toLowerCase().includes('department')) {
+                    if (
+                      n.entityType === 'PRODUCTION_RUN' ||
+                      n.title.toLowerCase().includes('production')
+                    ) {
+                      targetLink = {
+                        href:
+                          role === 'SUPER_ADMIN'
+                            ? `/approvals?tab=MANUFACTURING${n.entityId ? `&id=${encodeURIComponent(n.entityId)}` : ''}`
+                            : `/manufacturing?tab=RUNS${n.entityId ? `&runId=${encodeURIComponent(n.entityId)}` : ''}`,
+                        label:
+                          role === 'SUPER_ADMIN'
+                            ? 'Review Production Run'
+                            : 'View Production Run',
+                      };
+                    } else if (n.entityType === 'DEPARTMENT' || n.title.toLowerCase().includes('department')) {
                       targetLink = n.entityId
                         ? { href: `/departments?departmentId=${encodeURIComponent(n.entityId)}`, label: role === 'SUPER_ADMIN' ? 'Review Department' : 'View Department' }
                         : { href: '/departments', label: 'View Departments' };
@@ -244,7 +259,7 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                       targetLink = n.entityId && role === 'SUPER_ADMIN'
                         ? { href: `/catalog?status=PENDING_APPROVAL&productId=${encodeURIComponent(n.entityId)}`, label: 'Review Product' }
                         : n.entityId
-                          ? { href: `/catalog/${n.entityId}`, label: 'View Product' }
+                          ? { href: `/catalog?productId=${encodeURIComponent(n.entityId)}`, label: 'View Product' }
                           : { href: '/catalog', label: 'View Catalog' };
                     } else if (
                       n.entityType === 'STOCK_REQUEST' ||
@@ -291,8 +306,17 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                     return (
                       <div
                         key={n.id}
-                        className={`py-3 transition-colors ${
-                          !n.readAt ? 'bg-blue-50/40 px-2.5 rounded-lg my-1' : 'px-1'
+                        onClick={() => {
+                          if (!n.readAt) handleMarkAsRead(n.id);
+                          setShowNotifications(false);
+                          if (targetLink?.href) {
+                            router.push(targetLink.href);
+                          }
+                        }}
+                        className={`py-3 transition-colors rounded-lg px-2.5 my-1 ${
+                          targetLink ? 'cursor-pointer hover:bg-slate-100/80' : ''
+                        } ${
+                          !n.readAt ? 'bg-blue-50/70 hover:bg-blue-100/70' : 'hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -304,7 +328,11 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                           </div>
                           {!n.readAt && (
                             <button
-                              onClick={() => handleMarkAsRead(n.id)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkAsRead(n.id);
+                              }}
                               className="text-[10px] font-medium text-blue-600 hover:underline shrink-0"
                             >
                               Mark read
@@ -327,17 +355,10 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                           </span>
 
                           {targetLink && (
-                            <Link
-                              href={targetLink.href}
-                              onClick={() => {
-                                if (!n.readAt) handleMarkAsRead(n.id);
-                                setShowNotifications(false);
-                              }}
-                              className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 hover:underline bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200/60 transition-colors"
-                            >
+                            <span className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-200/60 transition-colors">
                               <span>{targetLink.label}</span>
                               <span>→</span>
-                            </Link>
+                            </span>
                           )}
                         </div>
                       </div>

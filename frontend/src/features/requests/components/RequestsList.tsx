@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { StockRequest } from '../requests.types';
 import { requestsService } from '../requests.service';
+import { administrationService } from '../../administration/administration.service';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { StatusLabel } from '../../../components/data-display/StatusLabel';
@@ -15,103 +16,220 @@ import { ErrorState } from '../../../components/feedback/ErrorState';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useAuth } from '../../auth/auth.store';
 
-type RequestFilter = 'ALL' | 'OPEN' | 'FINISHED';
-type OperationFilter = 'ALL' | 'DISPATCH' | 'STOCK_IN';
+type StatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DRAFT';
+type RequestTypeFilter = 'ALL' | 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
 
-function requestMeta(request: StockRequest): { label: string; sublabel: string; variant: 'primary' | 'success' | 'purple' | 'neutral' } {
+function requestMeta(request: StockRequest): {
+  label: string;
+  sublabel: string;
+  variant: 'primary' | 'success' | 'purple' | 'warning' | 'neutral';
+} {
   const type = (request.requestType || request.type || '').toUpperCase();
-  if (type.includes('STOCK_IN')) return { label: 'Stock In', sublabel: 'Inbound Receipt', variant: 'success' };
-  if (type.includes('DISPATCH') || type.includes('STOCK_OUT')) return { label: 'Dispatch', sublabel: 'Consignment Out', variant: 'primary' };
-  if (type.includes('TRANSFER')) return { label: 'Transfer', sublabel: 'Internal Move', variant: 'purple' };
-  if (type.includes('ADJUSTMENT')) return { label: 'Adjustment', sublabel: 'Stock Reconciliation', variant: 'neutral' };
-  return { label: 'Stock Movement', sublabel: 'General Request', variant: 'neutral' };
-}
-
-function isOpenRequest(status: StockRequest['status']) {
-  return status === 'DRAFT' || status === 'PENDING_APPROVAL';
+  if (type.includes('STOCK_IN')) {
+    return { label: 'Stock In', sublabel: 'Inbound Receipt', variant: 'success' };
+  }
+  if (type.includes('DISPATCH') || type.includes('STOCK_OUT')) {
+    return { label: 'Stock Out', sublabel: 'Consignment Out', variant: 'primary' };
+  }
+  if (type.includes('TRANSFER')) {
+    return { label: 'Transfer', sublabel: 'Internal Move', variant: 'purple' };
+  }
+  if (type.includes('ADJUSTMENT')) {
+    return { label: 'Adjustment', sublabel: 'Reconciliation', variant: 'warning' };
+  }
+  return { label: type || 'Movement', sublabel: 'General Request', variant: 'neutral' };
 }
 
 export function RequestsList() {
   const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isStoreAdmin = user?.role === 'STORE_ADMIN';
+
+  // Filter States
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [typeFilter, setTypeFilter] = useState<RequestTypeFilter>('ALL');
+  const [selectedClientId, setSelectedClientId] = useState<string>('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Query: Clients for dropdown filter
+  const { data: clients = [] } = useQuery({
+    queryKey: ['administration', 'clients'],
+    queryFn: () => administrationService.getClients(),
+    enabled: isSuperAdmin || isStoreAdmin,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Query: Warehouses for dropdown filter
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ['administration', 'warehouses'],
+    queryFn: () => administrationService.getWarehouses(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Query: Stock Requests
   const {
     data: rawRequests = [],
     isLoading,
     error,
     refetch: fetchRequests,
   } = useQuery({
-    queryKey: queryKeys.requests.list(user?.id, { all: true }),
-    queryFn: () => requestsService.getRequests(),
+    queryKey: queryKeys.requests.list(user?.id, {
+      clientId: selectedClientId || undefined,
+      warehouseId: selectedWarehouseId || undefined,
+      requestType: typeFilter === 'ALL' ? undefined : typeFilter,
+      status: statusFilter === 'ALL' ? undefined : statusFilter,
+    }),
+    queryFn: () =>
+      requestsService.getRequests({
+        clientId: selectedClientId || undefined,
+        warehouseId: selectedWarehouseId || undefined,
+        requestType: typeFilter === 'ALL' ? undefined : typeFilter,
+        status: statusFilter === 'ALL' ? undefined : (statusFilter as any),
+      }),
     staleTime: 2 * 60 * 1000,
   });
-  const requests = Array.isArray(rawRequests) ? rawRequests as StockRequest[] : [];
-  const [filter, setFilter] = useState<RequestFilter>('ALL');
-  const [opFilter, setOpFilter] = useState<OperationFilter>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+
+  const requests = Array.isArray(rawRequests) ? (rawRequests as StockRequest[]) : [];
+
+  // Summary Metrics
   const counts = useMemo(() => {
-    const open = requests.filter((r) => isOpenRequest(r.status)).length;
-    const finished = requests.length - open;
-    const dispatches = requests.filter((r) => {
+    const all = requests.length;
+    const pending = requests.filter((r) => r.status === 'PENDING_APPROVAL').length;
+    const approved = requests.filter((r) => r.status === 'APPROVED').length;
+    const rejected = requests.filter((r) => r.status === 'REJECTED').length;
+    const drafts = requests.filter((r) => r.status === 'DRAFT').length;
+
+    const stockIn = requests.filter((r) =>
+      (r.requestType || r.type || '').toUpperCase().includes('STOCK_IN'),
+    ).length;
+    const stockOut = requests.filter((r) => {
       const t = (r.requestType || r.type || '').toUpperCase();
-      return t.includes('DISPATCH') || t.includes('STOCK_OUT');
+      return t.includes('STOCK_OUT') || t.includes('DISPATCH');
     }).length;
+    const transfers = requests.filter((r) =>
+      (r.requestType || r.type || '').toUpperCase().includes('TRANSFER'),
+    ).length;
+
     const totalUnits = requests.reduce((sum, r) => {
-      return sum + (r.lines || []).reduce((lineSum, l) => lineSum + Number(l.quantity || 0), 0);
+      return (
+        sum +
+        (r.lines || []).reduce((lineSum, l) => lineSum + Number(l.quantity || 0), 0)
+      );
     }, 0);
-    return { all: requests.length, open, finished, dispatches, totalUnits };
+
+    return { all, pending, approved, rejected, drafts, stockIn, stockOut, transfers, totalUnits };
   }, [requests]);
 
+  // Client-side filtering
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
-      // Status filter
-      if (filter === 'OPEN' && !isOpenRequest(request.status)) return false;
-      if (filter === 'FINISHED' && isOpenRequest(request.status)) return false;
-
-      // Operation filter
-      if (opFilter === 'DISPATCH') {
-        const t = (request.requestType || request.type || '').toUpperCase();
-        if (!t.includes('DISPATCH') && !t.includes('STOCK_OUT')) return false;
-      } else if (opFilter === 'STOCK_IN') {
-        const t = (request.requestType || request.type || '').toUpperCase();
-        if (!t.includes('STOCK_IN')) return false;
+      // Status Filter
+      if (statusFilter !== 'ALL' && request.status !== statusFilter) {
+        return false;
       }
 
-      // Text search
+      // Request Type Filter
+      if (typeFilter !== 'ALL') {
+        const t = (request.requestType || request.type || '').toUpperCase();
+        if (typeFilter === 'STOCK_IN' && !t.includes('STOCK_IN')) return false;
+        if (typeFilter === 'STOCK_OUT' && !t.includes('STOCK_OUT') && !t.includes('DISPATCH')) return false;
+        if (typeFilter === 'TRANSFER' && !t.includes('TRANSFER')) return false;
+        if (typeFilter === 'ADJUSTMENT' && !t.includes('ADJUSTMENT')) return false;
+      }
+
+      // Client Filter
+      if (selectedClientId) {
+        const matchesClient =
+          request.clientId === selectedClientId ||
+          request.client?.id === selectedClientId ||
+          request.sourceLocation?.client?.id === selectedClientId ||
+          request.destinationLocation?.client?.id === selectedClientId;
+        if (!matchesClient) return false;
+      }
+
+      // Warehouse Filter
+      if (selectedWarehouseId) {
+        const matchesWarehouse =
+          request.sourceLocation?.warehouse?.id === selectedWarehouseId ||
+          request.destinationLocation?.warehouse?.id === selectedWarehouseId;
+        if (!matchesWarehouse) return false;
+      }
+
+      // Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const ref = (request.requestNumber || request.id).toLowerCase();
         const type = (request.requestType || request.type || '').toLowerCase();
-        const loc = (request.locationName || request.destinationName || '').toLowerCase();
+        const clientName = (request.client?.name || request.destinationLocation?.client?.name || '').toLowerCase();
+        const originName = (request.sourceLocation?.warehouse?.name || '').toLowerCase();
+        const destName = (request.destinationLocation?.warehouse?.name || request.destinationName || '').toLowerCase();
         const requester = (request.requesterUsername || '').toLowerCase();
         const itemMatch = request.lines?.some((l) =>
-          (l.productName || l.product?.name || '').toLowerCase().includes(query)
+          (l.productName || l.product?.name || '').toLowerCase().includes(query),
         );
 
-        if (!ref.includes(query) && !type.includes(query) && !loc.includes(query) && !requester.includes(query) && !itemMatch) {
+        if (
+          !ref.includes(query) &&
+          !type.includes(query) &&
+          !clientName.includes(query) &&
+          !originName.includes(query) &&
+          !destName.includes(query) &&
+          !requester.includes(query) &&
+          !itemMatch
+        ) {
           return false;
         }
       }
 
       return true;
     });
-  }, [requests, filter, opFilter, searchQuery]);
+  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId, searchQuery]);
+
+  const hasActiveFilters =
+    statusFilter !== 'ALL' ||
+    typeFilter !== 'ALL' ||
+    Boolean(selectedClientId) ||
+    Boolean(selectedWarehouseId) ||
+    Boolean(searchQuery.trim());
+
+  const resetFilters = () => {
+    setStatusFilter('ALL');
+    setTypeFilter('ALL');
+    setSelectedClientId('');
+    setSelectedWarehouseId('');
+    setSearchQuery('');
+  };
 
   const columns: ColumnDef<StockRequest>[] = useMemo(
     () => [
       {
         id: 'reference',
-        header: 'Reference & Route',
-        width: '20%',
-        minWidth: '180px',
+        header: 'Reference & Scope',
+        width: '24%',
+        minWidth: '200px',
         valign: 'top',
         cell: (request) => {
-          const refNumber = request.requestNumber || 'Stock request';
-          const locationDisplay = request.destinationName || request.locationName || (request.destinationLocationId ? 'Client Location' : 'Central Warehouse');
-          const originDisplay = request.sourceLocation?.warehouse?.name || 'Central Warehouse';
+          const refNumber = request.requestNumber || '—';
+          const clientName =
+            request.client?.name ||
+            request.destinationLocation?.client?.name ||
+            request.sourceLocation?.client?.name;
+          const locationDisplay =
+            request.destinationName ||
+            request.destinationLocation?.warehouse?.name ||
+            request.destinationLocation?.client?.name ||
+            request.locationName ||
+            'Destination';
+          const originDisplay =
+            request.sourceLocation?.warehouse?.name ||
+            request.sourceLocation?.client?.name ||
+            'Central Warehouse';
           const isUrgent = request.priority === 'URGENT' || request.priority === 'HIGH';
 
           return (
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1.5">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-mono text-xs font-bold text-slate-900 tracking-tight">
                   #{refNumber}
                 </span>
@@ -120,14 +238,19 @@ export function RequestsList() {
                     Urgent
                   </Badge>
                 )}
+                {clientName && (
+                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                    🏢 {clientName}
+                  </span>
+                )}
               </div>
               <div
-                className="text-[10px] text-slate-500 flex items-center gap-1 truncate max-w-[170px]"
+                className="text-[11px] text-slate-500 flex items-center gap-1.5 truncate max-w-[220px]"
                 title={`${originDisplay} → ${locationDisplay}`}
               >
-                <span className="truncate">{originDisplay}</span>
+                <span className="truncate font-medium text-slate-600">{originDisplay}</span>
                 <span className="text-slate-400">→</span>
-                <span className="font-medium text-slate-700 truncate">{locationDisplay}</span>
+                <span className="font-semibold text-slate-800 truncate">{locationDisplay}</span>
               </div>
             </div>
           );
@@ -135,41 +258,52 @@ export function RequestsList() {
       },
       {
         id: 'operation',
-        header: 'Operation',
-        width: '12%',
-        minWidth: '110px',
+        header: 'Request Type',
+        width: '14%',
+        minWidth: '130px',
         valign: 'top',
         cell: (request) => {
           const meta = requestMeta(request);
           return (
-            <Badge variant={meta.variant} size="sm">
-              {meta.label}
-            </Badge>
+            <div className="space-y-0.5">
+              <Badge variant={meta.variant} size="sm">
+                {meta.label}
+              </Badge>
+              <div className="text-[10px] text-slate-400 font-medium">
+                {meta.sublabel}
+              </div>
+            </div>
           );
         },
       },
       {
         id: 'items',
         header: 'Requested Items',
-        width: '27%',
+        width: '26%',
         minWidth: '220px',
         valign: 'top',
         cell: (request) => {
-          const totalQty = (request.lines || []).reduce((sum, l) => sum + Number(l.quantity || 0), 0);
+          const totalQty = (request.lines || []).reduce(
+            (sum, l) => sum + Number(l.quantity || 0),
+            0,
+          );
           return (
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
                 <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-700 border border-slate-200/60">
                   {totalQty.toLocaleString()} units
                 </span>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[10px] text-slate-400 font-medium">
                   ({request.lines?.length || 0} item{(request.lines?.length || 0) !== 1 ? 's' : ''})
                 </span>
               </div>
               <div className="space-y-0.5">
                 {request.lines && request.lines.length > 0 ? (
                   request.lines.slice(0, 2).map((line, idx) => (
-                    <div key={idx} className="text-xs text-slate-700 flex items-baseline gap-1.5 truncate max-w-sm">
+                    <div
+                      key={idx}
+                      className="text-xs text-slate-700 flex items-baseline gap-1.5 truncate max-w-sm"
+                    >
                       <span className="font-medium text-slate-900 truncate">
                         {line.productName || line.product?.name || 'Item'}
                       </span>
@@ -195,8 +329,8 @@ export function RequestsList() {
       {
         id: 'status',
         header: 'Status',
-        width: '14%',
-        minWidth: '120px',
+        width: '12%',
+        minWidth: '110px',
         valign: 'top',
         cell: (request) => <StatusLabel status={request.status} />,
       },
@@ -208,12 +342,19 @@ export function RequestsList() {
         valign: 'top',
         cell: (request) => {
           const dateStr = request.createdAt
-            ? new Date(request.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+            ? new Date(request.createdAt).toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })
             : '—';
           return (
             <div className="space-y-0.5">
               <div className="text-xs font-medium text-slate-900 font-mono">{dateStr}</div>
-              <div className="text-[10px] text-slate-400 truncate max-w-[100px]" title={request.requesterUsername || 'staff'}>
+              <div
+                className="text-[10px] text-slate-400 truncate max-w-[100px]"
+                title={request.requesterUsername || 'staff'}
+              >
                 by {request.requesterUsername || 'staff'}
               </div>
             </div>
@@ -223,8 +364,8 @@ export function RequestsList() {
       {
         id: 'actions',
         header: 'Actions',
-        width: '15%',
-        minWidth: '150px',
+        width: '12%',
+        minWidth: '130px',
         align: 'right',
         valign: 'top',
         cell: (request) => {
@@ -264,17 +405,35 @@ export function RequestsList() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="My Stock Requests"
-        description="Monitor, approve, and track warehouse dispatches, inbound receipts, and stock transfer vouchers."
+        title={isSuperAdmin ? 'Stock Requests & Movement Register' : 'My Stock Requests'}
+        description={
+          isSuperAdmin
+            ? 'Monitor, audit, and filter warehouse dispatches, inbound receipts, and stock transfer vouchers across all clients and warehouses.'
+            : 'Monitor, approve, and track warehouse dispatches, inbound receipts, and stock transfer vouchers.'
+        }
         actions={
-          <Link href="/requests/new">
-            <Button variant="primary" className="shadow-xs gap-1.5 font-medium text-xs">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>New Stock Movement</span>
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <Link href="/approvals">
+                <Button variant="secondary" className="shadow-xs gap-1.5 font-medium text-xs">
+                  <span>Approvals Queue</span>
+                  {counts.pending > 0 && (
+                    <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                      {counts.pending}
+                    </span>
+                  )}
+                </Button>
+              </Link>
+            )}
+            <Link href="/requests/new">
+              <Button variant="primary" className="shadow-xs gap-1.5 font-medium text-xs">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>New Stock Movement</span>
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -282,7 +441,9 @@ export function RequestsList() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Requests</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              Total Requests
+            </span>
             <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -290,28 +451,38 @@ export function RequestsList() {
             </div>
           </div>
           <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">{counts.all}</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+              {counts.all}
+            </span>
             <span className="text-xs text-slate-500">all movements</span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-amber-200/90 shadow-2xs hover:border-amber-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Pending Approval</span>
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
+              Pending Approval
             </span>
+            {counts.pending > 0 && (
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+            )}
           </div>
           <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-amber-900 font-mono">{counts.open}</span>
+            <span className="text-2xl font-bold tracking-tight text-amber-900 font-mono">
+              {counts.pending}
+            </span>
             <span className="text-xs text-amber-700 font-medium">requires action</span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Approved &amp; Completed</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              Approved &amp; Completed
+            </span>
             <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -319,14 +490,18 @@ export function RequestsList() {
             </div>
           </div>
           <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">{counts.finished}</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+              {counts.approved}
+            </span>
             <span className="text-xs text-emerald-600 font-medium">finalized</span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Units Tracked</span>
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              Total Units Tracked
+            </span>
             <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -342,102 +517,158 @@ export function RequestsList() {
         </div>
       </div>
 
-      {/* Filter and Search Navigation Bar */}
+      {/* Primary Status Navigation Tabs */}
       <Card>
-        <CardContent className="p-3.5 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Status Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filter requests">
-            {(
-              [
-                ['ALL', 'All Requests', counts.all],
-                ['OPEN', 'Waiting for Approval', counts.open],
-                ['FINISHED', 'Approved & Completed', counts.finished],
-              ] as const
-            ).map(([value, label, count]) => {
-              const isSelected = filter === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  onClick={() => setFilter(value)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                    isSelected
-                      ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs border border-blue-200/90'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <span>{label}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium ${
-                      isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200/80 text-slate-700'
+        <CardContent className="p-3.5 space-y-3">
+          {/* Top Status Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filter requests by status">
+              {(
+                [
+                  ['ALL', 'All Requests', counts.all],
+                  ['PENDING_APPROVAL', 'Waiting Approval', counts.pending],
+                  ['APPROVED', 'Approved & Completed', counts.approved],
+                  ['DRAFT', 'Drafts', counts.drafts],
+                  ['REJECTED', 'Rejected', counts.rejected],
+                ] as const
+              ).map(([value, label, count]) => {
+                const isSelected = statusFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => setStatusFilter(value)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                      isSelected
+                        ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs border border-blue-200/90'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                     }`}
                   >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Operation Filter & Search */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setOpFilter('ALL')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  opFilter === 'ALL' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                All Operations
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpFilter('DISPATCH')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  opFilter === 'DISPATCH' ? 'bg-white text-blue-700 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Dispatches
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpFilter('STOCK_IN')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  opFilter === 'STOCK_IN' ? 'bg-white text-emerald-700 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Stock In
-              </button>
+                    <span>{label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium ${
+                        isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200/80 text-slate-700'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="w-full sm:w-64 relative">
-              <input
-                type="text"
-                placeholder="Search ref, item, location..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-              />
-              <svg
-                className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  ✕
-                </button>
+                <span>Reset Filters</span>
+                <span>✕</span>
+              </button>
+            )}
+          </div>
+
+          {/* Granular Filters: Request Type, Client, Warehouse, and Search */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            {/* Request Type Pills */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs flex-wrap">
+              {(
+                [
+                  ['ALL', 'All Types'],
+                  ['STOCK_IN', 'Stock In'],
+                  ['STOCK_OUT', 'Stock Out'],
+                  ['TRANSFER', 'Transfer'],
+                  ['ADJUSTMENT', 'Adjustment'],
+                ] as const
+              ).map(([value, label]) => {
+                const isSelected = typeFilter === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setTypeFilter(value)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                      isSelected
+                        ? 'bg-white text-blue-700 shadow-2xs font-semibold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Dropdown Filters and Search Bar */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Client Filter (for Super Admin & Store Admin) */}
+              {(isSuperAdmin || isStoreAdmin) && clients.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-500">Client:</span>
+                  <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                  >
+                    <option value="">All Clients</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
+
+              {/* Warehouse Filter */}
+              {warehouses.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-slate-500">Warehouse:</span>
+                  <select
+                    value={selectedWarehouseId}
+                    onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                    className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                  >
+                    <option value="">All Warehouses</option>
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Text Search */}
+              <div className="w-full sm:w-60 relative">
+                <input
+                  type="text"
+                  placeholder="Search ref, item, client..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                />
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -445,29 +676,40 @@ export function RequestsList() {
 
       {/* Main Request Data Table */}
       {error ? (
-        <ErrorState title="Requests could not be loaded" message={error instanceof Error ? error.message : 'Could not load your requests.'} onRetry={() => void fetchRequests()} />
+        <ErrorState
+          title="Requests could not be loaded"
+          message={error instanceof Error ? error.message : 'Could not load your requests.'}
+          onRetry={() => void fetchRequests()}
+        />
       ) : (
         <DataTable
           data={filteredRequests}
           columns={columns}
           keyExtractor={(request) => request.id}
           isLoading={isLoading}
-          loadingMessage="Loading your stock requests…"
+          loadingMessage="Loading stock requests…"
           minWidth="min-w-[960px]"
           emptyState={{
-            title: requests.length === 0 ? 'No requests recorded yet' : 'No requests match your filter',
+            title:
+              requests.length === 0
+                ? 'No requests recorded yet'
+                : 'No requests match your current filters',
             description:
               requests.length === 0
-                ? 'Initiate a new stock-in or stock-out request to begin tracking inventory movements.'
-                : 'Try clearing your search query or selecting a different status tab above.',
+                ? 'Initiate a new stock movement request to begin tracking inventory.'
+                : 'Try clearing your filters or selecting a different status/type tab above.',
             action:
-              requests.length === 0 ? (
+              hasActiveFilters ? (
+                <Button variant="secondary" size="sm" onClick={resetFilters}>
+                  Clear All Filters
+                </Button>
+              ) : (
                 <Link href="/requests/new">
                   <Button variant="primary" size="sm">
                     Create First Request
                   </Button>
                 </Link>
-              ) : undefined,
+              ),
           }}
           pagination={{
             pageSize: 10,

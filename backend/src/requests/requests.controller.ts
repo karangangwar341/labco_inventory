@@ -15,7 +15,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
-import { UserRole, RequestStatus } from '@prisma/client';
+import { UserRole, RequestStatus, RequestType } from '@prisma/client';
 import { RequestsService } from './requests.service.js';
 import { CreateStockRequestDto } from './dto/create-stock-request.dto.js';
 import { UpdateStockRequestDto } from './dto/update-stock-request.dto.js';
@@ -43,18 +43,33 @@ export class RequestsController {
   @Get()
   @ApiOperation({ summary: 'List stock requests within caller scope' })
   @ApiQuery({ name: 'status', required: false, enum: RequestStatus })
+  @ApiQuery({ name: 'requestType', required: false, enum: RequestType })
+  @ApiQuery({ name: 'clientId', required: false, type: String })
+  @ApiQuery({ name: 'warehouseId', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number })
   async getRequests(
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: RequestStatus,
+    @Query('requestType') requestType?: RequestType,
+    @Query('clientId') clientId?: string,
+    @Query('warehouseId') warehouseId?: string,
     @Query('limit') limit?: number,
     @Query('page') page?: number,
   ) {
-    return this.requestsService.getRequests(user, status, {
-      limit: limit ? Number(limit) : undefined,
-      page: page ? Number(page) : undefined,
-    });
+    return this.requestsService.getRequests(
+      user,
+      {
+        status,
+        requestType,
+        clientId,
+        warehouseId,
+      },
+      {
+        limit: limit ? Number(limit) : undefined,
+        page: page ? Number(page) : undefined,
+      },
+    );
   }
 
   @Get(':id')

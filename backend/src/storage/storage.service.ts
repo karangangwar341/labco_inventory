@@ -8,6 +8,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type {
@@ -213,6 +214,19 @@ export class StorageService implements IStorageService, OnModuleInit {
   }
 
   async getStorageHealth(): Promise<StorageHealthResult> {
+    if (this.driver !== 'local' && this.s3Client) {
+      try {
+        await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      } catch {
+        return {
+          status: 'DEGRADED',
+          driver: this.driver,
+          bucket: this.bucket,
+          details: 'Configured object storage is unreachable or the bucket is unavailable.',
+        };
+      }
+    }
+
     return {
       status: 'HEALTHY',
       driver: this.driver,

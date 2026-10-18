@@ -44,6 +44,20 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     ],
   };
 
+  const secondRawMaterialProduct = {
+    ...rawMaterialProduct,
+    id: 'prod-raw-2',
+    name: 'Buffer Solution',
+    units: [
+      {
+        id: 'unit-milliliters',
+        unitName: 'MILLILITER',
+        conversionToBase: new Prisma.Decimal(1),
+        status: 'ACTIVE',
+      },
+    ],
+  };
+
   const finishedGoodProduct = {
     id: 'prod-finished',
     name: 'Diagnostic Assay Kit',
@@ -66,6 +80,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   beforeEach(() => {
     mockPrisma = {
       $transaction: vi.fn(async (cb) => cb(mockPrisma)),
+      $queryRaw: vi.fn().mockResolvedValue([]),
       productionRun: {
         create: vi.fn(),
         findUnique: vi.fn(),
@@ -74,17 +89,18 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       },
       stockLocation: {
         findUnique: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       inventoryBalance: {
         findFirst: vi.fn(),
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       ledgerEntry: {
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       product: {
         findUnique: vi.fn(),
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       stockBatch: {
         findUnique: vi.fn(),
@@ -111,10 +127,14 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     it('creates draft production run without affecting stock', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
       mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
-      mockPrisma.inventoryBalance.findMany.mockResolvedValue([{ productId: 'prod-raw' }]);
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([
+        { productId: 'prod-raw' },
+        { productId: 'prod-raw-2' },
+      ]);
       mockPrisma.ledgerEntry.findMany.mockResolvedValue([]);
       mockPrisma.product.findUnique
         .mockResolvedValueOnce(rawMaterialProduct)
+        .mockResolvedValueOnce(secondRawMaterialProduct)
         .mockResolvedValueOnce(finishedGoodProduct);
 
       const createdRun = {
@@ -134,6 +154,11 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
             quantity: 5,
             unitId: 'unit-liters',
           },
+          {
+            productId: 'prod-raw-2',
+            quantity: 250,
+            unitId: 'unit-milliliters',
+          },
         ],
         outputs: [
           {
@@ -152,6 +177,12 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           data: expect.objectContaining({
             clientId: 'client-123',
             status: ProductionStatus.DRAFT,
+            inputs: expect.objectContaining({
+              create: expect.arrayContaining([
+                expect.objectContaining({ productId: 'prod-raw' }),
+                expect.objectContaining({ productId: 'prod-raw-2' }),
+              ]),
+            }),
           }),
         }),
       );
@@ -202,6 +233,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
         clientId: 'client-123',
         status: ProductionStatus.DRAFT,
         submittedById: clientAdminUser.id,
+        actualOutput: new Prisma.Decimal(25),
         inputs: [
           {
             productId: 'prod-raw',
@@ -225,6 +257,45 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       });
 
       const res = await manufacturingService.submitProductionRun(clientAdminUser, 'run-1');
+      expect(res.status).toBe(ProductionStatus.PENDING_APPROVAL);
+    });
+
+    it('validates stock across batched inventory balances when draft input has null batchId', async () => {
+      const draftRun = {
+        id: 'run-batched-1',
+        clientId: 'client-123',
+        status: ProductionStatus.DRAFT,
+        submittedById: clientAdminUser.id,
+        actualOutput: new Prisma.Decimal(25),
+        inputs: [
+          {
+            productId: 'prod-raw',
+            batchId: null,
+            baseQuantity: new Prisma.Decimal(10),
+          },
+        ],
+      };
+      mockPrisma.productionRun.findUnique.mockResolvedValue(draftRun);
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+
+      // Stock is stored under a lot/batch in inventory_balances
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([
+        {
+          id: 'bal-1',
+          locationId: 'loc-client-1',
+          productId: 'prod-raw',
+          batchId: 'batch-lot-1',
+          usableQty: new Prisma.Decimal(45),
+          reservedQty: new Prisma.Decimal(0),
+        },
+      ]);
+
+      mockPrisma.productionRun.update.mockResolvedValue({
+        id: 'run-batched-1',
+        status: ProductionStatus.PENDING_APPROVAL,
+      });
+
+      const res = await manufacturingService.submitProductionRun(clientAdminUser, 'run-batched-1');
       expect(res.status).toBe(ProductionStatus.PENDING_APPROVAL);
     });
   });
@@ -354,6 +425,130 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       });
 
       expect(res.status).toBe(ProductionStatus.REJECTED);
+    });
+  });
+
+  describe('4. Production Cycles & Analytics Reporting', () => {
+    it('re-runs a cycle: preserves input/output formulation and creates a new DRAFT run', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-123' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', clientId: 'client-123' });
+      mockPrisma.product.findUnique
+        .mockResolvedValueOnce(rawMaterialProduct)
+        .mockResolvedValueOnce(finishedGoodProduct);
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([
+        { productId: rawMaterialProduct.id },
+      ]);
+
+      const originalRun = {
+        id: 'run-original',
+        clientId: 'client-123',
+        mode: ProductionMode.LINKED,
+        status: ProductionStatus.APPROVED,
+        productionReference: 'CYCLE-ASSAY-01',
+        plannedOutput: new Prisma.Decimal(25),
+        actualOutput: new Prisma.Decimal(25),
+        inputs: [
+          {
+            productId: rawMaterialProduct.id,
+            unitId: 'unit-liters',
+            quantity: new Prisma.Decimal(10),
+            unit: { id: 'unit-liters', unitName: 'LITER', conversionToBase: new Prisma.Decimal(1), status: 'ACTIVE' },
+            product: rawMaterialProduct,
+          },
+        ],
+        outputs: [
+          {
+            productId: finishedGoodProduct.id,
+            unitId: 'unit-kits',
+            quantity: new Prisma.Decimal(25),
+            batchNumber: 'BATCH-PREV',
+            unit: { id: 'unit-kits', unitName: 'KIT', conversionToBase: new Prisma.Decimal(1), status: 'ACTIVE' },
+            product: finishedGoodProduct,
+          },
+        ],
+      };
+
+      mockPrisma.productionRun.findUnique.mockResolvedValue(originalRun);
+      mockPrisma.productionRun.create.mockImplementation(({ data }: any) => ({
+        id: 'run-new-draft',
+        ...data,
+      }));
+
+      const newRun = await manufacturingService.reRunCycle(clientAdminUser, 'run-original', {
+        plannedOutput: 50,
+      });
+
+      expect(newRun).toBeDefined();
+      expect(newRun.status).toBe(ProductionStatus.DRAFT);
+      expect(newRun.productionReference).toBe('CYCLE-ASSAY-01');
+      expect(mockPrisma.productionRun.create).toHaveBeenCalled();
+    });
+
+    it('enforces client isolation: prevents re-running cycles belonging to other clients', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-other' });
+      mockPrisma.productionRun.findUnique.mockResolvedValue({
+        id: 'run-foreign',
+        clientId: 'client-123',
+        inputs: [{ productId: 'p1' }],
+        outputs: [{ productId: 'p2' }],
+      });
+
+      await expect(
+        manufacturingService.reRunCycle(clientAdminUser, 'run-foreign'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('computes complete manufacturing analytics and chronological execution ledger', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-123' });
+      mockPrisma.productionRun.findMany.mockResolvedValue([
+        {
+          id: 'run-1',
+          clientId: 'client-123',
+          mode: ProductionMode.LINKED,
+          status: ProductionStatus.APPROVED,
+          productionReference: 'CYCLE-01',
+          plannedOutput: new Prisma.Decimal(20),
+          actualOutput: new Prisma.Decimal(19),
+          wastage: new Prisma.Decimal(1),
+          createdAt: new Date('2026-10-10T10:00:00Z'),
+          submittedAt: new Date('2026-10-10T10:00:00Z'),
+          approvedAt: new Date('2026-10-10T11:00:00Z'),
+          submittedBy: { id: 'ca-1', username: 'clientadmin' },
+          approvedBy: { id: 'sa-1', username: 'superadmin' },
+          client: { id: 'client-123', name: 'Labco Client' },
+          inputs: [
+            {
+              productId: 'prod-raw',
+              quantity: new Prisma.Decimal(10),
+              baseQuantity: new Prisma.Decimal(10),
+              unitNameSnapshot: 'LITER',
+              product: { id: 'prod-raw', name: 'Chemical Reagent A', sku: 'RAW-001' },
+            },
+          ],
+          outputs: [
+            {
+              productId: 'prod-finished',
+              quantity: new Prisma.Decimal(19),
+              batchNumber: 'BATCH-100',
+              product: { id: 'prod-finished', name: 'Diagnostic Assay Kit', sku: 'KIT-001', minQuantity: 5 },
+            },
+          ],
+        },
+      ]);
+
+      const analytics = await manufacturingService.getManufacturingAnalytics(clientAdminUser);
+
+      expect(analytics).toBeDefined();
+      expect(analytics.summary.totalRuns).toBe(1);
+      expect(analytics.summary.approvedRuns).toBe(1);
+      expect(analytics.summary.totalProduced).toBe(19);
+      expect(analytics.summary.totalPlanned).toBe(20);
+      expect(analytics.summary.avgYieldEfficiency).toBe(95);
+      expect(analytics.executionHistory).toHaveLength(1);
+      expect(analytics.executionHistory[0].runNumber).toBe('RUN-RUN-1');
+      expect(analytics.executionHistory[0].yieldEfficiency).toBe(95);
+      expect(analytics.materialConsumption).toHaveLength(1);
+      expect(analytics.materialConsumption[0].productName).toBe('Chemical Reagent A');
     });
   });
 });

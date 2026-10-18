@@ -68,6 +68,8 @@ export const queryKeys = {
     all: ['manufacturing'] as const,
     list: (scope?: string, filters?: Record<string, unknown>) =>
       ['manufacturing', 'list', { scope: scope || 'default', ...filters }] as const,
+    cycles: (clientId?: string) => ['manufacturing', 'cycles', clientId || 'default'] as const,
+    analytics: (filters?: Record<string, unknown>) => ['manufacturing', 'analytics', { ...filters }] as const,
     detail: (id: string) => ['manufacturing', 'detail', id] as const,
   },
 

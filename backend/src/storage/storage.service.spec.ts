@@ -77,12 +77,32 @@ describe('StorageService (Neon Object Storage & Local Driver)', () => {
       };
 
       const s3Service = new StorageService(mockConfig);
+      Object.assign(s3Service, { s3Client: { send: vi.fn().mockResolvedValue({}) } });
       const health = await s3Service.getStorageHealth();
 
       expect(health.status).toBe('HEALTHY');
       expect(health.driver).toBe('neon_s3');
       expect(health.bucket).toBe('test-warehouse-bucket');
       expect(health.endpoint).toBe('https://storage.neon.tech');
+    });
+
+    it('reports degraded when the configured bucket cannot be reached', async () => {
+      const mockConfig: any = {
+        get: (key: string) => ({
+          STORAGE_DRIVER: 'neon_s3',
+          AWS_ACCESS_KEY_ID: 'neon_real_key_12345',
+          AWS_SECRET_ACCESS_KEY: 'neon_real_secret_67890',
+          AWS_ENDPOINT_URL_S3: 'https://storage.neon.tech',
+          STORAGE_BUCKET_NAME: 'test-warehouse-bucket',
+        })[key],
+      };
+      const s3Service = new StorageService(mockConfig);
+      Object.assign(s3Service, { s3Client: { send: vi.fn().mockRejectedValue(new Error('secret details omitted')) } });
+
+      const health = await s3Service.getStorageHealth();
+
+      expect(health.status).toBe('DEGRADED');
+      expect(health.details).not.toContain('secret details');
     });
   });
 });

@@ -104,7 +104,6 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1">
                 <span className="font-semibold text-xs text-white tracking-tight leading-none truncate">WMS Console</span>
-                <span className="text-[8px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">PROD</span>
               </div>
               <span className="text-[9px] text-slate-400 font-normal mt-0.5 truncate">ISO 9001:2015</span>
             </div>
@@ -132,12 +131,6 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    {isActive && (
-                      <span
-                        className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-blue-500"
-                        aria-hidden="true"
-                      />
-                    )}
                     {renderIcon(domain.iconName, isActive)}
                     <span className="truncate">{domain.label}</span>
                   </div>
@@ -181,11 +174,6 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
                   <span className="text-[10px] text-slate-400 font-medium truncate">
                     {user.role}
                   </span>
-                  {user.clientId && (
-                    <span className="text-[9px] text-blue-400 bg-blue-500/10 px-1 rounded truncate">
-                      {user.clientId.slice(0, 10)}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>

@@ -19,6 +19,7 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 - Revalidate stock and authorization at posting time.
 - Use idempotency keys for retries and duplicate clicks.
 - The backend derives user identity from the authenticated session; never trust actor IDs supplied by clients.
+- Each new authenticated request checks the current session record in PostgreSQL so revocation, account disablement, and role changes take effect without a stale positive cache. Concurrent requests for the same session share an in-flight validation query. Database errors fail closed; authentication does not fall back to a previously accepted session.
 - Do not accept client-computed base quantity, balance or permission as authoritative.
 - Enforce organization/warehouse/client scope in every query.
 - AI output is untrusted input and must pass normal validation.
@@ -54,6 +55,8 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 | POST | `/api/v1/stock-requests/{id}/reject` | Super Admin rejection/release reservation |
 | POST | `/api/v1/shipments/{id}/receive` | Record receipt |
 | POST | `/api/v1/production-runs` | Create production draft |
+| PATCH | `/api/v1/production-runs/{id}` | Edit the caller’s own draft; no inventory effect |
+| DELETE | `/api/v1/production-runs/{id}` | Delete the Client Admin caller’s own draft; submitted runs are retained |
 | POST | `/api/v1/production-runs/{id}/submit` | Submit production for approval |
 | POST | `/api/v1/import-batches` | Upload/create import draft |
 | PATCH | `/api/v1/import-batches/{id}/rows/{rowId}` | Edit imported row |

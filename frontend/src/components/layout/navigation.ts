@@ -61,7 +61,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
     matchPaths: ['/requests', '/approvals'],
     subItems: [
-      { href: '/requests', label: 'My Requests', exact: true },
+      { href: '/requests', label: 'Stock Requests', exact: true },
       { href: '/requests/new', label: 'New Stock Movement' },
       { href: '/approvals', label: 'Approvals Queue', roles: ['SUPER_ADMIN'] },
     ],
@@ -74,9 +74,9 @@ export const MAIN_DOMAINS: MainDomain[] = [
     roles: ['CLIENT_ADMIN'],
     matchPaths: ['/manufacturing', '/departments'],
     subItems: [
-      { href: '/manufacturing', label: 'Production Jobs' },
-      { href: '/departments', label: 'Send to Department' },
-      { href: '/staff', label: 'Staff & Work Logs' },
+      { href: '/manufacturing', label: 'Production Runs & Cycles' },
+      { href: '/departments', label: 'Department Transfers', roles: ['CLIENT_ADMIN'] },
+      { href: '/staff', label: 'Staff & Work Logs', roles: ['CLIENT_ADMIN'] },
     ],
   },
   {
@@ -84,7 +84,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Staff & HR',
     defaultHref: '/staff',
     iconName: 'users',
-    roles: ['CLIENT_ADMIN', 'SUPER_ADMIN'],
+    roles: ['CLIENT_ADMIN'],
     matchPaths: ['/staff'],
     subItems: [
       { href: '/staff', label: 'Staff Directory & Daily Logs', exact: true },

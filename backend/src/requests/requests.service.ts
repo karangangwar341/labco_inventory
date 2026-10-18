@@ -864,12 +864,36 @@ export class RequestsService {
    */
   async getRequests(
     user: AuthenticatedUser,
-    status?: RequestStatus,
+    statusOrFilters?:
+      | RequestStatus
+      | {
+          status?: RequestStatus;
+          requestType?: RequestType;
+          clientId?: string;
+          warehouseId?: string;
+        },
     pagination?: { limit?: number; page?: number },
   ) {
     const where: Prisma.StockRequestWhereInput = {};
+    let status: RequestStatus | undefined;
+    let requestType: RequestType | undefined;
+    let filterClientId: string | undefined;
+    let filterWarehouseId: string | undefined;
+
+    if (typeof statusOrFilters === 'string') {
+      status = statusOrFilters;
+    } else if (statusOrFilters && typeof statusOrFilters === 'object') {
+      status = statusOrFilters.status;
+      requestType = statusOrFilters.requestType;
+      filterClientId = statusOrFilters.clientId;
+      filterWarehouseId = statusOrFilters.warehouseId;
+    }
+
     if (status) {
       where.status = status;
+    }
+    if (requestType) {
+      where.requestType = requestType;
     }
 
     if (user.role === UserRole.STORE_ADMIN) {
@@ -881,12 +905,31 @@ export class RequestsService {
         { sourceLocation: { warehouseId } },
         { destinationLocation: { warehouseId } },
       ];
+      if (filterClientId) {
+        where.clientId = filterClientId;
+      }
     } else if (user.role === UserRole.CLIENT_ADMIN) {
       const clientId = user.clientId !== undefined
         ? user.clientId
         : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
       if (!clientId) return [];
       where.clientId = clientId;
+      if (filterWarehouseId) {
+        where.OR = [
+          { sourceLocation: { warehouseId: filterWarehouseId } },
+          { destinationLocation: { warehouseId: filterWarehouseId } },
+        ];
+      }
+    } else if (user.role === UserRole.SUPER_ADMIN) {
+      if (filterClientId) {
+        where.clientId = filterClientId;
+      }
+      if (filterWarehouseId) {
+        where.OR = [
+          { sourceLocation: { warehouseId: filterWarehouseId } },
+          { destinationLocation: { warehouseId: filterWarehouseId } },
+        ];
+      }
     }
 
     const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
@@ -903,6 +946,7 @@ export class RequestsService {
         },
         approvals: true,
         requester: { select: { id: true, username: true } },
+        client: { select: { id: true, name: true } },
         sourceLocation: {
           include: {
             warehouse: { select: { id: true, name: true } },

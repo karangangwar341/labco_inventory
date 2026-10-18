@@ -21,7 +21,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <TopBar onOpenMobileMenu={() => setMobileMenuOpen(true)} />
 
         {/* Content Region */}
-        <main className="flex-1 p-5 sm:p-7 lg:p-9 overflow-x-hidden">
+        <main className="dashboard-content bg-grid-pattern flex-1 p-5 sm:p-7 lg:p-9 overflow-x-hidden">
           <div className="max-w-[1600px] mx-auto w-full space-y-6">
             {children}
           </div>

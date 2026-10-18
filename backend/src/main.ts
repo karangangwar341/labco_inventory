@@ -2,9 +2,19 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { randomUUID } from 'node:crypto';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  const trustedProxyHops = process.env.TRUST_PROXY_HOPS;
+  if (trustedProxyHops !== undefined && trustedProxyHops !== '') {
+    const hopCount = Number(trustedProxyHops);
+    if (!Number.isInteger(hopCount) || hopCount < 0 || hopCount > 10) {
+      throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 10.');
+    }
+    app.getHttpAdapter().getInstance().set('trust proxy', hopCount);
+  }
 
   const rawCorsOrigins = process.env.CORS_ALLOWED_ORIGINS;
   const allowedOrigins = rawCorsOrigins
@@ -34,9 +44,14 @@ async function bootstrap() {
 
   // Request correlation and duration timing middleware (P-001)
   app.use((req: any, res: any, next: any) => {
+    const suppliedRequestId = req.headers['x-request-id'];
+    // Treat caller-provided IDs as untrusted log input. Accept only short,
+    // printable tokens so newlines/control characters cannot forge log entries.
     const correlationId =
-      req.headers['x-request-id'] ||
-      `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      typeof suppliedRequestId === 'string' &&
+      /^[A-Za-z0-9._:-]{1,128}$/.test(suppliedRequestId)
+        ? suppliedRequestId
+        : randomUUID();
     req.id = correlationId;
     res.setHeader('X-Request-ID', correlationId);
 
@@ -56,7 +71,7 @@ async function bootstrap() {
       const durationMs = (diff[0] * 1e3 + diff[1] * 1e-6).toFixed(2);
       if (process.env.NODE_ENV !== 'test') {
         const method = req.method;
-        const path = req.originalUrl || req.url;
+        const path = req.path || req.url?.split('?')[0];
         const status = res.statusCode;
         console.log(`[HTTP ${status}] ${method} ${path} (${durationMs}ms) [${correlationId}]`);
       }
@@ -75,10 +90,12 @@ async function bootstrap() {
       'Permissions-Policy',
       'camera=(), microphone=(), geolocation=()',
     );
-    res.setHeader(
-      'Strict-Transport-Security',
-      'max-age=31536000; includeSubDomains; preload',
-    );
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains; preload',
+      );
+    }
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     next();
@@ -111,12 +128,16 @@ async function bootstrap() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/v1/docs', app, document);
+  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/v1/docs', app, document);
+  }
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}/api/v1`);
-  console.log(`Swagger documentation: http://localhost:${port}/api/v1/docs`);
+  console.log(`Application is listening on port ${port}.`);
+  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
+    console.log(`Swagger documentation: /api/v1/docs`);
+  }
 }
 await bootstrap();

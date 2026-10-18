@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -13,19 +12,10 @@ import { AuthResponseDto } from './dto/auth-response.dto.js';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
-interface CachedSessionUser {
-  user: User;
-  sessionId: string;
-  userId: string;
-  cachedAt: number;
-}
-
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-  // Short-lived in-memory session cache (60s TTL) to prevent repeated remote DB roundtrips on burst/parallel requests
-  private sessionMemoryCache = new Map<string, CachedSessionUser>();
-  // In-flight promise sharing to coalesce concurrent requests for the same session into 1 DB query
+  // Reuse concurrent validation work, but never cache a successful result across requests:
+  // revocation and account disablement must take effect on the next authenticated request.
   private inFlightSessionValidations = new Map<string, Promise<User | null>>();
 
   constructor(
@@ -160,14 +150,6 @@ export class AuthService {
       },
     });
 
-    // Seed session in memory cache immediately so post-login dashboard bursts hit 0 DB roundtrips
-    this.sessionMemoryCache.set(session.id, {
-      user,
-      sessionId: session.id,
-      userId: user.id,
-      cachedAt: now.getTime(),
-    });
-
     // Access token lifetime: 15 minutes (900 seconds)
     const payload = {
       sub: user.id,
@@ -271,25 +253,14 @@ export class AuthService {
   }
 
   async validateSession(userId: string, sessionId: string): Promise<User | null> {
-    const now = Date.now();
-
-    // 1. Check in-memory session cache (60s TTL) to serve rapid/burst requests without remote DB hit
-    const cached = this.sessionMemoryCache.get(sessionId);
-    if (cached && cached.userId === userId && now - cached.cachedAt < 60_000) {
-      if (cached.user.status === UserStatus.DISABLED) {
-        this.sessionMemoryCache.delete(sessionId);
-        return null;
-      }
-      return cached.user;
-    }
-
-    // 2. In-flight promise sharing (stampede prevention)
+    // In-flight promise sharing avoids duplicate DB reads for parallel requests while
+    // preserving immediate cross-instance revocation checks on every new request.
     const inFlight = this.inFlightSessionValidations.get(sessionId);
     if (inFlight) {
       return inFlight;
     }
 
-    const validationPromise = this.doValidateSession(userId, sessionId, cached);
+    const validationPromise = this.doValidateSession(userId, sessionId);
     this.inFlightSessionValidations.set(sessionId, validationPromise);
     try {
       return await validationPromise;
@@ -301,31 +272,16 @@ export class AuthService {
   private async doValidateSession(
     userId: string,
     sessionId: string,
-    fallbackCached?: CachedSessionUser,
   ): Promise<User | null> {
     const now = Date.now();
-
-    let session: any = null;
-    try {
-      session = await this.prisma.session.findUnique({
-        where: { id: sessionId },
-        include: { user: true },
-      });
-    } catch (err: any) {
-      // If a database connection timeout or transient network pool glitch occurs:
-      // Gracefully fall back to the existing memory-cached session if available (< 5 mins stale)
-      // to avoid failing user requests with 500 when remote PgBouncer is under heavy load.
-      if (fallbackCached && fallbackCached.userId === userId && now - fallbackCached.cachedAt < 300_000) {
-        this.logger.warn(
-          `[Auth] DB transient error while validating session ${sessionId.slice(0, 8)}, falling back to memory cache: ${err?.message || err}`,
-        );
-        return fallbackCached.user.status === UserStatus.DISABLED ? null : fallbackCached.user;
-      }
-      throw err;
-    }
+    // Database errors intentionally propagate. Falling back to an old positive
+    // session result would let revoked or disabled accounts continue using the API.
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { user: true },
+    });
 
     if (!session || session.userId !== userId || session.isRevoked) {
-      this.sessionMemoryCache.delete(sessionId);
       return null;
     }
 
@@ -333,7 +289,6 @@ export class AuthService {
 
     // Check 7-day inactivity timeout
     if (now - session.lastActivityAt.getTime() > sevenDaysMs || now > session.expiresAt.getTime()) {
-      this.sessionMemoryCache.delete(sessionId);
       await this.prisma.session.update({
         where: { id: session.id },
         data: { isRevoked: true, revokedAt: new Date() },
@@ -342,21 +297,12 @@ export class AuthService {
     }
 
     if (session.user.status === UserStatus.DISABLED) {
-      this.sessionMemoryCache.delete(sessionId);
       await this.prisma.session.update({
         where: { id: session.id },
         data: { isRevoked: true, revokedAt: new Date() },
       });
       return null;
     }
-
-    // Cache valid session in memory
-    this.sessionMemoryCache.set(sessionId, {
-      user: session.user,
-      sessionId,
-      userId,
-      cachedAt: now,
-    });
 
     // Throttle lastActivityAt updates: only write when > 5 minutes stale.
     // This avoids a DB write round-trip on every single API request.
@@ -375,8 +321,6 @@ export class AuthService {
   }
 
   async logout(userId: string, sessionId: string): Promise<{ success: boolean; message: string }> {
-    this.sessionMemoryCache.delete(sessionId);
-
     await this.prisma.session.updateMany({
       where: {
         id: sessionId,
@@ -396,12 +340,6 @@ export class AuthService {
   }
 
   async revokeAllUserSessions(userId: string): Promise<void> {
-    for (const [sId, entry] of this.sessionMemoryCache.entries()) {
-      if (entry.userId === userId) {
-        this.sessionMemoryCache.delete(sId);
-      }
-    }
-
     await this.prisma.session.updateMany({
       where: {
         userId,

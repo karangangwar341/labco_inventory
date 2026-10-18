@@ -7,15 +7,32 @@ on:
     branches: [main, master, develop]
 
 jobs:
-  lint-and-test:
-    name: Lint, Build & Test
+  quality-gate:
+    name: Quality Gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: warehouse_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d warehouse_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      NODE_ENV: test
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?sslmode=disable"
-      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?sslmode=disable"
-      JWT_SECRET: "ci_test_super_secret_signing_key_32_chars_long!"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?schema=public"
+      JWT_SECRET: "ci-only-random-looking-test-secret-32chars"
       STORAGE_DRIVER: "local"
+      NEXT_PUBLIC_API_URL: "http://localhost:4000/api/v1"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
 
     steps:
       - name: Checkout Source Code
@@ -24,31 +41,40 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Verify Secret Hygiene
         run: |
           echo "Verifying no tracked .env or private key files..."
-          if git ls-files | grep -E '\.env$|\.key$|\.pem$'; then
+          if git ls-files | grep -E '(^|/)\.env($|\.)|\.key$|\.pem$' | grep -Ev '\.example$'; then
             echo "ERROR: Sensitive file committed to Git!"
             exit 1
           fi
           echo "Secret hygiene check passed."
 
       - name: Install Monorepo Root Dependencies
-        run: npm ci || npm install
+        run: npm ci
+
+      - name: Check Dependency Advisories
+        run: npm audit --audit-level=high
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Validate and Apply Migrations to Ephemeral Database
+        run: npm run prisma:migrate:deploy --workspace backend
+
+      - name: Lint Backend and Frontend
+        run: npm run lint
+
+      - name: Typecheck Frontend
+        run: npm run typecheck
 
       - name: Run Backend Tests
-        if: hashFiles('backend/package.json') != ''
-        run: |
-          cd backend
-          npm ci || npm install
-          npm run test --if-present
+        env:
+          NODE_ENV: test
+        run: npm test
 
-      - name: Run Frontend Tests
-        if: hashFiles('frontend/package.json') != ''
-        run: |
-          cd frontend
-          npm ci || npm install
-          npm run test --if-present
+      - name: Build Production Artifacts
+        run: npm run build

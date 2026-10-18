@@ -1,60 +1,112 @@
 # Deployment, Operations & Recovery Runbook
-**Version:** 0.1 | Provider and hosting selection deferred.
 
-## 1. Environments & Infrastructure Platform
-- **Database:** Neon Serverless PostgreSQL (`DATABASE_URL` with PgBouncer connection pooling for app traffic, `DIRECT_URL` for Prisma migrations).
-- **Object Storage:** Neon Object Storage (S3-compatible, branch-aware blob storage with `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`).
-- **Container / Docker Requirement:** None. Application runs directly on Node.js 20+ runtime and deploys to serverless or PaaS environments without requiring Docker or local container daemons.
-- Separate local development, test/CI, staging and production environments using Neon branches (instant copy-on-write branching for both database and object storage).
-- Separate credentials, storage buckets and databases for each environment.
-- Never copy production secrets into local/dev configuration.
-- Use least-privilege service accounts and secret manager/environment injection.
+**Status:** The application is prepared for a provider-neutral release pipeline. Hosting provider, region, public domain, RPO/RTO, monitoring destination, and production credentials still require owner decisions and setup. No production deployment has been performed.
 
-## 2. Deployment pipeline
-1. Review code and required tests.
-2. Run formatter, static checks, unit/integration/security tests and dependency scans.
-3. Build application package / distribution bundle (`npm run build`). Docker containers are not required.
-4. Apply database migrations to Neon PostgreSQL direct endpoint (`DIRECT_URL`) via `npx prisma migrate deploy`.
-5. Deploy to staging environment and run smoke tests.
-6. Take/verify pre-deployment backup or Neon branch snapshot when schema/data risk warrants it.
-7. Deploy production with health checks (`/api/v1/health`) and rollback criteria.
-8. Verify login, approval queue, inventory read, transaction posting in safe test scope, background jobs and backup/storage status.
+## 1. Supported runtime and architecture
 
-## 3. Backups & Data Protection
-- Data loss tolerance: as close to zero as practically achievable for confirmed transactions.
-- Strict atomic transactions: every approved inventory movement must commit atomically; partial updates are not allowed.
-- Continuous transaction-log protection / Point-in-Time Recovery (PITR) designed to prevent inter-day data loss between scheduled snapshots.
-- Daily automatic backups retained for 90 days.
-- Backup isolation: independent backup copies protected from accidental deletion, unauthorized access, and failures affecting the primary database.
-- Encrypt backups in transit and at rest; enforce strict access controls.
-- Automated integrity checks and scheduled restoration drills; a backup is not considered reliable until restore has been successfully tested.
-- On failure: automatic retry, notify Super Admin, persistent dashboard warning until successful backup.
+- Node.js 22.18+ or 24.11+; CI uses Node 24. Use a currently supported LTS release.
+- NestJS API and Next.js app run as Node.js services. Docker is optional; the project does not require it.
+- PostgreSQL is the application database. Use Neon or another supported PostgreSQL host. `DATABASE_URL` is the pooled runtime connection; `DIRECT_URL` is the direct connection reserved for migrations.
+- File uploads require durable S3-compatible object storage in production. `STORAGE_DRIVER=local` is rejected for production configuration.
+- Keep API and frontend origins on HTTPS. Configure the frontend build with the public API URL.
 
-## 4. Recovery & Integrity
-- RPO target: near-zero for confirmed transactions (via continuous log protection); RTO defined before production launch.
-- Inventory integrity: immutable stock ledger, automated reconciliation checks, and unbroken audit history.
-- Recovery testing: restore to an isolated environment first; verify database integrity, ledger-to-balance reconciliation, attachment availability, and audit continuity.
-- Document who authorizes production recovery and how users are notified.
-- Never manually patch stock balances to hide ledger inconsistency; use a reviewed reconciliation procedure.
+## 2. CI quality gate
 
-## 5. Monitoring and incident response
-Monitor API errors/latency, failed login/lockout patterns, authorization denials, duplicate/idempotency conflicts, failed jobs, import failures, backup status, storage capacity and unusual stock adjustments.
-Incident procedure: detect → contain → preserve evidence/audit → assess scope → recover → validate inventory integrity → document root cause and prevention.
+GitHub Actions runs on pushes and pull requests to `main`, `master`, and `develop`. It uses Node 24, an ephemeral PostgreSQL 16 service, and the committed lockfile. The gate checks secret-file hygiene, dependency advisories, Prisma Client generation, migration application, backend and frontend lint, frontend TypeScript, backend tests, and production builds.
 
-## 6. Security operations
-- Rotate/revoke credentials when staff or providers change.
-- Patch dependencies and Node.js runtime environment.
-- Review privileged account activity and exports.
-- Ensure file access is authorized and time-limited.
-- Test session revocation after account reset/disable.
-- Never log passwords, session tokens, API keys or document secrets.
+Run locally from the repository root:
 
-## 7. Launch checklist
-- Hosting/provider and region selected.
-- Domain/TLS and secure headers configured.
-- Secrets stored outside source control.
-- Database backups and restore drill passed.
-- Monitoring and alert routing tested.
-- RPO/RTO and expected capacity approved.
-- Security review and user acceptance testing signed off.
-- Data retention/privacy/legal obligations reviewed.
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+The frontend currently has no automated unit or browser test suite. Before launch, manually smoke test the critical workflows in staging: login by role, stock request and approval, dispatch and client receipt approval, manufacturing, department issue, and report visibility across clients.
+
+## 3. Production environment
+
+Inject these values through the selected platform's secret manager or runtime environment. Do not commit production `.env` files.
+
+### API runtime
+
+Required:
+
+- `NODE_ENV=production`
+- `PORT` (provided by the host when applicable)
+- `DATABASE_URL` (pooled PostgreSQL URL)
+- `DIRECT_URL` (direct PostgreSQL URL for release migrations)
+- `JWT_SECRET` (unique random value of at least 32 characters)
+- `CORS_ALLOWED_ORIGINS` (comma-separated HTTPS origins only, without paths or trailing slashes)
+- `STORAGE_DRIVER=neon_s3` or `s3`
+- `AWS_ACCESS_KEY_ID` or `NEON_STORAGE_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY` or `NEON_STORAGE_SECRET_ACCESS_KEY`
+- `AWS_ENDPOINT_URL_S3` or `NEON_STORAGE_ENDPOINT`
+- `STORAGE_BUCKET_NAME` or `NEON_STORAGE_BUCKET`
+
+Optional:
+
+- `TRUST_PROXY_HOPS`: set to the exact number of trusted reverse-proxy hops. Leave unset when the API receives direct client connections. Do not accept arbitrary forwarded-IP headers as trusted.
+- `ENABLE_API_DOCS=true`: explicitly exposes Swagger documentation. Documentation is disabled by default in production.
+- `GEMINI_API_KEY`: enables Gemini document extraction; deterministic fallback remains available if it is omitted.
+
+Production configuration validation fails startup for missing/placeholder database or JWT values, non-HTTPS CORS origins, and non-durable or incomplete object storage. The health probe at `/api/v1/health` returns only readiness and timestamp; detailed health requires Super Admin authorization at `/api/v1/backups/health`.
+
+### Frontend build/runtime
+
+- `NEXT_PUBLIC_API_URL`: full public API base URL including `/api/v1`, set at build time because Next.js embeds public variables in the client bundle.
+- Build and run the frontend as a Node.js server using `npm run build:frontend` and `npm run start --workspace frontend`.
+
+## 4. Release procedure
+
+1. Select hosting provider/region and create separate staging and production environments.
+2. Configure HTTPS, DNS, API and frontend origins, trusted proxy hops (if applicable), and environment secrets. Keep staging and production database/storage credentials separate.
+3. Provision Neon PostgreSQL and S3-compatible storage. Verify the API credentials have only the access required by the application.
+4. Apply schema migrations to staging, deploy the CI-built application, and run the critical-workflow smoke test.
+5. Take and verify a production database recovery point before the first migration. Apply migrations with the direct database URL:
+
+   ```bash
+   npm run prisma:migrate:deploy --workspace backend
+   ```
+
+6. Build the frontend with the production `NEXT_PUBLIC_API_URL`; deploy the API and frontend artifacts using the chosen host's release process.
+7. If the production database is empty, provision the first Super Admin exactly once using temporary `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` secret values, then run:
+
+   ```bash
+   npm run bootstrap:super-admin --workspace backend
+   ```
+
+   Use a unique username and a password of at least 12 characters. The command requires `NODE_ENV=production`, serializes concurrent attempts, refuses to run if any user already exists, hashes the password, and never prints it. Remove both bootstrap values immediately after the command succeeds. Never use the demo seed to provision a production account.
+
+8. Verify the public readiness probe, authenticated Super Admin health page, login, scoped inventory, approval queues, uploads, and audit history. Watch application and database errors during the initial rollout.
+
+## 5. Backups and recovery
+
+- Configure provider-managed point-in-time recovery and scheduled backups. The target daily retention is 90 days, but the provider settings must be verified in the selected account.
+- Restore a recent backup to an isolated environment before launch. Validate database integrity, ledger-to-balance reconciliation, audit continuity, and attachment availability.
+- The owner must set and document RPO/RTO and name the recovery approver before production use.
+- Prisma migrations are forward-applied. Do not rely on `prisma migrate rollback`; for a faulty schema change, stop rollout and use a reviewed forward-fix. Restore a database snapshot only under the approved recovery procedure because restoration can discard newer transactions.
+
+## 6. Monitoring and incident response
+
+Configure an external log and error-monitoring destination with alerts for API error rate and latency, failed logins, authorization denials, migration failures, backup failures, storage errors, and database pool exhaustion. Logs include request IDs, method, path (without query parameters), status, and duration; never log credentials, tokens, uploaded document contents, or user passwords.
+
+For an incident: detect → contain → preserve audit evidence → assess affected tenants and inventory → restore service → reconcile the ledger and balances → document root cause and prevention. Do not manually edit stock balances to hide discrepancies.
+
+## 7. Rollback and rollout
+
+- Deploy first to staging and then to production. Start with a controlled internal user group and monitor error rate, latency, failed transactions, and client data isolation before expanding access.
+- Roll back the application artifact if errors materially increase or inventory integrity is at risk. Preserve the database and append-only audit history.
+- For database incompatibilities, halt rollout and apply a forward-fix. Restore from a verified recovery point only with the recovery approver's authorization and a documented data-loss assessment.
+
+## 8. Remaining launch gates
+
+- Hosting provider, region, domain, and TLS setup are selected and verified.
+- Production secrets are generated and installed in the platform secret manager.
+- Staging smoke tests pass for all role workflows.
+- Dependency audit and full CI pipeline pass on the remote runner.
+- Backup retention and an isolated restore drill are verified.
+- External monitoring and alert routing are tested.
+- RPO/RTO, data retention/privacy obligations, and recovery ownership are approved.

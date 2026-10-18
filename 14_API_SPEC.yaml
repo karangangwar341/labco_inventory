@@ -98,6 +98,53 @@ paths:
       responses:
         "200": { description: Scoped rawMaterials and manufacturedProducts lists }
         "403": { description: Client Admin only }
+  /production-runs:
+    get:
+      summary: List production runs in the caller's authorized scope.
+      responses:
+        "200": { description: Production runs with input and output lines }
+    post:
+      summary: Create a production draft; inventory is unchanged.
+      responses:
+        "201": { description: Production draft created }
+  /production-runs/{id}:
+    delete:
+      summary: Delete the Client Admin caller’s own production draft.
+      description: Only DRAFT runs can be deleted; submitted or approved runs are retained for review and inventory traceability.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Draft deleted; no inventory was changed }
+        "403": { description: Run is outside caller’s client or submitter scope }
+        "409": { description: Run is no longer a draft }
+    patch:
+      summary: Replace the inputs and outputs of the caller's own draft.
+      description: Client Admin only; only DRAFT runs can be edited. The update is atomic and has no inventory effect.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Draft updated }
+        "403": { description: Run is outside caller's client or submitter scope }
+        "409": { description: Run is no longer a draft }
+  /production-runs/{id}/submit:
+    post:
+      summary: Validate and submit a draft for Super Admin approval.
+      description: Stock is unchanged until Super Admin approval posts inputs and outputs atomically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Run submitted for approval }
+        "400": { description: Input stock or production data is invalid }
+        "409": { description: Run is no longer a draft }
   /products/{id}:
     patch:
       summary: Propose a new version of an owned product; changes do not take effect before Super Admin approval.
@@ -191,6 +238,55 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: Rejected }
+  /departments/returns:
+    get:
+      summary: List department returns within caller scope.
+      responses:
+        "200": { description: Client Admin receives own-client returns; Super Admin may filter by client, department, condition, or status }
+    post:
+      summary: Submit a department return for Super Admin approval; submission does not change inventory.
+      responses:
+        "201": { description: Return request created in PENDING_APPROVAL }
+        "403": { description: Caller is outside client scope or is a Store Admin }
+  /departments/returns/{returnId}/approve:
+    post:
+      summary: Super Admin approves a return and atomically posts it to the matching condition balance.
+      parameters:
+        - in: path
+          name: returnId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+      responses:
+        "200": { description: Approved and posted }
+        "403": { description: Super Admin only }
+        "409": { description: Return is no longer pending }
+  /departments/returns/{returnId}/reject:
+    post:
+      summary: Super Admin rejects a pending return with a required reason.
+      parameters:
+        - in: path
+          name: returnId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Rejected; inventory unchanged }
+        "403": { description: Super Admin only }
+  /departments/write-offs:
+    post:
+      summary: Super Admin posts a reasoned, idempotent write-off from a client's damaged or expired balance.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+      responses:
+        "201": { description: Write-off adjustment posted }
+        "403": { description: Super Admin only }
+        "409": { description: Insufficient damaged or expired stock }
   /import-batches:
     post:
       summary: Create a private import draft; must not post inventory.
@@ -208,11 +304,16 @@ paths:
         "200": { description: Validation results }
   /reports/{reportType}:
     get:
-      summary: Generate an authorized report; audit exports/downloads.
+      summary: Generate an authorized report; Super Admin may scope client reports with clientId.
       parameters:
         - in: path
           name: reportType
           required: true
           schema: { type: string }
       responses:
-        "200": { description: Report output }
+        "200":
+          description: >-
+            Report output. STOCK_BALANCE rows include the product baseUnit. PRODUCTION_RUNS rows include plannedOutput, actualOutput,
+            wastage, and inputs and outputs arrays containing product name, quantity,
+            and unit snapshots. Client-scoped report data remains restricted to the
+            requested client by server-side location and ownership filters.

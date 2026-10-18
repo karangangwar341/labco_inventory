@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import { ManufacturingView } from '@/features/manufacturing/components/ManufacturingView';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 
@@ -7,8 +8,10 @@ export const metadata = {
 
 export default function ManufacturingPage() {
   return (
-    <RoleGuard allowedRoles={['CLIENT_ADMIN']}>
-      <ManufacturingView />
+    <RoleGuard allowedRoles={['CLIENT_ADMIN', 'SUPER_ADMIN']}>
+      <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading manufacturing jobs...</div>}>
+        <ManufacturingView />
+      </Suspense>
     </RoleGuard>
   );
 }

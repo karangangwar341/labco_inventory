@@ -20,12 +20,14 @@ import { ReportsModule } from './reports/reports.module.js';
 import { BackupsModule } from './backups/backups.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { StaffModule } from './staff/staff.module.js';
+import { validateEnvironment } from './config/env.validation.js';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '../.env', '.env.local'],
+      validate: validateEnvironment,
     }),
     ThrottlerModule.forRoot([
       {

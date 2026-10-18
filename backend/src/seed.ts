@@ -24,6 +24,9 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Demo seed data is disabled in production.');
+  }
   console.log('Starting comprehensive diagnostic warehouse database seeding...');
   const defaultPasswordHash = await bcrypt.hash('Password123!', 10);
 

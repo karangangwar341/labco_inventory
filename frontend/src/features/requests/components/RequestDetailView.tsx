@@ -392,7 +392,6 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
                     <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                       {brand && role !== 'CLIENT_ADMIN' && <span>Brand: {brand}</span>}
                       {category && <span>· {category}</span>}
-                      {line.productId && <span className="font-mono">· SKU: {line.productId}</span>}
                     </div>
                   </TableCell>
 

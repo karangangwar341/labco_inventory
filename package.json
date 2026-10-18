@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Warehouse, Client Manufacturing & Inventory Management System",
+  "engines": {
+    "node": ">=22.18 <23 || >=24.11 <25"
+  },
   "workspaces": [
     "backend",
     "frontend"
@@ -10,12 +13,17 @@
   "scripts": {
     "dev:backend": "npm run start:dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend",
-    "test:backend": "npm run test --prefix backend",
-    "test:frontend": "npm run test --prefix frontend",
-    "test": "npm run test:backend && npm run test:frontend",
-    "build:backend": "npm run build --prefix backend",
-    "build:frontend": "npm run build --prefix frontend",
-    "build": "npm run build:backend && npm run build:frontend"
+    "prisma:generate": "npm run prisma:generate --workspace backend",
+    "lint:backend": "npm run lint --workspace backend",
+    "lint:frontend": "npm run lint --workspace frontend",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "typecheck": "npm run typecheck --workspace frontend",
+    "test:backend": "npm run test --workspace backend",
+    "test": "npm run test:backend",
+    "build:backend": "npm run build --workspace backend",
+    "build:frontend": "npm run build --workspace frontend",
+    "build": "npm run prisma:generate && npm run build:backend && npm run build:frontend",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "inventory",

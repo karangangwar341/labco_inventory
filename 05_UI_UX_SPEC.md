@@ -25,6 +25,7 @@
 - Company product/category catalog; product units/conversions; threshold and tracking configuration.
 - Client product approval and product-change review.
 - Client operations overview: Super Admin can open a separate, client-scoped view of posted stock, manufacturing runs, and department issue/return reports. Department and manufacturing workspaces remain in the Client Admin navigation; Super Admin reviews their pending inventory changes through Approvals.
+- Client Production Jobs page: show run counts and clear draft, waiting approval, approved, and rejected states. Client Admin can save, reopen, edit, or delete their own draft, then submit it for Super Admin approval from its details. Submitted and approved runs are retained. State clearly that drafts and pending approval do not change inventory; approval posts raw-material deductions and finished output atomically. Capture planned output, actual output when complete, wastage, optional reference/notes, and only product-configured lot/expiry fields.
 - Client/warehouse assignment management with effective history.
 - User account management: create, disable, reset password; sessions revoked on reset/disable.
 - Import review: extracted field mapping, confidence/uncertainty indicators, duplicate warnings, row-level edit, validation, approval-mode selection.

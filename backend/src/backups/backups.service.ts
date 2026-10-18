@@ -380,6 +380,7 @@ export class BackupsService {
 
     const healthData = {
       status: isHealthy ? 'HEALTHY' : 'DEGRADED',
+      ready: dbStatus === 'CONNECTED' && storageHealth.status === 'HEALTHY',
       database: dbStatus,
       storage: storageHealth,
       uptimeSeconds: Math.floor(process.uptime()),

@@ -26,25 +26,37 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 
 type ActiveTab = 'STAFF' | 'LOGS';
 
-export function StaffManagementView() {
+export interface StaffManagementViewProps {
+  clientId?: string;
+  hideHeader?: boolean;
+}
+
+export function StaffManagementView({ clientId: propClientId, hideHeader = false }: StaffManagementViewProps = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const [selectedClientId, setSelectedClientId] = useState<string>('ALL');
-  const [modalClientId, setModalClientId] = useState<string>('');
+  const [selectedClientId, setSelectedClientId] = useState<string>(propClientId || 'ALL');
+  const [modalClientId, setModalClientId] = useState<string>(propClientId || '');
+
+  useEffect(() => {
+    if (propClientId) {
+      setSelectedClientId(propClientId);
+      setModalClientId(propClientId);
+    }
+  }, [propClientId]);
 
   const { data: clients = [] } = useQuery({
     queryKey: ['administration', 'clients'],
     queryFn: administrationService.getClients,
-    enabled: isSuperAdmin,
+    enabled: isSuperAdmin && !propClientId,
   });
 
-  const effectiveClientId = isSuperAdmin
+  const effectiveClientId = propClientId || (isSuperAdmin
     ? selectedClientId !== 'ALL'
       ? selectedClientId
       : undefined
-    : user?.clientId;
+    : user?.clientId);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('STAFF');
   const [searchQuery, setSearchQuery] = useState('');
@@ -174,7 +186,7 @@ export function StaffManagementView() {
     setRoleTitle('');
     setContact('');
     setEditStatus('ACTIVE');
-    setModalClientId('');
+    setModalClientId(propClientId || '');
     setFormError(null);
   };
 
@@ -214,7 +226,7 @@ export function StaffManagementView() {
       setFormError('Full name is required');
       return;
     }
-    if (!editingStaff && isSuperAdmin && !modalClientId) {
+    if (!editingStaff && isSuperAdmin && !propClientId && !modalClientId) {
       setFormError('Please select a client organization to assign this staff member');
       return;
     }
@@ -231,12 +243,13 @@ export function StaffManagementView() {
         },
       });
     } else {
+      const targetClientId = propClientId || (isSuperAdmin && modalClientId ? modalClientId : undefined);
       createStaffMutation.mutate({
         staffNumber: staffNumber.trim(),
         fullName: fullName.trim(),
         roleTitle: roleTitle.trim() || undefined,
         contact: contact.trim() || undefined,
-        ...(isSuperAdmin && modalClientId ? { clientId: modalClientId } : {}),
+        ...(targetClientId ? { clientId: targetClientId } : {}),
       });
     }
   };
@@ -354,29 +367,52 @@ export function StaffManagementView() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <PageHeader
-        title="Staff &amp; Workforce Portal"
-        description="Manage your facility personnel, assign employee badge numbers, track active shifts, and log daily work accomplishments."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={() => {
-                resetStaffForm();
-                setIsAddStaffOpen(true);
-              }}
-            >
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Staff Member</span>
-              </span>
-            </Button>
+      {/* Header */}
+      {!hideHeader ? (
+        <PageHeader
+          title="Staff &amp; Workforce Portal"
+          description="Manage your facility personnel, assign employee badge numbers, track active shifts, and log daily work accomplishments."
+          actions={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  resetStaffForm();
+                  setIsAddStaffOpen(true);
+                }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Staff Member</span>
+                </span>
+              </Button>
+            </div>
+          }
+        />
+      ) : (
+        <div className="flex items-center justify-between pb-1">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Personnel &amp; Workforce</h2>
+            <p className="text-xs text-slate-500">Facility personnel, active shifts, and daily shift work logs for this client.</p>
           </div>
-        }
-      />
+          <Button
+            variant="primary"
+            onClick={() => {
+              resetStaffForm();
+              setIsAddStaffOpen(true);
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add Staff Member</span>
+            </span>
+          </Button>
+        </div>
+      )}
 
       {/* KPI Metric Summary Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -449,7 +485,7 @@ export function StaffManagementView() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {isSuperAdmin && (
+          {isSuperAdmin && !propClientId && (
             <select
               value={selectedClientId}
               onChange={(e) => setSelectedClientId(e.target.value)}
@@ -874,7 +910,7 @@ export function StaffManagementView() {
             </div>
           )}
 
-          {isSuperAdmin && !editingStaff && (
+          {isSuperAdmin && !editingStaff && !propClientId && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Client Organization <span className="text-rose-500">*</span>

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { QueueItem, ApprovalTab } from '../approvals.types';
 import { approvalsService } from '../approvals.service';
@@ -25,12 +26,22 @@ const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
   CORRECTIONS: [],
 };
 
+const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'MANUFACTURING', 'DEPARTMENTS', 'CORRECTIONS'];
+
 export function ApprovalsQueue() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab') as ApprovalTab | null;
+  const idParam = searchParams.get('id');
   const isAuthorized = canApproveWorkflows(user?.role);
 
-  const [activeTab, setActiveTab] = useState<ApprovalTab>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<ApprovalTab>(() => {
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      return tabParam;
+    }
+    return 'REQUESTS';
+  });
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'URGENT' | 'NORMAL'>('ALL');
   const [requesterSearch, setRequesterSearch] = useState('');
 
@@ -50,6 +61,23 @@ export function ApprovalsQueue() {
     queryFn: () => approvalsService.getQueue(),
     staleTime: 30 * 1000,
   });
+
+  // Synchronize tab from URL if present
+  useEffect(() => {
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  // Synchronize item inspection modal from URL id if present
+  useEffect(() => {
+    if (idParam && items[activeTab]?.length) {
+      const match = items[activeTab].find((i) => i.id === idParam);
+      if (match) {
+        setSelectedDetailItem(match);
+      }
+    }
+  }, [idParam, items, activeTab]);
 
   const approveMutation = useMutation({
     mutationFn: ({ tab, id }: { tab: ApprovalTab; id: string }) =>

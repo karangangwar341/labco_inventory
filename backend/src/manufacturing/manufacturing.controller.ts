@@ -2,13 +2,20 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
+  Delete,
   Param,
   Body,
   Query,
   UseGuards,
   Headers,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiHeader,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -21,6 +28,8 @@ import {
   ApproveProductionRunDto,
   RejectProductionRunDto,
 } from './dto/decide-production-run.dto.js';
+import { ReRunCycleDto } from './dto/re-run-cycle.dto.js';
+import { QueryManufacturingAnalyticsDto } from './dto/query-manufacturing-analytics.dto.js';
 
 @ApiTags('Client Manufacturing')
 @ApiBearerAuth()
@@ -39,12 +48,54 @@ export class ManufacturingController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List client manufacturing runs within caller scope' })
+  @ApiOperation({
+    summary: 'List client manufacturing runs within caller scope',
+  })
   async getProductionRuns(
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: ProductionStatus,
+    @Query('clientId') clientId?: string,
   ) {
-    return this.manufacturingService.getProductionRuns(user, status);
+    return this.manufacturingService.getProductionRuns(user, status, clientId);
+  }
+
+  @Get('cycles')
+  @ApiOperation({
+    summary: 'List distinct production cycles with finished stock status and replenishment alerts',
+  })
+  async getProductionCycles(@CurrentUser() user: AuthenticatedUser) {
+    return this.manufacturingService.getProductionCycles(user);
+  }
+
+  @Get('analytics')
+  @ApiOperation({
+    summary: 'Get manufacturing cycle analytics, yield efficiency, and execution history ledger',
+  })
+  async getManufacturingAnalytics(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: QueryManufacturingAnalyticsDto,
+  ) {
+    return this.manufacturingService.getManufacturingAnalytics(user, query);
+  }
+
+  @Post('check-low-stock-cycles')
+  @ApiOperation({
+    summary: 'Scan for low-stock manufactured products and notify client admins to re-run cycles',
+  })
+  async checkLowStockCycles(@CurrentUser() user: AuthenticatedUser) {
+    return this.manufacturingService.checkLowStockCycles(user);
+  }
+
+  @Post(':id/re-run')
+  @ApiOperation({
+    summary: 'Re-run an existing production cycle; generates a new draft with same formula and fresh batch number',
+  })
+  async reRunCycle(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto?: ReRunCycleDto,
+  ) {
+    return this.manufacturingService.reRunCycle(user, id, dto);
   }
 
   @Get(':id')
@@ -65,10 +116,36 @@ export class ManufacturingController {
     return this.manufacturingService.submitProductionRun(user, id);
   }
 
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a client production run draft without changing stock',
+  })
+  async updateProductionRun(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: CreateProductionRunDto,
+  ) {
+    return this.manufacturingService.updateProductionRun(user, id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.CLIENT_ADMIN)
+  @ApiOperation({
+    summary:
+      'Delete the caller’s own production draft; drafts have no inventory effect',
+  })
+  async deleteProductionRun(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    return this.manufacturingService.deleteProductionRun(user, id);
+  }
+
   @Post(':id/approve')
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({
-    summary: 'Super Admin approves production run; atomically posts input deductions and output additions',
+    summary:
+      'Super Admin approves production run; atomically posts input deductions and output additions',
   })
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async approveProductionRun(

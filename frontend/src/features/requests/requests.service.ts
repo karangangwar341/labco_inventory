@@ -11,6 +11,9 @@ import {
 export const requestsService = {
   getRequests: async (params?: {
     status?: RequestStatus;
+    requestType?: string;
+    clientId?: string;
+    warehouseId?: string;
     limit?: number;
     page?: number;
   }): Promise<StockRequest[]> => {

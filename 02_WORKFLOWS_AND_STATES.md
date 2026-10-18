@@ -51,6 +51,7 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 ## 8. Manufacturing
 ### Linked production
 - Client records production run, inputs consumed, planned/actual output, wastage and optional notes.
+- The submitting Client Admin may delete their own `DRAFT` run; it has no inventory effect. Submitted and approved runs cannot be deleted through ordinary actions and remain available for approval and audit history.
 - Validate input stock and product/unit rules.
 - Super Admin approval posts all input deductions and output additions atomically. No partial posting.
 ### Separate transactions

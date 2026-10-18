@@ -1,19 +1,56 @@
-import { apiClient } from '../../lib/api/client';
-import { endpoints } from '../../lib/api/endpoints';
-import { actionIdempotency } from '../../lib/api/idempotency';
+import { apiClient } from "../../lib/api/client";
+import { endpoints } from "../../lib/api/endpoints";
+import { actionIdempotency } from "../../lib/api/idempotency";
 import {
   ProductionRun,
   CreateProductionRunPayload,
   ProductionStatus,
-} from './manufacturing.types';
+  ProductionCycle,
+  ReRunCyclePayload,
+  ManufacturingAnalytics,
+} from "./manufacturing.types";
 
 export const manufacturingService = {
   getProductionRuns: async (params?: {
     status?: ProductionStatus;
+    clientId?: string;
   }): Promise<ProductionRun[]> => {
     return apiClient.get<ProductionRun[]>(
       endpoints.manufacturing.productionRuns(params),
     );
+  },
+
+  getProductionCycles: async (): Promise<ProductionCycle[]> => {
+    return apiClient.get<ProductionCycle[]>(endpoints.manufacturing.cycles());
+  },
+
+  reRunCycle: async (
+    id: string,
+    payload?: ReRunCyclePayload,
+  ): Promise<ProductionRun> => {
+    return apiClient.post<ProductionRun>(
+      endpoints.manufacturing.reRun(id),
+      payload || {},
+    );
+  },
+
+  getAnalytics: async (params?: {
+    clientId?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: string;
+  }): Promise<ManufacturingAnalytics> => {
+    return apiClient.get<ManufacturingAnalytics>(
+      endpoints.manufacturing.analytics(params),
+    );
+  },
+
+  checkLowStockCycles: async (): Promise<{
+    checkedCyclesCount: number;
+    alertedCyclesCount: number;
+    cycles: ProductionCycle[];
+  }> => {
+    return apiClient.post(endpoints.manufacturing.checkLowStockCycles());
   },
 
   getProductionRunById: async (id: string): Promise<ProductionRun> => {
@@ -27,6 +64,20 @@ export const manufacturingService = {
       endpoints.manufacturing.create(),
       payload,
     );
+  },
+
+  updateProductionRun: async (
+    id: string,
+    payload: CreateProductionRunPayload,
+  ): Promise<ProductionRun> => {
+    return apiClient.patch<ProductionRun>(
+      endpoints.manufacturing.update(id),
+      payload,
+    );
+  },
+
+  deleteProductionRun: async (id: string): Promise<void> => {
+    return apiClient.delete(endpoints.manufacturing.delete(id));
   },
 
   submitProductionRun: async (id: string): Promise<ProductionRun> => {
@@ -53,10 +104,7 @@ export const manufacturingService = {
     }
   },
 
-  rejectProductionRun: async (
-    id: string,
-    reason: string,
-  ): Promise<void> => {
+  rejectProductionRun: async (id: string, reason: string): Promise<void> => {
     return apiClient.post(endpoints.manufacturing.reject(id), { reason });
   },
 
@@ -64,9 +112,8 @@ export const manufacturingService = {
     id: string,
     actualQuantity?: number,
   ): Promise<ProductionRun> => {
-    return apiClient.post<ProductionRun>(
-      endpoints.manufacturing.complete(id),
-      { actualQuantity },
-    );
+    return apiClient.post<ProductionRun>(endpoints.manufacturing.complete(id), {
+      actualQuantity,
+    });
   },
 };
