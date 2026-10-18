@@ -1,6 +1,6 @@
 # Deployment, Operations & Recovery Runbook
 
-**Status:** Vercel multi-service configuration is prepared in the repository. Vercel account/project setup, region, public domain, RPO/RTO, monitoring destination, and production credentials still require owner decisions and setup. No production deployment has been performed.
+**Status:** The repository is intended for two separate Vercel projects: one for the NestJS API and one for the Next.js frontend. Vercel project setup, region, public domains, RPO/RTO, monitoring destination, and production credentials still require owner setup. No production deployment has been performed.
 
 ## 1. Supported runtime and architecture
 
@@ -9,7 +9,7 @@
 - PostgreSQL is the application database. Use Neon or another supported PostgreSQL host. `DATABASE_URL` is the pooled runtime connection; `DIRECT_URL` is the direct connection reserved for migrations.
 - File uploads require durable S3-compatible object storage in production. `STORAGE_DRIVER=local` is rejected for production configuration.
 - Keep API and frontend origins on HTTPS. Configure the frontend build with the public API URL.
-- For the Vercel multi-service deployment, the root `vercel.json` routes `/api/*` to the NestJS service and all other paths to Next.js on one origin. The frontend defaults to `/api/v1` in production; no service binding is needed because browser requests use the public API route.
+- Deploy `backend/` and `frontend/` as separate Vercel projects from the same repository. Set `NEXT_PUBLIC_API_URL` on the frontend project to the backend's public HTTPS URL ending in `/api/v1`; allow the frontend's exact HTTPS origin in the backend's `CORS_ALLOWED_ORIGINS`.
 
 ## 2. CI quality gate
 
@@ -49,6 +49,7 @@ Required:
 
 Optional:
 
+- On Vercel, set `NODE_OPTIONS=--experimental-require-module` for the backend project. Vercel disables Node's `require(esm)` compatibility by default, and NestJS 12 packages are ESM-only.
 - `TRUST_PROXY_HOPS`: set to the exact number of trusted reverse-proxy hops. Leave unset when the API receives direct client connections. Do not accept arbitrary forwarded-IP headers as trusted.
 - `ENABLE_API_DOCS=true`: explicitly exposes Swagger documentation. Documentation is disabled by default in production.
 - `GEMINI_API_KEY`: enables Gemini document extraction; deterministic fallback remains available if it is omitted.
@@ -57,7 +58,7 @@ Production configuration validation fails startup for missing/placeholder databa
 
 ### Frontend build/runtime
 
-- `NEXT_PUBLIC_API_URL`: optional full public API base URL including `/api/v1`, set at build time when the API uses a different origin. For the Vercel multi-service deployment, omit it to use the same-origin `/api/v1` route.
+- `NEXT_PUBLIC_API_URL`: required for separate Vercel projects. Set it at build time to the backend's public HTTPS URL including `/api/v1` (for example, `https://<backend-project>.vercel.app/api/v1`).
 - Build and run the frontend as a Node.js server using `npm run build:frontend` and `npm run start --workspace frontend`.
 
 ## 4. Release procedure
@@ -72,7 +73,7 @@ Production configuration validation fails startup for missing/placeholder databa
    npm run prisma:migrate:deploy --workspace backend
    ```
 
-6. For Vercel Services, connect the repository with the Vercel framework set to Services and use the root `vercel.json` routing. Set the required environment variables for both services, including an exact HTTPS `CORS_ALLOWED_ORIGINS` value for the public application origin. For other hosts, build the frontend with the production `NEXT_PUBLIC_API_URL` and deploy the API and frontend artifacts using the host's release process.
+6. For Vercel, create two projects from the same repository. Set the backend project's Root Directory to `backend` and use the NestJS framework preset; set the frontend project's Root Directory to `frontend` and use the Next.js preset. Configure each project's environment variables. Set `NEXT_PUBLIC_API_URL` on the frontend to the backend deployment URL plus `/api/v1`, and set the backend's `CORS_ALLOWED_ORIGINS` to the exact frontend HTTPS origin. For other hosts, deploy the API and frontend separately and apply the same URL and CORS settings.
 7. If the production database is empty, provision the first Super Admin exactly once using temporary `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` secret values, then run:
 
    ```bash

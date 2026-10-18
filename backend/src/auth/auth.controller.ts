@@ -53,13 +53,9 @@ export class AuthController {
       userAgent,
     );
 
-    const response = await this.authService.login(user);
-    try {
-      response.bootstrap = await this.authService.getBootstrap(user);
-    } catch {
-      // Keep authentication available if the optional startup reference lookup is unavailable.
-    }
-    return response;
+    // Keep login latency focused on credential validation and session creation.
+    // Startup reference data is fetched separately after the client establishes the session.
+    return this.authService.login(user);
   }
 
   @Post('logout')

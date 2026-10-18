@@ -125,6 +125,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(profile);
       if (res.bootstrap) {
         queryClient.setQueryData<AppBootstrap>(queryKeys.session.bootstrap(profile.id), res.bootstrap);
+      } else {
+        // Don't make sign-in wait for catalog and location lookups. Load them after
+        // the session is established; pages that need them can also fetch on demand.
+        void authService.getBootstrap().then((bootstrap) => {
+          queryClient.setQueryData<AppBootstrap>(queryKeys.session.bootstrap(profile.id), bootstrap);
+        }).catch(() => {
+          // Keep sign-in successful if optional startup references are temporarily unavailable.
+        });
       }
       try {
         localStorage.setItem('user_session', JSON.stringify(profile));

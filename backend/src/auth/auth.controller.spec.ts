@@ -11,6 +11,7 @@ describe('AuthController & MeController', () => {
     mockAuthService = {
       validateUserCredentials: vi.fn(),
       login: vi.fn(),
+      getBootstrap: vi.fn(),
       logout: vi.fn(),
     };
 
@@ -47,6 +48,7 @@ describe('AuthController & MeController', () => {
         'TestAgent',
       );
       expect(mockAuthService.login).toHaveBeenCalledWith(mockUser);
+      expect(mockAuthService.getBootstrap).not.toHaveBeenCalled();
       expect(result).toEqual(expectedResponse);
     });
   });
