@@ -24,7 +24,11 @@ async function bootstrap() {
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (such as mobile apps, curl, or server-to-server)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+      ) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked for untrusted origin: ${origin}`));
@@ -38,8 +42,10 @@ async function bootstrap() {
       'X-Requested-With',
       'Idempotency-Key',
       'X-Request-ID',
+      'X-Device-Id',
+      'x-device-id',
     ],
-    exposedHeaders: ['X-Request-ID', 'X-Response-Time'],
+    exposedHeaders: ['X-Request-ID', 'X-Response-Time', 'X-Device-Id'],
   });
 
   // Request correlation and duration timing middleware (P-001)
