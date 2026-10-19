@@ -55,7 +55,7 @@ Provide an online system for a company to manage warehouse inventory, client sup
 
 ## 5. Product catalog
 - The company catalog contains raw materials; each client has a separate catalog for manufactured products. Client Admins can create manufactured products only, using categories owned by their client. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.
-- Manufacturing input choices are limited to approved raw materials with current client balances or stock-ledger history at that client. Output choices are approved manufactured products from that same client’s catalog. Manufactured products are issued to that client’s departments.
+- Manufacturing input choices are limited to approved raw materials with current client balances or stock-ledger history at that client. Output choices are approved manufactured products from that same client’s catalog. Client stock-out is recorded through the daily department issue workflow; each line selects an active department and an approved manufactured product from that client’s catalog with available stock.
 - No SKU/product-code field.
 - Optional image, description and batch details.
 - Flexible physical attributes (e.g. weight, length, breadth, thickness, diameter) are distinct from inventory unit/quantity.

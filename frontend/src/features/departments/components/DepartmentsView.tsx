@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
 import { Input } from '../../../components/ui/Input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../../components/ui/Table';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../../components/ui/Card';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
@@ -81,13 +82,13 @@ export function DepartmentsView() {
   });
 
   const {
-    data: manufacturingOptions,
-    isLoading: isManufacturingOptionsLoading,
-    error: manufacturingOptionsError,
-    refetch: refetchManufacturingOptions,
+    data: catalogProducts = [],
+    isLoading: isCatalogProductsLoading,
+    error: catalogProductsError,
+    refetch: refetchCatalogProducts,
   } = useQuery({
-    queryKey: queryKeys.catalog.manufacturingOptions(),
-    queryFn: () => catalogService.getManufacturingOptions(),
+    queryKey: queryKeys.catalog.products(`client-${user?.clientId || user?.id || 'current'}`),
+    queryFn: () => catalogService.getProducts(),
     enabled: role === 'CLIENT_ADMIN',
     staleTime: 2 * 60 * 1000,
   });
@@ -105,19 +106,24 @@ export function DepartmentsView() {
   });
 
   const isLoading = isDeptsLoading || isIssuesLoading;
-  const currentError = errorMsg || [deptsError, issuesError, manufacturingOptionsError, balancesError]
+  const currentError = errorMsg || [deptsError, issuesError, catalogProductsError, balancesError]
     .find((error): error is Error => error instanceof Error)?.message || null;
-  const isIssueDataLoading = isManufacturingOptionsLoading || isBalancesLoading;
+  const isIssueDataLoading = isCatalogProductsLoading || isBalancesLoading;
   const activeDepartments = departments.filter((department) => department.status === 'ACTIVE');
-  const stockedManufacturedProducts = useMemo(() => {
+  const stockedProducts = useMemo(() => {
     const stockedIds = new Set(balances
       .filter((balance) => Number(balance.availableQty) > 0)
       .map((balance) => balance.productId));
-    return (manufacturingOptions?.manufacturedProducts || []).filter((product) => stockedIds.has(product.id));
-  }, [manufacturingOptions, balances]);
+    return catalogProducts.filter(
+      (product) =>
+        product.status === 'APPROVED' &&
+        product.kind === 'MANUFACTURED_PRODUCT' &&
+        stockedIds.has(product.id),
+    );
+  }, [catalogProducts, balances]);
   const effectiveIssueDepartmentId = issueDepartmentId || activeDepartments[0]?.id || '';
-  const effectiveIssueProductId = issueProductId || stockedManufacturedProducts[0]?.id || '';
-  const selectedIssueProduct = stockedManufacturedProducts.find((product) => product.id === effectiveIssueProductId);
+  const effectiveIssueProductId = issueProductId || stockedProducts[0]?.id || '';
+  const selectedIssueProduct = stockedProducts.find((product) => product.id === effectiveIssueProductId);
   const issueBalances = balances.filter((balance) =>
     balance.productId === effectiveIssueProductId && Number(balance.availableQty) > 0,
   );
@@ -217,7 +223,7 @@ export function DepartmentsView() {
       queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), batch);
       await invalidation.afterDepartmentMutation(queryClient);
       await queryClient.invalidateQueries({ queryKey: queryKeys.approvals.all });
-      setActionSuccess(batch.status === 'POSTED' ? 'Daily department issue was posted.' : 'Daily department issue was sent for approval.');
+      setActionSuccess(batch.status === 'POSTED' ? 'Stock out was posted.' : 'Stock out was sent for approval.');
       setTimeout(() => setActionSuccess(null), 5000);
     },
     onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Daily department issue could not be submitted.'),
@@ -250,6 +256,10 @@ export function DepartmentsView() {
   });
 
   useEffect(() => {
+    if (searchParams.get('tab') === 'ISSUES') setActiveTab('ISSUES');
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!departmentIdFromNotification || isDeptsLoading || handledNotificationId.current === departmentIdFromNotification) return;
     const target = departments.find((department) => department.id === departmentIdFromNotification);
     if (!target) {
@@ -259,8 +269,8 @@ export function DepartmentsView() {
           queryClient.setQueryData<Department[]>(queryKeys.departments.list(), (current = []) =>
             current.some((item) => item.id === department.id) ? current : [...current, department],
           );
-        }).catch((err: unknown) => {
-          setErrorMsg(err instanceof Error ? err.message : 'This department request could not be opened.');
+        }).catch(() => {
+          // Department was not found or was already processed
         });
       }
       return;
@@ -281,7 +291,7 @@ export function DepartmentsView() {
     refetchDepts();
     refetchIssues();
     if (role === 'CLIENT_ADMIN') {
-      void refetchManufacturingOptions();
+      void refetchCatalogProducts();
       void refetchBalances();
     }
   };
@@ -289,21 +299,21 @@ export function DepartmentsView() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={activeTab === 'RETURNS' ? 'Department Returns & Write-offs' : 'Departments & Stock Issues'}
-        description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Build a daily department issue draft, then submit all lines together.'}
+        title={activeTab === 'RETURNS' ? 'Department Returns & Write-offs' : activeTab === 'ISSUES' ? 'Stock Out to Departments' : 'Departments'}
+        description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Add stocked products, choose a department for each line, and submit the day’s stock out together.'}
         actions={
           activeTab !== 'RETURNS' ? <div className="flex flex-wrap gap-2">
             {role === 'CLIENT_ADMIN' && (
               <>
                 <Button variant="secondary" disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'} onClick={() => { setErrorMsg(null); setIsIssueModalOpen(true); }}>
-                  Add issue line{issueDraftQuery.data?.issues.length ? ` (${issueDraftQuery.data.issues.length})` : ''}
+                  Add product{issueDraftQuery.data?.issues.length ? ` (${issueDraftQuery.data.issues.length})` : ''}
                 </Button>
                 <Button
                   variant="primary"
                   disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data.issues.length || submitIssueBatchMutation.isPending}
                   onClick={() => submitIssueBatchMutation.mutate()}
                 >
-                  {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit daily request'}
+                  {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit stock out'}
                 </Button>
               </>
             )}
@@ -353,7 +363,7 @@ export function DepartmentsView() {
               : 'border-transparent text-[#5b6678] hover:text-[#172033]'
           }`}
         >
-          Issue Requisitions ({history.length})
+          Stock Out History ({history.length})
         </button>
         <button
           role="tab"
@@ -438,53 +448,191 @@ export function DepartmentsView() {
           </div>
         )
       ) : (
-        history.length === 0 ? (
-          <EmptyState
-            title="No department issues recorded"
-            description="Department stock requests will appear here after you submit them."
-          />
-        ) : (
-          <Table>
-            <TableHeader sticky>
-              <tr>
-                <TableHead>Issue #</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Product and quantity</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Issued At</TableHead>
-              </tr>
-            </TableHeader>
-            <TableBody>
-              {history.map((tx: DepartmentIssue) => (
-                <TableRow key={tx.id}>
-                  <TableCell className="font-mono font-medium text-[#172033]">
-                    {tx.issueNumber || 'Department issue'}
-                  </TableCell>
-                  <TableCell className="font-semibold text-[#172033]">
-                    {tx.department?.name || tx.departmentName || 'Department'}
-                  </TableCell>
-                  <TableCell>
-                    <span className="block text-xs text-[#172033]">
-                      {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-[#5b6678] text-xs">
-                    {tx.notes || '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
-                      {tx.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
-                    {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )
+        <div className="space-y-6">
+          {role === 'CLIENT_ADMIN' && (
+            <Card>
+              <CardHeader
+                action={
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'}
+                      onClick={() => {
+                        setErrorMsg(null);
+                        setEditingIssueId(null);
+                        setIssueDepartmentId(activeDepartments[0]?.id || '');
+                        setIssueProductId(stockedProducts[0]?.id || '');
+                        setIssueQuantity('');
+                        setIssueNotes('');
+                        setIsIssueModalOpen(true);
+                      }}
+                    >
+                      + Add Product Line
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data?.issues?.length || submitIssueBatchMutation.isPending}
+                      onClick={() => submitIssueBatchMutation.mutate()}
+                    >
+                      {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit Today’s Stock Out'}
+                    </Button>
+                  </div>
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <CardTitle>Today’s Daily Stock Out Draft</CardTitle>
+                  <Badge variant={issueDraftQuery.data?.status === 'DRAFT' ? 'neutral' : 'success'}>
+                    {issueDraftQuery.data?.status || 'DRAFT'}
+                  </Badge>
+                </div>
+                <CardDescription>
+                  Build your daily stock out list below. For each product, select which internal department receives it. When ready, submit the batch together for approval/posting.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {issueDraftQuery.data?.issues?.length ? (
+                  <Table>
+                    <TableHeader>
+                      <tr>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Receiving Department</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </tr>
+                    </TableHeader>
+                    <TableBody>
+                      {issueDraftQuery.data.issues.map((line) => (
+                        <TableRow key={line.id}>
+                          <TableCell className="font-semibold text-[#172033]">
+                            {line.product?.name || 'Product'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="neutral">
+                              {line.department?.name || 'Department'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-[#172033]">
+                            {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
+                          </TableCell>
+                          <TableCell className="text-xs text-[#5b6678]">
+                            {line.notes || '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingIssueId(line.id);
+                                  setIssueDepartmentId(line.departmentId);
+                                  setIssueProductId(line.productId);
+                                  setIssueUnitId(line.unit?.id || '');
+                                  setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
+                                  setIssueQuantity(String(line.quantity));
+                                  setIssueNotes(line.notes || '');
+                                  setIsIssueModalOpen(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                disabled={removeIssueLineMutation.isPending}
+                                onClick={() => removeIssueLineMutation.mutate(line.id)}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="py-8 text-center text-xs text-[#5b6678]">
+                    <p className="font-medium text-[#172033]">No products in today’s stock out draft yet.</p>
+                    <p className="mt-1">Add items as departments request them, assign each to its destination department, and submit when complete.</p>
+                    <div className="mt-4">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={!activeDepartments.length}
+                        onClick={() => {
+                          setErrorMsg(null);
+                          setEditingIssueId(null);
+                          setIssueDepartmentId(activeDepartments[0]?.id || '');
+                          setIssueProductId(stockedProducts[0]?.id || '');
+                          setIssueQuantity('');
+                          setIssueNotes('');
+                          setIsIssueModalOpen(true);
+                        }}
+                      >
+                        + Add First Product Line
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <div>
+            <h3 className="text-sm font-semibold text-[#172033] mb-3">Stock Out History</h3>
+            {history.length === 0 ? (
+              <EmptyState
+                title="No department issues recorded"
+                description="Past department stock requests will appear here after they are submitted and processed."
+              />
+            ) : (
+              <Table>
+                <TableHeader sticky>
+                  <tr>
+                    <TableHead>Issue #</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Product and quantity</TableHead>
+                    <TableHead>Note</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Issued At</TableHead>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {history.map((tx: DepartmentIssue) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="font-mono font-medium text-[#172033]">
+                        {tx.issueNumber || 'Department issue'}
+                      </TableCell>
+                      <TableCell className="font-semibold text-[#172033]">
+                        {tx.department?.name || tx.departmentName || 'Department'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="block text-xs text-[#172033]">
+                          {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-[#5b6678] text-xs">
+                        {tx.notes || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
+                          {tx.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
+                        {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </div>
       )}
 
       {/* New Department Modal */}
@@ -515,7 +663,7 @@ export function DepartmentsView() {
       <Modal
         isOpen={isIssueModalOpen}
         onClose={() => setIsIssueModalOpen(false)}
-        title="Issue manufactured stock to a department"
+        title="Add stock out to a department"
       >
         <form
           onSubmit={(event) => {
@@ -524,39 +672,14 @@ export function DepartmentsView() {
             if (!effectiveIssueDepartmentId || !effectiveIssueProductId || !effectiveIssueBalanceId ||
               !effectiveIssueUnitId || !Number(issueQuantity) || Number(issueQuantity) <= 0 ||
               Number(issueQuantity) > availableInSelectedUnit) {
-              setErrorMsg('Choose a department, an in-stock manufactured product, and a quantity within available stock.');
+              setErrorMsg('Choose a department, an in-stock product, and a quantity within available stock.');
               return;
             }
             saveIssueLineMutation.mutate();
           }}
           className="space-y-3 text-xs"
         >
-          <p className="text-[#5b6678]">Save lines as they come in, edit them during the day, and submit the complete request when ready.</p>
-          {issueDraftQuery.data?.issues.length ? (
-            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-[#dbe3ee] p-2">
-              <p className="font-semibold text-[#172033]">Daily draft · {issueDraftQuery.data.issues.length} lines</p>
-              {issueDraftQuery.data.issues.map((line) => (
-                <div key={line.id} className="flex items-center justify-between gap-3 border-t border-[#edf1f6] pt-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-[#172033]">{line.product?.name || 'Product'} · {line.department?.name || 'Department'}</p>
-                    <p className="text-[#5b6678]">{line.quantity} {line.unit?.unitName || line.unitNameSnapshot}</p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button type="button" variant="secondary" size="sm" onClick={() => {
-                      setEditingIssueId(line.id);
-                      setIssueDepartmentId(line.departmentId);
-                      setIssueProductId(line.productId);
-                      setIssueUnitId(line.unit?.id || '');
-                      setIssueBalanceId(balances.find((balance) => balance.productId === line.productId && balance.batchId === (line.batchId || null))?.id || '');
-                      setIssueQuantity(String(line.quantity));
-                      setIssueNotes(line.notes || '');
-                    }}>Edit</Button>
-                    <Button type="button" variant="danger" size="sm" disabled={removeIssueLineMutation.isPending} onClick={() => removeIssueLineMutation.mutate(line.id)}>Remove</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : <p className="rounded-lg bg-slate-50 p-3 text-[#5b6678]">No saved lines yet. Add one below to start the daily request.</p>}
+          <p className="text-[#5b6678]">{editingIssueId ? 'Modify this item’s department, product, or quantity.' : 'Select a manufactured product from available stock, assign which department receives it, and specify the quantity.'}</p>
           <div>
             <label htmlFor="issue-department" className="mb-1 block font-medium text-[#172033]">Department</label>
             <select
@@ -582,18 +705,18 @@ export function DepartmentsView() {
                 setIssueQuantity('');
               }}
               required
-              disabled={!stockedManufacturedProducts.length}
+              disabled={!stockedProducts.length}
               className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033] disabled:bg-slate-100"
             >
-              {!stockedManufacturedProducts.length && <option value="">No manufactured stock is available</option>}
-              {stockedManufacturedProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              {!stockedProducts.length && <option value="">No manufactured client stock is available</option>}
+              {stockedProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
 
           {isIssueDataLoading ? (
-            <p className="text-[#5b6678]">Loading finished products and available stock…</p>
-          ) : !stockedManufacturedProducts.length ? (
-            <p className="rounded-md bg-amber-50 p-2 text-amber-800">Manufacture and approve finished products first. Only products with available client stock can be issued.</p>
+            <p className="text-[#5b6678]">Loading manufactured products and available stock…</p>
+          ) : !stockedProducts.length ? (
+            <p className="rounded-md bg-amber-50 p-2 text-amber-800">There are no approved manufactured products with available client stock to send to a department.</p>
           ) : (
             <>
               {(issueBalances.length > 1 || selectedIssueProduct?.trackingMode === 'BATCH_ONLY' || selectedIssueProduct?.trackingMode === 'BOTH') && (
@@ -649,7 +772,7 @@ export function DepartmentsView() {
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => { setIsIssueModalOpen(false); setEditingIssueId(null); }}>Close</Button>
-            <Button type="submit" variant="primary" disabled={saveIssueLineMutation.isPending || isIssueDataLoading || !stockedManufacturedProducts.length}>
+            <Button type="submit" variant="primary" disabled={saveIssueLineMutation.isPending || isIssueDataLoading || !stockedProducts.length}>
               {saveIssueLineMutation.isPending ? 'Saving…' : editingIssueId ? 'Update line' : 'Save line'}
             </Button>
           </div>

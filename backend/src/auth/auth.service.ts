@@ -1,11 +1,13 @@
 import {
   Injectable,
+  Optional,
   UnauthorizedException,
   ForbiddenException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { User, UserStatus, LoginOutcome, UserRole, ProductStatus, ProductKind, CatalogScope, OrganizationStatus } from '@prisma/client';
 import { AuthResponseDto } from './dto/auth-response.dto.js';
@@ -21,6 +23,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   async validateUserCredentials(
@@ -118,7 +121,10 @@ export class AuthService {
     return user;
   }
 
-  async login(user: User): Promise<AuthResponseDto> {
+  async login(
+    user: User,
+    clientContext?: { deviceId?: string; userAgent?: string; ipAddress?: string },
+  ): Promise<AuthResponseDto> {
     const now = new Date();
 
     // Invariant: Single active session per account. Invalidate prior active sessions.
@@ -137,35 +143,46 @@ export class AuthService {
     const rawSessionToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawSessionToken).digest('hex');
 
-    // 7-day session lifetime ceiling
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // Configurable session lifetime ceiling (defaults to 30 days)
+    const sessionDays = parseInt(this.configService?.get<string>('SESSION_LIFETIME_DAYS') || '30', 10);
+    const expiresAt = new Date(Date.now() + sessionDays * 24 * 60 * 60 * 1000);
+
+    const userAgentHash = clientContext?.userAgent
+      ? crypto.createHash('sha256').update(clientContext.userAgent).digest('hex')
+      : null;
 
     const session = await this.prisma.session.create({
       data: {
         userId: user.id,
         tokenHash,
+        deviceId: clientContext?.deviceId || null,
+        userAgentHash,
+        ipAddress: clientContext?.ipAddress || null,
         isRevoked: false,
         lastActivityAt: now,
         expiresAt,
       },
     });
 
-    // Access token lifetime: 15 minutes (900 seconds)
+    const jwtExpiration = this.configService?.get<string>('JWT_EXPIRATION') || '30d';
+    const expiresInSeconds = this.parseExpirationToSeconds(jwtExpiration);
+
     const payload = {
       sub: user.id,
       username: user.username,
       role: user.role,
       sessionId: session.id,
+      deviceId: clientContext?.deviceId || null,
       warehouseId: user.warehouseId ?? null,
       clientId: user.clientId ?? null,
     };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: jwtExpiration as any });
 
     return {
       accessToken,
       tokenType: 'Bearer',
-      expiresIn: 900,
+      expiresIn: expiresInSeconds,
       user: {
         id: user.id,
         username: user.username,
@@ -175,6 +192,20 @@ export class AuthService {
         clientId: user.clientId ?? null,
       },
     };
+  }
+
+  private parseExpirationToSeconds(exp: string): number {
+    const match = exp.match(/^(\d+)([smhd])$/);
+    if (!match) return 30 * 86400;
+    const val = parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+      case 's': return val;
+      case 'm': return val * 60;
+      case 'h': return val * 3600;
+      case 'd': return val * 86400;
+      default: return 30 * 86400;
+    }
   }
 
   /** Small, role-scoped reference set used to render the first workspace screen. */
@@ -252,26 +283,32 @@ export class AuthService {
     };
   }
 
-  async validateSession(userId: string, sessionId: string): Promise<User | null> {
+  async validateSession(
+    userId: string,
+    sessionId: string,
+    clientContext?: { deviceId?: string; userAgent?: string; ipAddress?: string },
+  ): Promise<User | null> {
     // In-flight promise sharing avoids duplicate DB reads for parallel requests while
     // preserving immediate cross-instance revocation checks on every new request.
-    const inFlight = this.inFlightSessionValidations.get(sessionId);
+    const cacheKey = `${sessionId}:${clientContext?.deviceId || ''}:${clientContext?.userAgent || ''}`;
+    const inFlight = this.inFlightSessionValidations.get(cacheKey);
     if (inFlight) {
       return inFlight;
     }
 
-    const validationPromise = this.doValidateSession(userId, sessionId);
-    this.inFlightSessionValidations.set(sessionId, validationPromise);
+    const validationPromise = this.doValidateSession(userId, sessionId, clientContext);
+    this.inFlightSessionValidations.set(cacheKey, validationPromise);
     try {
       return await validationPromise;
     } finally {
-      this.inFlightSessionValidations.delete(sessionId);
+      this.inFlightSessionValidations.delete(cacheKey);
     }
   }
 
   private async doValidateSession(
     userId: string,
     sessionId: string,
+    clientContext?: { deviceId?: string; userAgent?: string; ipAddress?: string },
   ): Promise<User | null> {
     const now = Date.now();
     // Database errors intentionally propagate. Falling back to an old positive
@@ -285,10 +322,45 @@ export class AuthService {
       return null;
     }
 
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    // 1. Device binding check:
+    // If the session was registered with a device ID, any request must match that exact device ID.
+    if (session.deviceId) {
+      if (!clientContext?.deviceId || session.deviceId !== clientContext.deviceId) {
+        // Device mismatch (stolen or copied token on a different device) - revoke immediately
+        await this.prisma.session.update({
+          where: { id: session.id },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+        return null;
+      }
+    }
 
-    // Check 7-day inactivity timeout
-    if (now - session.lastActivityAt.getTime() > sevenDaysMs || now > session.expiresAt.getTime()) {
+    // 2. Browser / User-Agent binding check:
+    // If the session was bound to a User-Agent hash, reject if copied to a different browser/client
+    if (session.userAgentHash) {
+      if (!clientContext?.userAgent) {
+        await this.prisma.session.update({
+          where: { id: session.id },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+        return null;
+      }
+      const incomingUaHash = crypto.createHash('sha256').update(clientContext.userAgent).digest('hex');
+      if (session.userAgentHash !== incomingUaHash) {
+        // User-agent mismatch (e.g. copied from Chrome to Firefox/Safari or curl/Postman)
+        await this.prisma.session.update({
+          where: { id: session.id },
+          data: { isRevoked: true, revokedAt: new Date() },
+        });
+        return null;
+      }
+    }
+
+    const inactivityDays = parseInt(this.configService?.get<string>('SESSION_INACTIVITY_DAYS') || '30', 10);
+    const inactivityTimeoutMs = inactivityDays * 24 * 60 * 60 * 1000;
+
+    // Check inactivity timeout and absolute expiration ceiling
+    if (now - session.lastActivityAt.getTime() > inactivityTimeoutMs || now > session.expiresAt.getTime()) {
       await this.prisma.session.update({
         where: { id: session.id },
         data: { isRevoked: true, revokedAt: new Date() },

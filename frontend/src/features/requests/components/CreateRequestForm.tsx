@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -53,6 +53,7 @@ function isStockInType(value: string | null): value is Direction {
 export function CreateRequestForm() {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const userId = user?.id;
   const clientId = user?.clientId;
@@ -199,10 +200,14 @@ export function CreateRequestForm() {
   }, [clientId, queryClient, userId]);
 
   useEffect(() => {
-    const requestedDirection = new URLSearchParams(window.location.search).get('type');
+    const requestedDirection = searchParams.get('type');
+    if (user?.role === 'CLIENT_ADMIN' && requestedDirection !== 'STOCK_IN' && !searchParams.get('edit')) {
+      router.replace('/departments?tab=ISSUES');
+      return;
+    }
     if (isStockInType(requestedDirection)) setDirection(requestedDirection);
     void loadFormOptions();
-  }, [loadFormOptions]);
+  }, [loadFormOptions, router, searchParams, user?.role]);
 
   useEffect(() => {
     if (!availableLocations.some((location) => location.id === locationId)) {

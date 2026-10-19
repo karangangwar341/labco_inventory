@@ -9,6 +9,7 @@ export interface JwtPayload {
   username: string;
   role: string;
   sessionId: string;
+  deviceId?: string | null;
   warehouseId?: string | null;
   clientId?: string | null;
 }
@@ -30,13 +31,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
+      passReqToCallback: true,
     });
   }
 
-  async validate(payload: JwtPayload) {
-    const user = await this.authService.validateSession(payload.sub, payload.sessionId);
+  async validate(reqOrPayload: any, maybePayload?: JwtPayload) {
+    // Accommodate both passReqToCallback: true (req, payload) and direct test calls (payload)
+    const req = maybePayload ? reqOrPayload : null;
+    const payload: JwtPayload = maybePayload || reqOrPayload;
+
+    const incomingUserAgent = req?.headers?.['user-agent'];
+    const incomingDeviceId = (req?.headers?.['x-device-id'] as string) || (payload.deviceId ?? undefined);
+    const ipAddress = req?.ip || req?.socket?.remoteAddress;
+
+    const user = await this.authService.validateSession(payload.sub, payload.sessionId, {
+      deviceId: incomingDeviceId,
+      userAgent: incomingUserAgent,
+      ipAddress,
+    });
+
     if (!user) {
-      throw new UnauthorizedException('Session expired, revoked, or replaced by another login');
+      throw new UnauthorizedException('Session expired, revoked, replaced by another login, or used on an unauthorized device');
     }
 
     return {

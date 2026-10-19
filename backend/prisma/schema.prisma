@@ -597,6 +597,9 @@ model Session {
   id             String    @id @default(uuid())
   userId         String    @map("user_id")
   tokenHash      String    @unique @map("token_hash")
+  deviceId       String?   @map("device_id")
+  userAgentHash  String?   @map("user_agent_hash")
+  ipAddress      String?   @map("ip_address")
   isRevoked      Boolean   @default(false) @map("is_revoked")
   revokedAt      DateTime? @map("revoked_at")
   lastActivityAt DateTime  @default(now()) @map("last_activity_at")
@@ -606,6 +609,7 @@ model Session {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([deviceId])
   @@map("sessions")
 }
 

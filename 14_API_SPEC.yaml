@@ -296,7 +296,7 @@ paths:
         "403": { description: Client Admin only }
   /departments/issues/batches:
     get:
-      summary: List department issue batches, scoped to the caller's client where applicable.
+      summary: List client stock-out batches, scoped to the caller's client where applicable.
       parameters:
         - in: query
           name: status
@@ -306,7 +306,7 @@ paths:
         "200": { description: Scoped issue batches }
   /departments/issues/batches/{id}/lines:
     patch:
-      summary: Replace a Client Admin's draft issue lines. Revalidates all replacement lines; no stock is changed.
+      summary: Replace a Client Admin's draft stock-out lines. Each line names an active department and an approved product available to that client. Revalidates all lines; no stock is changed.
       parameters:
         - in: path
           name: id

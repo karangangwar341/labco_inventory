@@ -28,7 +28,7 @@ export default function LoginPage() {
             <div className="hidden md:flex items-center gap-2 pl-3 border-l border-slate-200 text-xs text-slate-500">
               <span className="font-semibold text-slate-700">WMS Operations</span>
               <span>·</span>
-              <span>ISO 9001:2015 Certified System</span>
+              <span>Warehouse Management System</span>
             </div>
           </div>
 
@@ -36,9 +36,10 @@ export default function LoginPage() {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] font-medium text-emerald-800">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Operational</span>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600">
-              ISO 9001:2015
+              WMS Console
             </span>
           </div>
         </div>
@@ -54,8 +55,6 @@ export default function LoginPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/90 text-xs font-semibold text-blue-800">
               <span className="w-2 h-2 rounded-full bg-blue-600" />
               <span>Precision Medical Diagnostics &amp; Supply Chain</span>
-              <span className="text-blue-300">|</span>
-              <span className="text-blue-900 font-bold">ISO 9001:2015 Certified</span>
             </div>
 
             {/* Headline */}
@@ -73,9 +72,9 @@ export default function LoginPage() {
             {/* Quality Statement & Trust Indicators */}
             <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-700">ISO 9001:2015</span>
+                <span className="font-semibold text-slate-700">Quality Management</span>
                 <span>·</span>
-                <span>Quality Management System</span>
+                <span>Verified Dispatch &amp; Traceability</span>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
                 <span>256-Bit Transport Security</span>
@@ -100,8 +99,6 @@ export default function LoginPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <span>© 2026 Labco Instruments Pvt. Ltd. All rights reserved.</span>
-            <span>·</span>
-            <span className="text-slate-600 font-medium">ISO 9001:2015 Quality Certified</span>
           </div>
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <span>Confidential &amp; Proprietary System</span>

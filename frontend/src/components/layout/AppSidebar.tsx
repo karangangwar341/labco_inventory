@@ -105,7 +105,7 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
               <div className="flex items-center gap-1">
                 <span className="font-semibold text-xs text-white tracking-tight leading-none truncate">WMS Console</span>
               </div>
-              <span className="text-[9px] text-slate-400 font-normal mt-0.5 truncate">ISO 9001:2015</span>
+              <span className="text-[9px] text-slate-400 font-normal mt-0.5 truncate">Operations &amp; Logistics</span>
             </div>
           </Link>
         </div>

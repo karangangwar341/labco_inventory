@@ -1,6 +1,6 @@
 import { ApiError } from './errors';
 import { generateIdempotencyKey } from './idempotency';
-import { getSessionToken } from '../auth/session';
+import { getSessionToken, getOrCreateDeviceId } from '../auth/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:4000/api/v1' : '/api/v1');
@@ -28,7 +28,15 @@ export async function request<T = unknown>(
     headers.set('Content-Type', 'application/json');
   }
 
-  // 2. Token injection
+  // 2. Device binding header (binds session tokens strictly to this browser instance)
+  if (typeof window !== 'undefined' && !headers.has('X-Device-Id')) {
+    const deviceId = getOrCreateDeviceId();
+    if (deviceId) {
+      headers.set('X-Device-Id', deviceId);
+    }
+  }
+
+  // 3. Token injection
   if (!options.skipAuth) {
     const token = getSessionToken();
     if (token && !headers.has('Authorization')) {

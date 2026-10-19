@@ -62,7 +62,8 @@ export const MAIN_DOMAINS: MainDomain[] = [
     matchPaths: ['/requests', '/approvals'],
     subItems: [
       { href: '/requests', label: 'Stock Requests', exact: true },
-      { href: '/requests/new', label: 'New Stock Movement' },
+      { href: '/requests/new', label: 'New Stock Movement', roles: ['SUPER_ADMIN', 'STORE_ADMIN'] },
+      { href: '/departments?tab=ISSUES', label: 'Stock Out to Departments', roles: ['CLIENT_ADMIN'] },
       { href: '/approvals', label: 'Approvals Queue', roles: ['SUPER_ADMIN'] },
     ],
   },
@@ -75,7 +76,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     matchPaths: ['/manufacturing', '/departments'],
     subItems: [
       { href: '/manufacturing', label: 'Production Runs & Cycles' },
-      { href: '/departments', label: 'Department Transfers', roles: ['CLIENT_ADMIN'] },
+      { href: '/departments', label: 'Departments & Returns', roles: ['CLIENT_ADMIN'] },
       { href: '/staff', label: 'Staff & Work Logs', roles: ['CLIENT_ADMIN'] },
     ],
   },

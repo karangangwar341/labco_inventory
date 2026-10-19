@@ -73,6 +73,8 @@ Production configuration validation fails startup for missing/placeholder databa
    npm run prisma:migrate:deploy --workspace backend
    ```
 
+   For Render, run `npx prisma migrate deploy --schema prisma/schema.prisma` from the backend service root as a pre-deploy/release command, with `DIRECT_URL` set to the direct database connection. If the Render plan does not provide a pre-deploy command, run it once as a controlled release operation before deploying the new backend. A successful application build does not apply migrations; do not run schema migrations in the ordinary build command.
+
 6. For Vercel, create two projects from the same repository. Set the backend project's Root Directory to `backend` and use the NestJS framework preset; set the frontend project's Root Directory to `frontend` and use the Next.js preset. Configure each project's environment variables. Set `NEXT_PUBLIC_API_URL` on the frontend to the backend deployment URL plus `/api/v1`, and set the backend's `CORS_ALLOWED_ORIGINS` to the exact frontend HTTPS origin. For other hosts, deploy the API and frontend separately and apply the same URL and CORS settings.
 7. If the production database is empty, provision the first Super Admin exactly once using temporary `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD` secret values, then run:
 

@@ -19,7 +19,7 @@ export default function HelpPage() {
 
       <div className="flex flex-wrap gap-2">
         <Link href="/requests/new?type=STOCK_IN"><Button variant="secondary">Start stock in</Button></Link>
-        <Link href="/requests/new?type=STOCK_OUT"><Button variant="primary">Start stock out</Button></Link>
+        <Link href="/departments?tab=ISSUES"><Button variant="primary">Stock out to departments</Button></Link>
       </div>
 
       <div className="divide-y divide-[#dbe3ee] rounded-lg border border-[#dbe3ee] bg-white px-5">

@@ -350,7 +350,7 @@ async function main() {
           specification: {
             tolerance: '±0.5%',
             storageTemp: '2°C to 8°C',
-            qualityControlStandard: 'ISO 13485:2016 Compliant',
+            qualityControlStandard: 'Medical Device Quality Standard',
           },
           changeReason: 'Initial baseline production release specification',
         },

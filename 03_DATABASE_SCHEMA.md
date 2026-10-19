@@ -14,7 +14,7 @@
 | Entity | Purpose | Key fields (illustrative) |
 |---|---|---|
 | users | Login accounts | id, username, password_hash, role, status, created_at, disabled_at |
-| sessions | Active session control | id, user_id, session_token_hash, created_at, last_activity_at, revoked_at |
+| sessions | Active session control & device binding | id, user_id, session_token_hash, device_id, user_agent_hash, ip_address, created_at, last_activity_at, revoked_at |
 | login_events | Security audit | id, username_attempted, user_id nullable, outcome, ip_hash/policy-approved metadata, occurred_at |
 | clients | Client organizations | id, name, status, created_at |
 | warehouses | Company warehouses | id, name, location_description, status |

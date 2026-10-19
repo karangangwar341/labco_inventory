@@ -252,10 +252,36 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                             ? 'Review Production Run'
                             : 'View Production Run',
                       };
-                    } else if (n.entityType === 'DEPARTMENT' || n.title.toLowerCase().includes('department')) {
+                    } else if (
+                      n.entityType === 'DEPARTMENT_ISSUE_BATCH' ||
+                      n.title.toLowerCase().includes('department issue batch')
+                    ) {
+                      targetLink = {
+                        href: role === 'SUPER_ADMIN' ? '/approvals?tab=DEPARTMENTS' : '/departments?tab=ISSUES',
+                        label: role === 'SUPER_ADMIN' ? 'Review Department Issue Batch' : 'View Stock Out',
+                      };
+                    } else if (
+                      n.entityType === 'DEPARTMENT_ISSUE' ||
+                      n.title.toLowerCase().includes('department issue')
+                    ) {
+                      targetLink = {
+                        href: role === 'SUPER_ADMIN' ? '/approvals?tab=DEPARTMENTS' : '/departments?tab=ISSUES',
+                        label: role === 'SUPER_ADMIN' ? 'Review Department Issue' : 'View Stock Out',
+                      };
+                    } else if (
+                      n.entityType === 'DEPARTMENT_RETURN' ||
+                      n.title.toLowerCase().includes('department return')
+                    ) {
+                      targetLink = {
+                        href: '/departments?tab=RETURNS',
+                        label: role === 'SUPER_ADMIN' ? 'Review Department Return' : 'View Department Returns',
+                      };
+                    } else if (n.entityType === 'DEPARTMENT') {
                       targetLink = n.entityId
                         ? { href: `/departments?departmentId=${encodeURIComponent(n.entityId)}`, label: role === 'SUPER_ADMIN' ? 'Review Department' : 'View Department' }
                         : { href: '/departments', label: 'View Departments' };
+                    } else if (n.title.toLowerCase().includes('department')) {
+                      targetLink = { href: '/departments', label: 'View Departments' };
                     } else if (n.entityType === 'PRODUCT' || n.title.toLowerCase().includes('product')) {
                       targetLink = n.entityId && role === 'SUPER_ADMIN'
                         ? { href: `/catalog?status=PENDING_APPROVAL&productId=${encodeURIComponent(n.entityId)}`, label: 'Review Product' }

@@ -7,6 +7,7 @@ import {
   DepartmentReturnStatus,
   ProductStatus,
   ProductKind,
+  CatalogScope,
   StockCondition,
   TransactionType,
   Prisma,
@@ -52,6 +53,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
 
   const testProduct = {
     id: 'prod-1',
+    clientId: 'client-123',
     name: 'Lab Diagnostic Cartridge',
     kind: ProductKind.MANUFACTURED_PRODUCT,
     status: ProductStatus.APPROVED,
@@ -156,6 +158,29 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   });
 
   describe('Daily department issue batches', () => {
+    it('rejects company raw materials for a department issue batch', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({
+        ...testProduct,
+        kind: ProductKind.RAW_MATERIAL,
+        ownerScope: CatalogScope.COMPANY,
+        clientId: null,
+      });
+
+      await expect((departmentsService as any).prepareIssueLine({
+        departmentId: 'dept-1', productId: 'prod-1', quantity: 2, unitId: 'unit-piece',
+      }, clientAdminUser, 'client-123')).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects manufactured products owned by another client', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, clientId: 'another-client' });
+
+      await expect((departmentsService as any).prepareIssueLine({
+        departmentId: 'dept-1', productId: 'prod-1', quantity: 2, unitId: 'unit-piece',
+      }, clientAdminUser, 'client-123')).rejects.toThrow(BadRequestException);
+    });
+
     it('creates one client-scoped daily draft for a Client Admin', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
       mockPrisma.departmentIssueBatch.findFirst.mockResolvedValue(null);
@@ -211,6 +236,43 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ action: 'DEPARTMENT_ISSUE_BATCH_AUTO_POSTED' }),
       }));
+    });
+
+    it('Super Admin approves a department issue batch containing client manufactured products', async () => {
+      const issues = [
+        {
+          id: 'issue-1', issueBatchId: 'issue-batch-1', productId: 'prod-mfg-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
+          quantity: new Prisma.Decimal(2), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(2), notes: null,
+          department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
+          product: { id: 'prod-mfg-1', name: 'Chemical Reagent Kit', kind: ProductKind.MANUFACTURED_PRODUCT, clientId: 'client-123', status: ProductStatus.APPROVED },
+        },
+        {
+          id: 'issue-2', issueBatchId: 'issue-batch-1', productId: 'prod-mfg-2', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
+          quantity: new Prisma.Decimal(1), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(1), notes: null,
+          department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
+          product: { id: 'prod-mfg-2', name: 'Diagnostic Cartridge', kind: ProductKind.MANUFACTURED_PRODUCT, clientId: 'client-123', status: ProductStatus.APPROVED },
+        },
+      ];
+      const batch = {
+        id: 'issue-batch-1', clientId: 'client-123', createdById: 'ca-1',
+        status: DepartmentIssueBatchStatus.PENDING_APPROVAL, issues,
+      };
+
+      mockPrisma.departmentIssueBatch.findUnique.mockResolvedValue(batch);
+      mockPrisma.departmentIssueBatch.update.mockResolvedValue({
+        ...batch, status: DepartmentIssueBatchStatus.APPROVED,
+      });
+
+      const result = await departmentsService.decideIssueBatch('issue-batch-1', true, undefined, superAdminUser);
+
+      expect(result.status).toBe(DepartmentIssueBatchStatus.APPROVED);
+      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(expect.objectContaining({
+        sourceRefType: 'DEPARTMENT_ISSUE_BATCH',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ productId: 'prod-mfg-1', direction: 'OUT' }),
+          expect.objectContaining({ productId: 'prod-mfg-2', direction: 'OUT' }),
+        ]),
+      }), superAdminUser.id, mockPrisma);
     });
   });
 
@@ -428,6 +490,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         status: DepartmentIssueStatus.PENDING_APPROVAL,
         department: { name: 'Hematology Lab' },
         product: {
+          clientId: 'client-123',
           name: 'Lab Diagnostic Cartridge',
           kind: ProductKind.MANUFACTURED_PRODUCT,
           status: ProductStatus.APPROVED,
@@ -476,6 +539,35 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           }),
         }),
       );
+    });
+
+    it('Super Admin approval rejects issue if product is a raw material', async () => {
+      mockPrisma.departmentIssue.findUnique.mockResolvedValue({
+        id: 'issue-rm-1',
+        clientId: 'client-123',
+        departmentId: 'dept-1',
+        productId: 'prod-rm',
+        quantity: new Prisma.Decimal(10),
+        unitNameSnapshot: 'PIECE',
+        baseQuantity: new Prisma.Decimal(10),
+        status: DepartmentIssueStatus.PENDING_APPROVAL,
+        department: { name: 'Biochemistry Lab' },
+        product: {
+          clientId: null,
+          ownerScope: CatalogScope.COMPANY,
+          name: 'Chemical Reagent',
+          kind: ProductKind.RAW_MATERIAL,
+          status: ProductStatus.APPROVED,
+        },
+      });
+
+      await expect(
+        departmentsService.approveIssue(
+          'issue-rm-1',
+          { idempotencyKey: 'idem-issue-rm-1' },
+          superAdminUser,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

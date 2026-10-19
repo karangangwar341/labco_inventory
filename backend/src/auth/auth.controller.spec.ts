@@ -47,7 +47,11 @@ describe('AuthController & MeController', () => {
         '127.0.0.1',
         'TestAgent',
       );
-      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser);
+      expect(mockAuthService.login).toHaveBeenCalledWith(mockUser, {
+        deviceId: undefined,
+        ipAddress: '127.0.0.1',
+        userAgent: 'TestAgent',
+      });
       expect(mockAuthService.getBootstrap).not.toHaveBeenCalled();
       expect(result).toEqual(expectedResponse);
     });

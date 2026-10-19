@@ -61,7 +61,7 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 
 ## 9. Department issue and return
 - Client Admin maintains department list; create/edit/deactivate requires Super Admin approval.
-- Client Admin maintains one open daily department-issue draft per client and can add/edit/remove lines across departments and products throughout the day. Saving the draft has no inventory effect.
+- Client Admin maintains one open daily department-issue draft per client and can add/edit/remove lines across departments and approved manufactured products with client stock throughout the day. This is the client stock-out flow; each line selects its department. Saving the draft has no inventory effect.
 - Submitting the daily draft revalidates every line and reserves all required usable stock atomically. If any line fails validation or availability, nothing is submitted or reserved.
 - If department-issue approval is enabled (default), the entire submitted draft is one Super Admin decision. Rejection releases all reservations; approval consumes all reservations and posts every line in one transaction. No department stock balance is maintained.
 - If approval is disabled in Super Admin settings, submission validates and posts every line atomically, marks the batch `POSTED`, and records an audit event. It never creates an unreviewed partial posting.

@@ -208,18 +208,24 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
     });
   });
 
-  describe('login (Single Active Session Policy)', () => {
-    it('revokes prior active sessions when a new login occurs', async () => {
+  describe('login (Single Active Session Policy & Device Binding)', () => {
+    it('revokes prior active sessions and binds session to device and user-agent when a new login occurs', async () => {
       mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.session.create.mockResolvedValue({
         id: 'new-session-uuid',
         userId: mockUser.id,
         tokenHash: 'hashed_token',
+        deviceId: 'device-xyz-123',
+        userAgentHash: 'hashed_ua',
         isRevoked: false,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
 
-      const response = await authService.login(mockUser as any);
+      const response = await authService.login(mockUser as any, {
+        deviceId: 'device-xyz-123',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        ipAddress: '127.0.0.1',
+      });
 
       // Verify prior active sessions were invalidated
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
@@ -233,27 +239,40 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
         }),
       });
 
+      // Verify session creation stored device and userAgent
+      expect(mockPrisma.session.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          deviceId: 'device-xyz-123',
+          ipAddress: '127.0.0.1',
+          userId: mockUser.id,
+        }),
+      }));
+
       expect(response.accessToken).toBe('mocked.jwt.token');
-      expect(response.expiresIn).toBe(900); // 15 mins
+      expect(response.expiresIn).toBe(2592000); // 30 days
       expect(response.user.username).toBe(mockUser.username);
     });
   });
 
-  describe('validateSession (7-Day Inactivity & Revocation)', () => {
-    it('returns user and refreshes lastActivityAt for valid active session', async () => {
+  describe('validateSession (Device Binding, Inactivity & Revocation)', () => {
+    it('returns user and refreshes lastActivityAt for valid active session on authorized device', async () => {
       const activeSession = {
         id: 'session-uuid',
         userId: mockUser.id,
+        deviceId: 'device-123',
+        userAgentHash: null,
         isRevoked: false,
         lastActivityAt: new Date(Date.now() - 10 * 60 * 1000),
-        expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
         user: mockUser,
       };
 
       mockPrisma.session.findUnique.mockResolvedValue(activeSession);
       mockPrisma.session.update.mockResolvedValue(activeSession);
 
-      const user = await authService.validateSession(mockUser.id, 'session-uuid');
+      const user = await authService.validateSession(mockUser.id, 'session-uuid', {
+        deviceId: 'device-123',
+      });
 
       expect(user).not.toBeNull();
       expect(user?.id).toBe(mockUser.id);
@@ -263,13 +282,44 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
       });
     });
 
-    it('rejects and revokes session if inactive for more than 7 days', async () => {
-      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    it('rejects and revokes session if accessed from a different device (copied token)', async () => {
+      const activeSession = {
+        id: 'session-uuid',
+        userId: mockUser.id,
+        deviceId: 'original-device-123',
+        userAgentHash: null,
+        isRevoked: false,
+        lastActivityAt: new Date(Date.now() - 10 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+        user: mockUser,
+      };
+
+      mockPrisma.session.findUnique.mockResolvedValue(activeSession);
+      mockPrisma.session.update.mockResolvedValue({ ...activeSession, isRevoked: true });
+
+      const user = await authService.validateSession(mockUser.id, 'session-uuid', {
+        deviceId: 'unauthorized-copied-device-999',
+      });
+
+      expect(user).toBeNull();
+      expect(mockPrisma.session.update).toHaveBeenCalledWith({
+        where: { id: 'session-uuid' },
+        data: expect.objectContaining({
+          isRevoked: true,
+          revokedAt: expect.any(Date),
+        }),
+      });
+    });
+
+    it('rejects and revokes session if inactive for more than 30 days', async () => {
+      const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
       const expiredSession = {
         id: 'old-session-uuid',
         userId: mockUser.id,
+        deviceId: null,
+        userAgentHash: null,
         isRevoked: false,
-        lastActivityAt: eightDaysAgo,
+        lastActivityAt: thirtyFiveDaysAgo,
         expiresAt: new Date(Date.now() + 1000),
         user: mockUser,
       };
@@ -292,6 +342,8 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
       mockPrisma.session.findUnique.mockResolvedValue({
         id: 'revoked-session',
         userId: mockUser.id,
+        deviceId: null,
+        userAgentHash: null,
         isRevoked: true,
         user: mockUser,
       });

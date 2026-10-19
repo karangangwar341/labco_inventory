@@ -45,6 +45,7 @@ export class AuthController {
   ): Promise<AuthResponseDto> {
     const ipAddress = req.ip || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
+    const deviceId = req.headers['x-device-id'] as string | undefined;
 
     const user = await this.authService.validateUserCredentials(
       loginDto.username,
@@ -55,7 +56,7 @@ export class AuthController {
 
     // Keep login latency focused on credential validation and session creation.
     // Startup reference data is fetched separately after the client establishes the session.
-    return this.authService.login(user);
+    return this.authService.login(user, { deviceId, userAgent, ipAddress });
   }
 
   @Post('logout')

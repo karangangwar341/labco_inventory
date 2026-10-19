@@ -17,6 +17,7 @@ import {
   DepartmentReturnStatus,
   ProductStatus,
   ProductKind,
+  CatalogScope,
   StockCondition,
   TransactionType,
   Prisma,
@@ -471,8 +472,13 @@ export class DepartmentsService {
         return tx.departmentIssueBatch.update({ where: { id: batch.id }, data: { status: DepartmentIssueBatchStatus.REJECTED, rejectionReason: reason!.trim(), approvedById: user.id, approvedAt: new Date() }, include: { issues: true } });
       }
       for (const issue of fresh.issues) {
-        if (issue.department.status !== DepartmentStatus.ACTIVE || issue.product.status !== ProductStatus.APPROVED || issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT) {
-          throw new BadRequestException('Every batch line must still reference an active department and an approved manufactured product');
+        if (
+          issue.department.status !== DepartmentStatus.ACTIVE ||
+          issue.product.status !== ProductStatus.APPROVED ||
+          issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
+          issue.product.clientId !== batch.clientId
+        ) {
+          throw new BadRequestException('Every batch line must still reference an active department and an approved manufactured product belonging to your organization');
         }
       }
       await this.reservationsService.consumeReservationsForDepartmentIssueBatch(tx, batch.id);
@@ -567,8 +573,8 @@ export class DepartmentsService {
         `Product "${product.name}" is not approved (status: ${product.status})`,
       );
     }
-    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT) {
-      throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is a raw material`);
+    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT || product.clientId !== clientId) {
+      throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is not an approved manufactured product belonging to your organization`);
     }
 
     // Resolve unit
@@ -758,8 +764,12 @@ export class DepartmentsService {
         `Department issue is not pending approval (current status: ${issue.status})`,
       );
     }
-    if (issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT || issue.product.status !== ProductStatus.APPROVED) {
-      throw new BadRequestException('Department issue product must remain an approved manufactured product');
+    if (
+      issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
+      issue.product.clientId !== issue.clientId ||
+      issue.product.status !== ProductStatus.APPROVED
+    ) {
+      throw new BadRequestException('Department issue product must remain an approved manufactured product belonging to your organization');
     }
 
     const clientLocation = await this.inventoryService.getOrCreateLocationForClient(issue.clientId);
