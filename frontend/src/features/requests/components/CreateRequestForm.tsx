@@ -78,6 +78,13 @@ export function CreateRequestForm() {
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'GRID' | 'CARDS'>('GRID');
 
+  // On small mobile screens, default to Cards for a clean, touch-friendly vertical experience
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setViewMode('CARDS');
+    }
+  }, []);
+
   const totalRequestedUnits = useMemo(() => {
     return lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
   }, [lines]);
@@ -479,7 +486,7 @@ export function CreateRequestForm() {
 
       {/* Direction Switcher Segmented Control - Only shown for Warehouse / Store Admins */}
       {user?.role !== 'CLIENT_ADMIN' && (
-        <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex gap-1.5" aria-label="Stock direction">
+        <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row gap-1.5" aria-label="Stock direction">
           {(['STOCK_OUT', 'STOCK_IN'] as const).map((value) => {
             const isSelected = direction === value;
             const isStockIn = value === 'STOCK_IN';
@@ -490,7 +497,7 @@ export function CreateRequestForm() {
                 aria-pressed={isSelected}
                 disabled={Boolean(editingDraftId)}
                 onClick={() => setDirection(value)}
-                className={`flex-1 py-3 px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2.5 px-3 sm:py-3 sm:px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
                   isSelected
                     ? isStockIn
                       ? 'bg-white text-emerald-800 shadow-sm border border-emerald-300'
@@ -498,8 +505,8 @@ export function CreateRequestForm() {
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                 }`}
               >
-                <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
-                <span>{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
+                <span className="truncate">{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
               </button>
             );
           })}
@@ -660,7 +667,7 @@ export function CreateRequestForm() {
               {viewMode === 'GRID' ? (
                 <div className="space-y-3">
                   {/* Grid Quick Action Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/90 text-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/90 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
@@ -695,11 +702,17 @@ export function CreateRequestForm() {
                         </button>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px] text-slate-600 font-medium pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/70">
                       <span>Products: <strong className="text-slate-900 font-mono">{distinctProductsCount}</strong></span>
                       <span className="text-slate-300">|</span>
                       <span>Total Units: <strong className="text-slate-900 font-mono">{totalRequestedUnits.toLocaleString()}</strong></span>
                     </div>
+                  </div>
+
+                  {/* Mobile Horizontal Swipe Notice */}
+                  <div className="flex sm:hidden items-center justify-between px-3 py-1.5 bg-blue-50/90 rounded-lg border border-blue-200/80 text-[11px] text-blue-800">
+                    <span className="font-medium">👉 Swipe table sideways to see all 8 columns</span>
+                    <span className="font-mono text-[10px] text-blue-600 font-semibold bg-white px-1.5 py-0.2 rounded border border-blue-200">Scrollable</span>
                   </div>
 
                   {/* Fast Spreadsheet Table */}

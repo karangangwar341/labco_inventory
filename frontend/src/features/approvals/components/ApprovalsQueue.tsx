@@ -553,14 +553,14 @@ export function ApprovalsQueue() {
       )}
 
       {/* Segmented Tab Bar */}
-      <div className="flex gap-2 overflow-x-auto border-b border-slate-200 text-xs" role="tablist" aria-label="Approval categories">
+      <div className="flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-none border-b border-slate-200 text-xs pb-0.5" role="tablist" aria-label="Approval categories">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
             role="tab"
             aria-selected={activeTab === t.key}
-            className={`shrink-0 pb-2.5 px-3 font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            className={`shrink-0 pb-2.5 px-3 font-semibold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
               activeTab === t.key
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
@@ -582,34 +582,36 @@ export function ApprovalsQueue() {
 
       {/* Filter and Search Bar */}
       <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-3 text-xs shadow-xs">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3">
             {/* Priority Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-500 font-medium">Priority:</span>
-              {(['ALL', 'URGENT', 'NORMAL'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPriorityFilter(p)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-                    priorityFilter === p
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/80'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
+              <span className="text-slate-500 font-medium shrink-0">Priority:</span>
+              <div className="flex items-center gap-1">
+                {(['ALL', 'URGENT', 'NORMAL'] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPriorityFilter(p)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                      priorityFilter === p
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/80'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Client Filter (Super Admin / Authorized) */}
             {isAuthorized && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-500 font-medium">Client:</span>
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <span className="text-slate-500 font-medium shrink-0">Client:</span>
                 <select
                   value={selectedClientId}
                   onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white text-xs"
+                  className="w-full sm:w-auto px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white text-xs"
                 >
                   <option value="">All Clients</option>
                   {clients.map((c: any) => (

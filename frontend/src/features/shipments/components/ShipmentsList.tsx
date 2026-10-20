@@ -500,8 +500,8 @@ export function ShipmentsList() {
       <Card>
         <CardContent className="p-3.5 space-y-3">
           {/* Top row: Status Quick Filter Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
-            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs font-medium">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs font-medium overflow-x-auto whitespace-nowrap scrollbar-none max-w-full">
               {(
                 [
                   ['ALL', 'All Shipments', counts.all],
@@ -518,7 +518,7 @@ export function ShipmentsList() {
                     key={val}
                     type="button"
                     onClick={() => setStatusFilter(val)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-xs font-medium ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all text-xs font-medium ${
                       isSelected
                         ? 'bg-white text-blue-700 font-semibold shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -542,7 +542,7 @@ export function ShipmentsList() {
                 variant="ghost"
                 size="sm"
                 onClick={clearFilters}
-                className="text-xs text-slate-500 hover:text-slate-800"
+                className="text-xs text-slate-500 hover:text-slate-800 shrink-0 self-end sm:self-center"
               >
                 Clear All Filters ✕
               </Button>

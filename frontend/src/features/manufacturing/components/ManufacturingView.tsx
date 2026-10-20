@@ -761,11 +761,11 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
       )}
 
       {/* Navigation Segmented Tabs */}
-      <div className="flex border-b border-slate-200 bg-white px-2 pt-2 rounded-t-xl shadow-xs">
+      <div className="flex border-b border-slate-200 bg-white px-2 pt-2 rounded-t-xl shadow-xs overflow-x-auto whitespace-nowrap scrollbar-none gap-1 sm:gap-2">
         <button
           type="button"
           onClick={() => setActiveTab("CYCLES")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all ${
+          className={`flex items-center gap-2 border-b-2 px-3.5 sm:px-4 py-2.5 text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
             activeTab === "CYCLES"
               ? "border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-lg"
               : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
@@ -782,7 +782,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
         <button
           type="button"
           onClick={() => setActiveTab("RUNS")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all ${
+          className={`flex items-center gap-2 border-b-2 px-3.5 sm:px-4 py-2.5 text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
             activeTab === "RUNS"
               ? "border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-lg"
               : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
@@ -799,7 +799,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
         <button
           type="button"
           onClick={() => setActiveTab("ANALYTICS")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-all ${
+          className={`flex items-center gap-2 border-b-2 px-3.5 sm:px-4 py-2.5 text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
             activeTab === "ANALYTICS"
               ? "border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-lg"
               : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"

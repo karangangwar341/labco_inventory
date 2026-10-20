@@ -50,6 +50,13 @@ export function CyclesGridView({
   const [search, setSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<"TABLE" | "CARDS">("TABLE");
 
+  // Auto-detect mobile screen width on mount
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setViewMode("CARDS");
+    }
+  }, []);
+
   // Selection & row configuration for high-speed tabular execution
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [rowConfigs, setRowConfigs] = useState<Record<string, RowConfig>>({});
@@ -261,9 +268,9 @@ export function CyclesGridView({
 
       {/* Control Toolbar: View Toggle, Filters, and Search */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-xl shadow-xs">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 max-w-full">
           {/* View mode toggle */}
-          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 mr-1">
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 shrink-0 mr-1">
             <button
               type="button"
               onClick={() => setViewMode("TABLE")}
@@ -292,7 +299,7 @@ export function CyclesGridView({
           <button
             type="button"
             onClick={() => setFilter("ALL")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium shrink-0 whitespace-nowrap transition-colors ${
               filter === "ALL"
                 ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
                 : "text-slate-600 hover:bg-slate-50"
@@ -303,7 +310,7 @@ export function CyclesGridView({
           <button
             type="button"
             onClick={() => setFilter("LOW_STOCK")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium shrink-0 whitespace-nowrap transition-colors flex items-center gap-1.5 ${
               filter === "LOW_STOCK"
                 ? "bg-amber-100 text-amber-900 border border-amber-300"
                 : "text-slate-600 hover:bg-slate-50"
@@ -319,7 +326,7 @@ export function CyclesGridView({
           <button
             type="button"
             onClick={() => setFilter("HEALTHY")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium shrink-0 whitespace-nowrap transition-colors ${
               filter === "HEALTHY"
                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                 : "text-slate-600 hover:bg-slate-50"
@@ -377,8 +384,19 @@ export function CyclesGridView({
            TABULAR BULK PRODUCTION CHECKLIST (HIGH-SPEED GRID)
            =================================================================== */
         <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+          {/* Mobile Swipe Guide Banner */}
+          <div className="md:hidden px-3 py-1.5 bg-blue-50/90 border-b border-blue-100 flex items-center justify-between text-[11px] text-blue-700">
+            <span>👉 Swipe table sideways to see batch output & lot dates</span>
+            <button
+              type="button"
+              onClick={() => setViewMode("CARDS")}
+              className="font-bold underline text-blue-800"
+            >
+              Switch to Cards
+            </button>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="min-w-[860px] w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                   {canCreateRuns && (

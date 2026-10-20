@@ -22,6 +22,11 @@ import { useAuth } from '../../auth/auth.store';
 import { catalogService } from '../../catalog/catalog.service';
 import { inventoryService } from '../../inventory/inventory.service';
 import { groupItemsByDay } from '../../../lib/utils/date-grouping';
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from '../../../components/data-display/DateQuickFilterBar';
 
 export function DepartmentsView() {
   const { role, user } = useAuth();
@@ -75,13 +80,25 @@ export function DepartmentsView() {
     staleTime: 2 * 60 * 1000,
   });
 
+  const [historyDateFilter, setHistoryDateFilter] = useState<DateQuickFilter>('TODAY');
+  const [historyCustomStart, setHistoryCustomStart] = useState<string>('');
+  const [historyCustomEnd, setHistoryCustomEnd] = useState<string>('');
+
+  const olderHistoryCount = useMemo(() => {
+    return history.filter((i) => !isDateInRange(i.createdAt, 'TODAY')).length;
+  }, [history]);
+
+  const filteredHistory = useMemo(() => {
+    return history.filter((i) => isDateInRange(i.createdAt, historyDateFilter, historyCustomStart, historyCustomEnd));
+  }, [history, historyDateFilter, historyCustomStart, historyCustomEnd]);
+
   const historyDayGroups = useMemo(() => {
     return groupItemsByDay(
-      history,
+      filteredHistory,
       (tx: DepartmentIssue) => tx.createdAt,
       (tx: DepartmentIssue) => Number(tx.quantity || 0),
     );
-  }, [history]);
+  }, [filteredHistory]);
 
   const issueDraftQuery = useQuery({
     queryKey: queryKeys.departments.issueDraft(user?.clientId || user?.id),
@@ -311,25 +328,37 @@ export function DepartmentsView() {
         title={activeTab === 'RETURNS' ? 'Department Returns & Write-offs' : activeTab === 'ISSUES' ? 'Stock Out to Departments' : 'Departments'}
         description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Add stocked products, choose a department for each line, and submit the day’s stock out together.'}
         actions={
-          activeTab !== 'RETURNS' ? <div className="flex flex-wrap gap-2">
-            {role === 'CLIENT_ADMIN' && (
-              <>
-                <Button variant="secondary" disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'} onClick={() => { setErrorMsg(null); setIsIssueModalOpen(true); }}>
-                  Add product{issueDraftQuery.data?.issues.length ? ` (${issueDraftQuery.data.issues.length})` : ''}
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data.issues.length || submitIssueBatchMutation.isPending}
-                  onClick={() => submitIssueBatchMutation.mutate()}
-                >
-                  {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit stock out'}
-                </Button>
-              </>
-            )}
-            <Button variant={role === 'CLIENT_ADMIN' ? 'secondary' : 'primary'} onClick={() => setIsModalOpen(true)}>
-              + Add Department
-            </Button>
-          </div> : undefined
+          activeTab !== 'RETURNS' ? (
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {role === 'CLIENT_ADMIN' && (
+                <div className="flex flex-1 sm:flex-none items-center gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="secondary"
+                    className="flex-1 sm:flex-none text-xs"
+                    disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'}
+                    onClick={() => { setErrorMsg(null); setIsIssueModalOpen(true); }}
+                  >
+                    Add product{issueDraftQuery.data?.issues.length ? ` (${issueDraftQuery.data.issues.length})` : ''}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="flex-1 sm:flex-none text-xs"
+                    disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data.issues.length || submitIssueBatchMutation.isPending}
+                    onClick={() => submitIssueBatchMutation.mutate()}
+                  >
+                    {submitIssueBatchMutation.isPending ? 'Submitting…' : 'Submit stock out'}
+                  </Button>
+                </div>
+              )}
+              <Button
+                variant={role === 'CLIENT_ADMIN' ? 'secondary' : 'primary'}
+                className="w-full sm:w-auto text-xs"
+                onClick={() => setIsModalOpen(true)}
+              >
+                + Add Department
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -349,15 +378,15 @@ export function DepartmentsView() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-[#dbe3ee] text-xs">
+      <div className="flex border-b border-slate-200 text-xs overflow-x-auto whitespace-nowrap scrollbar-none gap-1 sm:gap-2">
         <button
           role="tab"
           aria-selected={activeTab === 'DEPARTMENTS'}
           onClick={() => setActiveTab('DEPARTMENTS')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-all ${
+          className={`px-3 sm:px-4 py-2.5 font-semibold border-b-2 shrink-0 whitespace-nowrap transition-all ${
             activeTab === 'DEPARTMENTS'
-              ? 'border-[#2563eb] text-[#2563eb]'
-              : 'border-transparent text-[#5b6678] hover:text-[#172033]'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           Departments ({departments.length})
@@ -366,10 +395,10 @@ export function DepartmentsView() {
           role="tab"
           aria-selected={activeTab === 'ISSUES'}
           onClick={() => setActiveTab('ISSUES')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-all ${
+          className={`px-3 sm:px-4 py-2.5 font-semibold border-b-2 shrink-0 whitespace-nowrap transition-all ${
             activeTab === 'ISSUES'
-              ? 'border-[#2563eb] text-[#2563eb]'
-              : 'border-transparent text-[#5b6678] hover:text-[#172033]'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
           Stock Out History ({history.length})
@@ -378,13 +407,13 @@ export function DepartmentsView() {
           role="tab"
           aria-selected={activeTab === 'RETURNS'}
           onClick={() => setActiveTab('RETURNS')}
-          className={`px-4 py-2 font-semibold border-b-2 transition-all ${
+          className={`px-3 sm:px-4 py-2.5 font-semibold border-b-2 shrink-0 whitespace-nowrap transition-all ${
             activeTab === 'RETURNS'
-              ? 'border-[#2563eb] text-[#2563eb]'
-              : 'border-transparent text-[#5b6678] hover:text-[#172033]'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          Returns & write-offs
+          Returns &amp; write-offs
         </button>
       </div>
 
@@ -503,91 +532,95 @@ export function DepartmentsView() {
               <CardContent className="p-0">
                 {/* Inline Fast Add Row (Zero-Modal Entry) */}
                 {issueDraftQuery.data?.status === 'DRAFT' && activeDepartments.length > 0 && stockedProducts.length > 0 && (
-                  <div className="p-3 bg-blue-50/50 border-b border-blue-100 flex flex-wrap items-center gap-2 text-xs">
+                  <div className="p-3 bg-blue-50/50 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center gap-2.5 text-xs">
                     <span className="text-[11px] font-bold text-blue-900 shrink-0">
                       ⚡ Quick Add Line:
                     </span>
-                    <select
-                      value={effectiveIssueDepartmentId}
-                      onChange={(e) => setIssueDepartmentId(e.target.value)}
-                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      {activeDepartments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 w-full sm:w-auto">
+                      <select
+                        value={effectiveIssueDepartmentId}
+                        onChange={(e) => setIssueDepartmentId(e.target.value)}
+                        className="w-full sm:w-auto px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {activeDepartments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
 
-                    <select
-                      value={effectiveIssueProductId}
-                      onChange={(e) => {
-                        setIssueProductId(e.target.value);
-                        setIssueUnitId('');
-                        setIssueBalanceId('');
-                      }}
-                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[220px]"
-                    >
-                      {stockedProducts.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                      <select
+                        value={effectiveIssueProductId}
+                        onChange={(e) => {
+                          setIssueProductId(e.target.value);
+                          setIssueUnitId('');
+                          setIssueBalanceId('');
+                        }}
+                        className="w-full sm:w-auto flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0"
+                      >
+                        {stockedProducts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                      <div className="flex items-center gap-1 w-full sm:w-auto">
+                        <input
+                          type="number"
+                          min="0.0001"
+                          placeholder="Qty"
+                          value={issueQuantity}
+                          onChange={(e) => setIssueQuantity(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && Number(issueQuantity) > 0) {
+                              e.preventDefault();
+                              saveIssueLineMutation.mutate();
+                            }
+                          }}
+                          className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                        <select
+                          value={effectiveIssueUnitId}
+                          onChange={(e) => setIssueUnitId(e.target.value)}
+                          className="flex-1 sm:flex-none px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          {issueUnits.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.unitName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <input
-                        type="number"
-                        min="0.0001"
-                        placeholder="Qty"
-                        value={issueQuantity}
-                        onChange={(e) => setIssueQuantity(e.target.value)}
+                        type="text"
+                        placeholder="Clinical purpose / notes (optional)"
+                        value={issueNotes}
+                        onChange={(e) => setIssueNotes(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && Number(issueQuantity) > 0) {
                             e.preventDefault();
                             saveIssueLineMutation.mutate();
                           }
                         }}
-                        className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
-                      <select
-                        value={effectiveIssueUnitId}
-                        onChange={(e) => setIssueUnitId(e.target.value)}
-                        className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        disabled={!Number(issueQuantity) || saveIssueLineMutation.isPending}
+                        onClick={() => saveIssueLineMutation.mutate()}
+                        className="w-full sm:w-auto text-xs px-3 py-1.5 gap-1 shrink-0"
                       >
-                        {issueUnits.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.unitName}
-                          </option>
-                        ))}
-                      </select>
+                        <span>+</span>
+                        <span>Add Line</span>
+                      </Button>
                     </div>
-
-                    <input
-                      type="text"
-                      placeholder="Clinical purpose / notes (optional)"
-                      value={issueNotes}
-                      onChange={(e) => setIssueNotes(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && Number(issueQuantity) > 0) {
-                          e.preventDefault();
-                          saveIssueLineMutation.mutate();
-                        }
-                      }}
-                      className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      disabled={!Number(issueQuantity) || saveIssueLineMutation.isPending}
-                      onClick={() => saveIssueLineMutation.mutate()}
-                      className="text-xs px-3 py-1.5 gap-1 shrink-0"
-                    >
-                      <span>+</span>
-                      <span>Add Line</span>
-                    </Button>
                   </div>
                 )}
 
@@ -682,19 +715,44 @@ export function DepartmentsView() {
           )}
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#172033]">Stock Out History</h3>
-              {history.length > 0 && (
-                <span className="text-xs text-slate-500 font-medium">
-                  {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day recorded' : 'days recorded'} · {history.length} total entries
-                </span>
-              )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-[#172033]">Stock Out History</h3>
+                {history.length > 0 && (
+                  <span className="text-xs text-slate-500 font-medium">
+                    {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day shown' : 'days shown'} · {filteredHistory.length} of {history.length} total entries
+                  </span>
+                )}
+              </div>
             </div>
+
+            {history.length > 0 && (
+              <DateQuickFilterBar
+                value={historyDateFilter}
+                onChange={setHistoryDateFilter}
+                customStart={historyCustomStart}
+                customEnd={historyCustomEnd}
+                onCustomStartChange={setHistoryCustomStart}
+                onCustomEndChange={setHistoryCustomEnd}
+                totalOlderCount={olderHistoryCount}
+                onViewOlder={() => setHistoryDateFilter('ALL')}
+              />
+            )}
 
             {history.length === 0 ? (
               <EmptyState
                 title="No department issues recorded"
                 description="Past department stock requests will appear here after they are submitted and processed."
+              />
+            ) : filteredHistory.length === 0 ? (
+              <EmptyState
+                title="No records found for selected dates"
+                description="Try switching to 'All History' or selecting a different date range."
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => setHistoryDateFilter('ALL')}>
+                    View All History ({history.length} records)
+                  </Button>
+                }
               />
             ) : (
               <div className="space-y-4">
@@ -720,48 +778,50 @@ export function DepartmentsView() {
                     </div>
 
                     {/* Table of issues for this day */}
-                    <Table>
-                      <TableHeader sticky>
-                        <tr>
-                          <TableHead>Issue #</TableHead>
-                          <TableHead>Department</TableHead>
-                          <TableHead>Product and quantity</TableHead>
-                          <TableHead>Note</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Time</TableHead>
-                        </tr>
-                      </TableHeader>
-                      <TableBody>
-                        {group.items.map((tx: DepartmentIssue) => (
-                          <TableRow key={tx.id}>
-                            <TableCell className="font-mono font-medium text-[#172033]">
-                              {tx.issueNumber || 'Department issue'}
-                            </TableCell>
-                            <TableCell className="font-semibold text-[#172033]">
-                              {tx.department?.name || tx.departmentName || 'Department'}
-                            </TableCell>
-                            <TableCell>
-                              <span className="block text-xs text-[#172033]">
-                                {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-[#5b6678] text-xs">
-                              {tx.notes || '—'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
-                                {tx.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
-                              {tx.createdAt
-                                ? new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                : '—'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[640px]">
+                        <TableHeader sticky>
+                          <tr>
+                            <TableHead>Issue #</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Product and quantity</TableHead>
+                            <TableHead>Note</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Time</TableHead>
+                          </tr>
+                        </TableHeader>
+                        <TableBody>
+                          {group.items.map((tx: DepartmentIssue) => (
+                            <TableRow key={tx.id}>
+                              <TableCell className="font-mono font-medium text-[#172033]">
+                                {tx.issueNumber || 'Department issue'}
+                              </TableCell>
+                              <TableCell className="font-semibold text-[#172033]">
+                                {tx.department?.name || tx.departmentName || 'Department'}
+                              </TableCell>
+                              <TableCell>
+                                <span className="block text-xs text-[#172033]">
+                                  {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-[#5b6678] text-xs">
+                                {tx.notes || '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
+                                  {tx.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
+                                {tx.createdAt
+                                  ? new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  : '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -40,10 +40,14 @@ export function CardHeader({
 }) {
   return (
     <div
-      className={`px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-4 ${className}`}
+      className={`px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 ${className}`}
     >
-      <div className="space-y-0.5">{children}</div>
-      {action && <div className="shrink-0">{action}</div>}
+      <div className="space-y-0.5 min-w-0 w-full sm:w-auto">{children}</div>
+      {action && (
+        <div className="shrink-0 w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
+          {action}
+        </div>
+      )}
     </div>
   );
 }

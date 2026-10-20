@@ -81,16 +81,16 @@ export function ManufacturingAnalyticsView({
   return (
     <div className="space-y-6">
       {/* Filters Bar */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
           {/* Client Filter for Super Admin */}
           {isSuperAdmin && clients.length > 0 && onClientChange && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-semibold text-slate-700">Client Facility:</label>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+              <label className="text-xs font-semibold text-slate-700 shrink-0">Client Facility:</label>
               <select
                 value={selectedClientId || ""}
                 onChange={(e) => onClientChange(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
+                className="w-full sm:w-auto rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
               >
                 <option value="">All Clients (Enterprise View)</option>
                 {clients.map((c) => (
@@ -102,12 +102,12 @@ export function ManufacturingAnalyticsView({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-semibold text-slate-700">Status:</label>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <label className="text-xs font-semibold text-slate-700 shrink-0">Status:</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
+              className="w-full sm:w-auto rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
             >
               <option value="ALL">All Statuses</option>
               <option value="APPROVED">Approved / Completed</option>
@@ -118,9 +118,9 @@ export function ManufacturingAnalyticsView({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2 pt-1 sm:pt-0">
           {onRefresh && (
-            <Button variant="secondary" size="sm" onClick={onRefresh}>
+            <Button variant="secondary" size="sm" className="w-full sm:w-auto" onClick={onRefresh}>
               ↻ Refresh Analytics
             </Button>
           )}
@@ -408,7 +408,7 @@ export function ManufacturingAnalyticsView({
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[900px] w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
                   <th className="py-2.5 px-3">Date / Run</th>

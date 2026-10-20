@@ -486,10 +486,10 @@ export function RequestsList() {
             : 'Monitor, approve, and track warehouse dispatches, inbound receipts, and stock transfer vouchers.'
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {isSuperAdmin && (
-              <Link href="/approvals">
-                <Button variant="secondary" className="shadow-xs gap-1.5 font-medium text-xs">
+              <Link href="/approvals" className="flex-1 sm:flex-none">
+                <Button variant="secondary" className="w-full sm:w-auto shadow-xs gap-1.5 font-medium text-xs">
                   <span>Approvals Queue</span>
                   {counts.pending > 0 && (
                     <span className="rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
@@ -499,8 +499,8 @@ export function RequestsList() {
                 </Button>
               </Link>
             )}
-            <Link href="/requests/new">
-              <Button variant="primary" className="shadow-xs gap-1.5 font-medium text-xs">
+            <Link href="/requests/new" className="flex-1 sm:flex-none">
+              <Button variant="primary" className="w-full sm:w-auto shadow-xs gap-1.5 font-medium text-xs">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                 </svg>
@@ -595,8 +595,8 @@ export function RequestsList() {
       <Card>
         <CardContent className="p-3.5 space-y-3">
           {/* Top Status Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filter requests by status">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 w-full sm:w-auto" role="tablist" aria-label="Filter requests by status">
               {(
                 [
                   ['ALL', 'All Requests', counts.all],
@@ -614,7 +614,7 @@ export function RequestsList() {
                     role="tab"
                     aria-selected={isSelected}
                     onClick={() => setStatusFilter(value)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg shrink-0 whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                       isSelected
                         ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs border border-blue-200/90'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -637,7 +637,7 @@ export function RequestsList() {
               <button
                 type="button"
                 onClick={resetFilters}
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1"
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 shrink-0 self-end sm:self-center"
               >
                 <span>Reset Filters</span>
                 <span>✕</span>
@@ -646,9 +646,9 @@ export function RequestsList() {
           </div>
 
           {/* Granular Filters: Request Type, Client, Warehouse, and Search */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-1">
             {/* Request Type Pills */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs flex-wrap">
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs overflow-x-auto whitespace-nowrap scrollbar-none max-w-full">
               {(
                 [
                   ['ALL', 'All Types'],
@@ -664,7 +664,7 @@ export function RequestsList() {
                     key={value}
                     type="button"
                     onClick={() => setTypeFilter(value)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 whitespace-nowrap transition-colors ${
                       isSelected
                         ? 'bg-white text-blue-700 shadow-2xs font-semibold'
                         : 'text-slate-600 hover:text-slate-900'
@@ -677,15 +677,15 @@ export function RequestsList() {
             </div>
 
             {/* Dropdown Filters and Search Bar */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
               {/* Client Filter (for Super Admin & Store Admin) */}
               {(isSuperAdmin || isStoreAdmin) && clients.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-slate-500">Client:</span>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Client:</span>
                   <select
                     value={selectedClientId}
                     onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                    className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
                   >
                     <option value="">All Clients</option>
                     {clients.map((c) => (
@@ -699,12 +699,12 @@ export function RequestsList() {
 
               {/* Warehouse Filter */}
               {warehouses.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-medium text-slate-500">Warehouse:</span>
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Warehouse:</span>
                   <select
                     value={selectedWarehouseId}
                     onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                    className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                    className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
                   >
                     <option value="">All Warehouses</option>
                     {warehouses.map((w) => (

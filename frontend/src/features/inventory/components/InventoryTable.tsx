@@ -572,13 +572,13 @@ export function InventoryTable() {
             : 'View posted stock and stock history at your locations. Product definitions are managed in the catalogue.'
         }
         actions={
-          <div className="flex items-center gap-2">
-            <Link href="/catalog">
-              <Button variant="secondary">Browse catalogue</Button>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Link href="/catalog" className="flex-1 sm:flex-none">
+              <Button variant="secondary" className="w-full sm:w-auto text-xs">Browse catalogue</Button>
             </Link>
-            <Link href="/requests/new">
-              <Button variant="primary">
-                <span className="flex items-center gap-1.5">
+            <Link href="/requests/new" className="flex-1 sm:flex-none">
+              <Button variant="primary" className="w-full sm:w-auto text-xs">
+                <span className="flex items-center justify-center gap-1.5">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                   </svg>
@@ -665,12 +665,12 @@ export function InventoryTable() {
       <Card>
         <CardContent className="p-4 space-y-3.5">
           {/* Top row: View Mode Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs font-medium">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs font-medium overflow-x-auto whitespace-nowrap scrollbar-none max-w-full">
               <button
                 type="button"
                 onClick={() => setViewMode('PRODUCT')}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                   viewMode === 'PRODUCT'
                     ? 'bg-white text-blue-700 font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -686,7 +686,7 @@ export function InventoryTable() {
                     setSelectedLocation('ALL');
                   }
                 }}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                   viewMode === 'WAREHOUSE'
                     ? 'bg-white text-blue-700 font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -702,7 +702,7 @@ export function InventoryTable() {
                     setSelectedLocation('ALL');
                   }
                 }}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                   viewMode === 'CLIENT'
                     ? 'bg-white text-blue-700 font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -713,7 +713,7 @@ export function InventoryTable() {
               <button
                 type="button"
                 onClick={() => setViewMode('CATEGORY')}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                   viewMode === 'CATEGORY'
                     ? 'bg-white text-blue-700 font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -725,7 +725,7 @@ export function InventoryTable() {
                 <button
                   type="button"
                   onClick={() => setViewMode('BRAND')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${
+                  className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                     viewMode === 'BRAND'
                       ? 'bg-white text-blue-700 font-semibold shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -737,7 +737,7 @@ export function InventoryTable() {
               <button
                 type="button"
                 onClick={() => setViewMode('BATCH')}
-                className={`px-3 py-1.5 rounded-md transition-all ${
+                className={`px-3 py-1.5 rounded-md shrink-0 whitespace-nowrap transition-all ${
                   viewMode === 'BATCH'
                     ? 'bg-white text-blue-700 font-semibold shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -747,7 +747,7 @@ export function InventoryTable() {
               </button>
             </div>
 
-            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none shrink-0 self-end sm:self-center">
               <input
                 type="checkbox"
                 checked={showLowStockOnly}
