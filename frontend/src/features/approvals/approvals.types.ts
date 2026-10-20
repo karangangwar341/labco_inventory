@@ -26,4 +26,5 @@ export interface QueueLineItem {
   expiryDate?: string | null;
   label?: string;
   quantityNote?: string;
+  stockWarning?: string;
 }

@@ -274,6 +274,36 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         ]),
       }), superAdminUser.id, mockPrisma);
     });
+
+    it('Super Admin approves a department issue batch containing company manufactured products', async () => {
+      const issues = [
+        {
+          id: 'issue-1', issueBatchId: 'issue-batch-company', productId: 'prod-co-mfg-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
+          quantity: new Prisma.Decimal(2), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(2), notes: null,
+          department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
+          product: { id: 'prod-co-mfg-1', name: 'ALT / SGPT Liquid Reagent 4x100ml', kind: ProductKind.MANUFACTURED_PRODUCT, ownerScope: CatalogScope.COMPANY, clientId: null, status: ProductStatus.APPROVED },
+        },
+      ];
+      const batch = {
+        id: 'issue-batch-company', clientId: 'client-123', createdById: 'ca-1',
+        status: DepartmentIssueBatchStatus.PENDING_APPROVAL, issues,
+      };
+
+      mockPrisma.departmentIssueBatch.findUnique.mockResolvedValue(batch);
+      mockPrisma.departmentIssueBatch.update.mockResolvedValue({
+        ...batch, status: DepartmentIssueBatchStatus.APPROVED,
+      });
+
+      const result = await departmentsService.decideIssueBatch('issue-batch-company', true, undefined, superAdminUser);
+
+      expect(result.status).toBe(DepartmentIssueBatchStatus.APPROVED);
+      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(expect.objectContaining({
+        sourceRefType: 'DEPARTMENT_ISSUE_BATCH',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ productId: 'prod-co-mfg-1', direction: 'OUT' }),
+        ]),
+      }), superAdminUser.id, mockPrisma);
+    });
   });
 
   describe('1. Department Master CRUD and Approval Workflow', () => {

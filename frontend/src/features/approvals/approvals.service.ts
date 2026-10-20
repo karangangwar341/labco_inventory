@@ -17,6 +17,7 @@ function mapRequestLines(lines: any[] = []) {
     unitName: line.unitNameSnapshot || line.unitName || line.unit?.unitName,
     batchNumber: line.batchNumber || line.batch?.batchNumber || null,
     expiryDate: line.expiryDate || null,
+    stockWarning: line.stockWarning || undefined,
   }));
 }
 

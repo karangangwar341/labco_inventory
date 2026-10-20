@@ -459,7 +459,7 @@ export class ManufacturingService {
       await tx.$queryRaw`SELECT id FROM production_runs WHERE id = ${runId} FOR UPDATE`;
       const run = await tx.productionRun.findUnique({
         where: { id: runId },
-        include: { inputs: true },
+        include: { inputs: { include: { product: true } } },
       });
       if (!run)
         throw new NotFoundException(`Production run ${runId} not found`);
@@ -531,7 +531,7 @@ export class ManufacturingService {
 
         if (available.lessThan(input.baseQuantity)) {
           throw new BadRequestException(
-            `Insufficient available raw material for product ${input.productId}. Available: ${available}, Required: ${input.baseQuantity}`,
+            `Insufficient available raw material for "${input.product?.name || 'Selected product'}". Available: ${available}, Required: ${input.baseQuantity}`,
           );
         }
       }
@@ -630,7 +630,7 @@ export class ManufacturingService {
           (product.ownerScope === 'CLIENT' && product.clientId !== run.clientId)
         ) {
           throw new BadRequestException(
-            `Manufacturing input ${input.productId} must be an approved raw material`,
+            `Manufacturing input "${product?.name || 'Selected product'}" must be an approved raw material`,
           );
         }
       }
@@ -644,7 +644,7 @@ export class ManufacturingService {
           product.clientId !== run.clientId
         ) {
           throw new BadRequestException(
-            `Manufacturing output ${output.productId} must be an approved manufactured product`,
+            `Manufacturing output "${product?.name || 'Selected product'}" must be an approved manufactured product`,
           );
         }
       }

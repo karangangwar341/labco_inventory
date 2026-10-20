@@ -22,6 +22,7 @@ import {
   ProductStatus,
   ProductKind,
   CatalogScope,
+  LocationType,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import {
@@ -101,7 +102,7 @@ export class RequestsService {
       });
 
       if (!product) {
-        throw new NotFoundException(`Product ${line.productId} not found`);
+        throw new NotFoundException('Selected product not found');
       }
 
       if (product.status !== ProductStatus.APPROVED) {
@@ -953,7 +954,7 @@ export class RequestsService {
     const pageSize = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 100;
     const pageNumber = pagination?.page ? Math.max(Number(pagination.page), 1) : 1;
 
-    return this.prisma.stockRequest.findMany({
+    const requests = await this.prisma.stockRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: pageSize,
@@ -979,6 +980,53 @@ export class RequestsService {
         },
       },
     });
+
+    if (user.role === UserRole.SUPER_ADMIN && requests.some((r) => r.status === RequestStatus.PENDING_APPROVAL)) {
+      for (const req of requests) {
+        if (req.status !== RequestStatus.PENDING_APPROVAL || !req.sourceLocationId) continue;
+        const sourceLocName = req.sourceLocation?.warehouse?.name || req.sourceLocation?.client?.name || 'Selected Location';
+        for (const line of req.lines) {
+          const bal = await this.prisma.inventoryBalance.findFirst({
+            where: {
+              locationId: req.sourceLocationId,
+              productId: line.productId,
+              batchId: line.batchId || null,
+            },
+          });
+          const availAtSource = bal ? bal.usableQty.minus(bal.reservedQty) : new Prisma.Decimal(0);
+          if (availAtSource.lessThan(line.quantity)) {
+            const otherBals = await this.prisma.inventoryBalance.findMany({
+              where: {
+                productId: line.productId,
+                locationId: { not: req.sourceLocationId },
+                stockLocation: { type: LocationType.WAREHOUSE },
+              },
+              include: { stockLocation: { include: { warehouse: { select: { name: true } } } } },
+            });
+            const whMap = new Map<string, Prisma.Decimal>();
+            for (const ob of otherBals) {
+              const whName = ob.stockLocation?.warehouse?.name;
+              if (!whName) continue;
+              const avail = ob.usableQty.minus(ob.reservedQty);
+              if (avail.greaterThan(0)) {
+                whMap.set(whName, (whMap.get(whName) || new Prisma.Decimal(0)).add(avail));
+              }
+            }
+            const unitSuffix = line.unitNameSnapshot ? ` ${line.unitNameSnapshot}` : '';
+            if (whMap.size > 0) {
+              const availList = Array.from(whMap.entries())
+                .map(([wh, q]) => `"${wh}" (${q.toString()}${unitSuffix} available)`)
+                .join(', ');
+              (line as any).stockWarning = `Product "${line.product?.name || 'Selected product'}" is not available at "${sourceLocName}" (${availAtSource}${unitSuffix} available, ${line.quantity}${unitSuffix} requested). Stock is available in: ${availList}.`;
+            } else {
+              (line as any).stockWarning = `Product "${line.product?.name || 'Selected product'}" is not available at "${sourceLocName}" (${availAtSource}${unitSuffix} available, ${line.quantity}${unitSuffix} requested). No usable stock is currently available in other warehouses.`;
+            }
+          }
+        }
+      }
+    }
+
+    return requests;
   }
 
   async getRequestById(user: AuthenticatedUser, requestId: string) {
@@ -1019,6 +1067,48 @@ export class RequestsService {
 
     if (!request) {
       throw new NotFoundException(`Stock request ${requestId} not found`);
+    }
+
+    if (user.role === UserRole.SUPER_ADMIN && request.status === RequestStatus.PENDING_APPROVAL && request.sourceLocationId) {
+      const sourceLocName = request.sourceLocation?.warehouse?.name || request.sourceLocation?.client?.name || 'Selected Location';
+      for (const line of request.lines) {
+        const bal = await this.prisma.inventoryBalance.findFirst({
+          where: {
+            locationId: request.sourceLocationId,
+            productId: line.productId,
+            batchId: line.batchId || null,
+          },
+        });
+        const availAtSource = bal ? bal.usableQty.minus(bal.reservedQty) : new Prisma.Decimal(0);
+        if (availAtSource.lessThan(line.quantity)) {
+          const otherBals = await this.prisma.inventoryBalance.findMany({
+            where: {
+              productId: line.productId,
+              locationId: { not: request.sourceLocationId },
+              stockLocation: { type: LocationType.WAREHOUSE },
+            },
+            include: { stockLocation: { include: { warehouse: { select: { name: true } } } } },
+          });
+          const whMap = new Map<string, Prisma.Decimal>();
+          for (const ob of otherBals) {
+            const whName = ob.stockLocation?.warehouse?.name;
+            if (!whName) continue;
+            const avail = ob.usableQty.minus(ob.reservedQty);
+            if (avail.greaterThan(0)) {
+              whMap.set(whName, (whMap.get(whName) || new Prisma.Decimal(0)).add(avail));
+            }
+          }
+          const unitSuffix = line.unitNameSnapshot ? ` ${line.unitNameSnapshot}` : '';
+          if (whMap.size > 0) {
+            const availList = Array.from(whMap.entries())
+              .map(([wh, q]) => `"${wh}" (${q.toString()}${unitSuffix} available)`)
+              .join(', ');
+            (line as any).stockWarning = `Product "${line.product?.name || 'Selected product'}" is not available at "${sourceLocName}" (${availAtSource}${unitSuffix} available, ${line.quantity}${unitSuffix} requested). Stock is available in: ${availList}.`;
+          } else {
+            (line as any).stockWarning = `Product "${line.product?.name || 'Selected product'}" is not available at "${sourceLocName}" (${availAtSource}${unitSuffix} available, ${line.quantity}${unitSuffix} requested). No usable stock is currently available in other warehouses.`;
+          }
+        }
+      }
     }
 
     // Tenancy checks without redundant DB queries

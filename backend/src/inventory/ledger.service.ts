@@ -9,6 +9,7 @@ import { PostTransactionDto } from './dto/post-transaction.dto.js';
 import {
   TransactionType,
   StockCondition,
+  LocationType,
   Prisma,
 } from '@prisma/client';
 
@@ -56,6 +57,13 @@ export class LedgerService {
       }> = [];
 
       for (const line of dto.lines) {
+        const product = await tx.product.findUnique({
+          where: { id: line.productId },
+        });
+        if (!product) {
+          throw new NotFoundException('Selected product not found');
+        }
+
         // Find product unit for snapshotting
         const unit = await tx.productUnit.findFirst({
           where: {
@@ -67,20 +75,13 @@ export class LedgerService {
 
         if (!unit) {
           throw new NotFoundException(
-            `Unit "${line.unitName}" is not active or not configured for product ${line.productId}`,
+            `Unit "${line.unitName}" is not active or not configured for product "${product.name}"`,
           );
         }
 
         const originalQtyDec = new Prisma.Decimal(line.quantity);
         const conversionSnapshot = new Prisma.Decimal(unit.conversionToBase);
         const baseQuantity = originalQtyDec.mul(conversionSnapshot);
-
-        const product = await tx.product.findUnique({
-          where: { id: line.productId },
-        });
-        if (!product) {
-          throw new NotFoundException(`Product ${line.productId} not found`);
-        }
 
         if (product.quantityPrecision === 0 && !baseQuantity.isInteger()) {
           throw new BadRequestException(
@@ -145,22 +146,92 @@ export class LedgerService {
           newUsable = newUsable.add(qtyDeltaBase);
           // Non-negotiable invariant: Available = Usable - Reserved >= 0
           if (newUsable.minus(balance.reservedQty).isNegative()) {
+            const location = await tx.stockLocation.findUnique({
+              where: { id: line.locationId },
+              include: {
+                warehouse: { select: { id: true, name: true } },
+                client: { select: { id: true, name: true } },
+              },
+            });
+            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
+            const availableAtLocation = balance.usableQty.minus(balance.reservedQty);
+            const unitLabel = unit.unitName ? ` ${unit.unitName}` : '';
+
+            // Check availability across other warehouses
+            let otherWarehouseNote = '';
+            try {
+              const otherBalances = await tx.inventoryBalance.findMany({
+                where: {
+                  productId: line.productId,
+                  locationId: { not: line.locationId },
+                  stockLocation: {
+                    type: LocationType.WAREHOUSE,
+                  },
+                },
+                include: {
+                  stockLocation: {
+                    include: {
+                      warehouse: { select: { name: true } },
+                    },
+                  },
+                },
+              });
+
+              const warehouseStockMap = new Map<string, Prisma.Decimal>();
+              for (const ob of otherBalances) {
+                const whName = ob.stockLocation?.warehouse?.name;
+                if (!whName) continue;
+                const avail = ob.usableQty.minus(ob.reservedQty);
+                if (avail.greaterThan(0)) {
+                  const current = warehouseStockMap.get(whName) || new Prisma.Decimal(0);
+                  warehouseStockMap.set(whName, current.add(avail));
+                }
+              }
+
+              if (warehouseStockMap.size > 0) {
+                const whEntries = Array.from(warehouseStockMap.entries()).map(
+                  ([wh, qty]) => `"${wh}" (${qty.toString()}${unitLabel} available)`,
+                );
+                otherWarehouseNote = ` This product is not available in "${locationName}", but is available in: ${whEntries.join(', ')}.`;
+              } else {
+                otherWarehouseNote = ` This product is not available in "${locationName}", and is not currently available in any other warehouse.`;
+              }
+            } catch {
+              // Fallback if lookup fails
+            }
+
             throw new BadRequestException(
-              `Insufficient available usable stock for product ${line.productId}. Available = Usable (${newUsable}) - Reserved (${balance.reservedQty}) cannot drop below zero.`,
+              `Insufficient stock for "${product.name}" at "${locationName}". Available usable stock is ${availableAtLocation}${unitLabel}, but ${line.quantity}${unitLabel} was requested.${otherWarehouseNote}`,
             );
           }
         } else if (line.condition === StockCondition.DAMAGED) {
           newDamaged = newDamaged.add(qtyDeltaBase);
           if (newDamaged.isNegative()) {
+            const location = await tx.stockLocation.findUnique({
+              where: { id: line.locationId },
+              include: {
+                warehouse: { select: { id: true, name: true } },
+                client: { select: { id: true, name: true } },
+              },
+            });
+            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
             throw new BadRequestException(
-              `Damaged stock balance cannot drop below zero for product ${line.productId}`,
+              `Damaged stock balance cannot drop below zero for "${product.name}" at "${locationName}"`,
             );
           }
         } else if (line.condition === StockCondition.EXPIRED) {
           newExpired = newExpired.add(qtyDeltaBase);
           if (newExpired.isNegative()) {
+            const location = await tx.stockLocation.findUnique({
+              where: { id: line.locationId },
+              include: {
+                warehouse: { select: { name: true } },
+                client: { select: { id: true, name: true } },
+              },
+            });
+            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
             throw new BadRequestException(
-              `Expired stock balance cannot drop below zero for product ${line.productId}`,
+              `Expired stock balance cannot drop below zero for "${product.name}" at "${locationName}"`,
             );
           }
         }
@@ -182,7 +253,7 @@ export class LedgerService {
 
           if (updateResult.count === 0) {
             throw new ConflictException(
-              `Concurrent inventory balance modification detected for product ${line.productId}. Please retry transaction.`,
+              `Concurrent inventory balance modification detected for "${product.name}". Please retry transaction.`,
             );
           }
         } else {

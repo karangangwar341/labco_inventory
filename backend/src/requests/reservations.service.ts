@@ -4,11 +4,53 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { Prisma, ReservationStatus, StockCondition } from '@prisma/client';
+import { Prisma, ReservationStatus, StockCondition, LocationType } from '@prisma/client';
 
 @Injectable()
 export class ReservationsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async findOtherWarehouseStock(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    excludeLocationId: string,
+  ): Promise<string> {
+    try {
+      const otherBalances = await tx.inventoryBalance.findMany({
+        where: {
+          productId,
+          locationId: { not: excludeLocationId },
+          stockLocation: { type: LocationType.WAREHOUSE },
+        },
+        include: {
+          stockLocation: {
+            include: {
+              warehouse: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      const map = new Map<string, Prisma.Decimal>();
+      for (const ob of otherBalances) {
+        const whName = ob.stockLocation?.warehouse?.name;
+        if (!whName) continue;
+        const avail = ob.usableQty.minus(ob.reservedQty);
+        if (avail.greaterThan(0)) {
+          const cur = map.get(whName) || new Prisma.Decimal(0);
+          map.set(whName, cur.add(avail));
+        }
+      }
+
+      if (map.size > 0) {
+        const entries = Array.from(map.entries()).map(([wh, qty]) => `"${wh}" (${qty.toString()} available)`);
+        return ` However, stock is available in: ${entries.join(', ')}.`;
+      }
+      return ` No usable stock is currently available in other warehouses.`;
+    } catch {
+      return '';
+    }
+  }
 
   /**
    * Atomically reserve stock for an array of lines.
@@ -33,6 +75,21 @@ export class ReservationsService {
         );
       }
 
+      const product = await tx.product.findUnique({
+        where: { id: line.productId },
+        select: { name: true },
+      });
+      const productName = product?.name || 'Selected product';
+
+      const location = await tx.stockLocation.findUnique({
+        where: { id: locationId },
+        include: {
+          warehouse: { select: { name: true } },
+          client: { select: { name: true } },
+        },
+      });
+      const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
+
       // Query inventory balance under lock / transaction
       const balance = await tx.inventoryBalance.findFirst({
         where: {
@@ -43,12 +100,9 @@ export class ReservationsService {
       });
 
       if (!balance) {
-        const product = await tx.product.findUnique({
-          where: { id: line.productId },
-          select: { name: true },
-        });
+        const otherWarehouses = await this.findOtherWarehouseStock(tx, line.productId, locationId);
         throw new BadRequestException(
-          `No available stock for "${product?.name || line.productId}" at the selected location. Available: 0, requested: ${line.baseQuantity} base units.`,
+          `Product "${productName}" is not available at "${locationName}" (0 available, ${line.baseQuantity} base units requested).${otherWarehouses}`,
         );
       }
 
@@ -65,12 +119,9 @@ export class ReservationsService {
 
       const availableQty = balance.usableQty.minus(balance.reservedQty);
       if (availableQty.lessThan(line.baseQuantity)) {
-        const product = await tx.product.findUnique({
-          where: { id: line.productId },
-          select: { name: true },
-        });
+        const otherWarehouses = await this.findOtherWarehouseStock(tx, line.productId, locationId);
         throw new BadRequestException(
-          `Not enough available stock for "${product?.name || line.productId}". Available: ${availableQty}, requested: ${line.baseQuantity} base units. Reduce the quantity or choose another product.`,
+          `Product "${productName}" has insufficient stock at "${locationName}" (${availableQty} available, ${line.baseQuantity} base units requested).${otherWarehouses}`,
         );
       }
 
@@ -101,7 +152,7 @@ export class ReservationsService {
 
         if (updateResult.count === 0) {
           throw new ConflictException(
-            `Concurrent inventory modification detected on product ${line.productId}. Please retry reservation.`,
+            `Concurrent inventory modification detected on product "${productName}". Please retry reservation.`,
           );
         }
       } else {
@@ -125,11 +176,19 @@ export class ReservationsService {
       const balance = await tx.inventoryBalance.findFirst({
         where: { locationId, productId: line.productId, batchId: line.batchId || null },
       });
-      if (!balance) throw new BadRequestException(`No available stock for product ${line.productId}`);
+      const product = await tx.product.findUnique({
+        where: { id: line.productId },
+        select: { name: true },
+      });
+      const productName = product?.name || 'Selected product';
+
+      if (!balance) {
+        throw new BadRequestException(`No available stock for product "${productName}"`);
+      }
       await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
       const available = balance.usableQty.minus(balance.reservedQty);
       if (available.lessThan(line.baseQuantity)) {
-        throw new BadRequestException(`Not enough available stock. Available: ${available}, requested: ${line.baseQuantity} base units.`);
+        throw new BadRequestException(`Not enough available stock for "${productName}". Available: ${available}, requested: ${line.baseQuantity} base units.`);
       }
       await tx.reservation.create({ data: {
         departmentIssueId: line.id,

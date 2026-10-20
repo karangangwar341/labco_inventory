@@ -472,11 +472,14 @@ export class DepartmentsService {
         return tx.departmentIssueBatch.update({ where: { id: batch.id }, data: { status: DepartmentIssueBatchStatus.REJECTED, rejectionReason: reason!.trim(), approvedById: user.id, approvedAt: new Date() }, include: { issues: true } });
       }
       for (const issue of fresh.issues) {
+        const isBelonging =
+          (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.clientId) ||
+          issue.product.clientId === batch.clientId;
         if (
           issue.department.status !== DepartmentStatus.ACTIVE ||
           issue.product.status !== ProductStatus.APPROVED ||
           issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
-          issue.product.clientId !== batch.clientId
+          !isBelonging
         ) {
           throw new BadRequestException('Every batch line must still reference an active department and an approved manufactured product belonging to your organization');
         }
@@ -507,7 +510,11 @@ export class DepartmentsService {
       throw new BadRequestException('Each issue must select an active department belonging to your organization');
     }
     const product = await this.prisma.product.findUnique({ where: { id: dto.productId }, include: { units: true } });
-    if (!product || product.status !== ProductStatus.APPROVED || product.kind !== ProductKind.MANUFACTURED_PRODUCT || product.clientId !== clientId) {
+    const isBelonging = product && (
+      (product.ownerScope === CatalogScope.COMPANY && !product.clientId) ||
+      product.clientId === clientId
+    );
+    if (!product || product.status !== ProductStatus.APPROVED || product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
       throw new BadRequestException('Each issue must select an approved manufactured product belonging to your organization');
     }
     const unit = product.units.find((candidate) => candidate.status === 'ACTIVE' && (
@@ -565,7 +572,7 @@ export class DepartmentsService {
     });
 
     if (!product) {
-      throw new NotFoundException(`Product ${dto.productId} not found`);
+      throw new NotFoundException('Selected product not found');
     }
 
     if (product.status !== ProductStatus.APPROVED) {
@@ -573,7 +580,10 @@ export class DepartmentsService {
         `Product "${product.name}" is not approved (status: ${product.status})`,
       );
     }
-    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT || product.clientId !== clientId) {
+    const isBelonging =
+      (product.ownerScope === CatalogScope.COMPANY && !product.clientId) ||
+      product.clientId === clientId;
+    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
       throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is not an approved manufactured product belonging to your organization`);
     }
 
@@ -764,9 +774,12 @@ export class DepartmentsService {
         `Department issue is not pending approval (current status: ${issue.status})`,
       );
     }
+    const isBelonging =
+      (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.clientId) ||
+      issue.product.clientId === issue.clientId;
     if (
       issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
-      issue.product.clientId !== issue.clientId ||
+      !isBelonging ||
       issue.product.status !== ProductStatus.APPROVED
     ) {
       throw new BadRequestException('Department issue product must remain an approved manufactured product belonging to your organization');
@@ -926,7 +939,7 @@ export class DepartmentsService {
     });
 
     if (!product) {
-      throw new NotFoundException(`Product ${dto.productId} not found`);
+      throw new NotFoundException('Selected product not found');
     }
 
     if (product.status !== ProductStatus.APPROVED) {
@@ -1194,7 +1207,7 @@ export class DepartmentsService {
     });
 
     if (!product) {
-      throw new NotFoundException(`Product ${dto.productId} not found`);
+      throw new NotFoundException('Selected product not found');
     }
 
     // Resolve unit

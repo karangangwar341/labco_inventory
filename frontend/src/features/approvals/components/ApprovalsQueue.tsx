@@ -28,6 +28,10 @@ const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
 
 const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'MANUFACTURING', 'DEPARTMENTS', 'CORRECTIONS'];
 
+function sanitizeError(msg: string): string {
+  return msg.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '').replace(/\s{2,}/g, ' ').trim();
+}
+
 export function ApprovalsQueue() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -96,7 +100,7 @@ export function ApprovalsQueue() {
       setTimeout(() => setActionSuccess(null), 4000);
     },
     onError: (err: unknown) => {
-      setErrorMsg(err instanceof Error ? err.message : 'Approval failed');
+      setErrorMsg(sanitizeError(err instanceof Error ? err.message : 'Approval failed'));
     },
   });
 
@@ -112,7 +116,7 @@ export function ApprovalsQueue() {
       setTimeout(() => setActionSuccess(null), 4000);
     },
     onError: (err: unknown) => {
-      setErrorMsg(err instanceof Error ? err.message : 'Rejection failed');
+      setErrorMsg(sanitizeError(err instanceof Error ? err.message : 'Rejection failed'));
     },
   });
 
@@ -228,24 +232,31 @@ export function ApprovalsQueue() {
               {item.details}
             </p>
             {item.lineItems && item.lineItems.length > 0 && (
-              <div className="flex flex-wrap gap-1 items-center">
-                {item.lineItems.slice(0, 2).map((line) => (
-                  <span
-                    key={line.id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600"
-                  >
-                    <span className="font-medium text-slate-800">{line.productName}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="font-semibold text-slate-700">
-                      {line.quantity}
-                      {line.unitName ? ` ${line.unitName}` : ''}
+              <div className="flex flex-col gap-1 items-start">
+                <div className="flex flex-wrap gap-1 items-center">
+                  {item.lineItems.slice(0, 2).map((line) => (
+                    <span
+                      key={line.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600"
+                    >
+                      <span className="font-medium text-slate-800">{line.productName}</span>
+                      <span className="text-slate-400">·</span>
+                      <span className="font-semibold text-slate-700">
+                        {line.quantity}
+                        {line.unitName ? ` ${line.unitName}` : ''}
+                      </span>
                     </span>
-                  </span>
-                ))}
-                {item.lineItems.length > 2 && (
-                  <span className="text-[10px] text-slate-400 font-medium px-1">
-                    +{item.lineItems.length - 2} more
-                  </span>
+                  ))}
+                  {item.lineItems.length > 2 && (
+                    <span className="text-[10px] text-slate-400 font-medium px-1">
+                      +{item.lineItems.length - 2} more
+                    </span>
+                  )}
+                </div>
+                {item.lineItems.some((l) => l.stockWarning) && (
+                  <div className="mt-1 px-2 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded text-[11px] leading-tight">
+                    ⚠️ {item.lineItems.find((l) => l.stockWarning)?.stockWarning}
+                  </div>
                 )}
               </div>
             )}
@@ -376,7 +387,11 @@ export function ApprovalsQueue() {
       )}
 
       {(errorMsg || (error instanceof Error ? error.message : null)) && (
-        <ErrorState message={errorMsg || (error instanceof Error ? error.message : 'Error loading approvals')} onRetry={() => { setErrorMsg(null); fetchQueue(); }} />
+        <ErrorState
+          title={errorMsg ? "Approval Decision Failed" : "Failed to load content"}
+          message={errorMsg || (error instanceof Error ? sanitizeError(error.message) : 'Error loading approvals')}
+          onRetry={() => { setErrorMsg(null); fetchQueue(); }}
+        />
       )}
 
       {/* Segmented Tab Bar */}
@@ -502,20 +517,27 @@ export function ApprovalsQueue() {
                 <h4 className="font-bold text-slate-900 mb-2">Products and quantities</h4>
                 <div className="divide-y divide-slate-100 rounded-xl border border-slate-200/80 bg-white overflow-hidden">
                   {selectedDetailItem.lineItems.map((line) => (
-                    <div key={line.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 px-3.5 py-2.5">
-                      <div>
-                        {line.label && <span className="mr-1 text-slate-400 font-medium">{line.label}:</span>}
-                        <span className="font-semibold text-slate-900">{line.productName}</span>
-                        {(line.batchNumber || line.expiryDate) && (
-                          <div className="mt-0.5 text-[11px] text-slate-400">
-                            {line.batchNumber ? `Lot ${line.batchNumber}` : ''}
-                            {line.batchNumber && line.expiryDate ? ' · ' : ''}
-                            {line.expiryDate ? `Expires ${new Date(line.expiryDate).toLocaleDateString()}` : ''}
-                          </div>
-                        )}
+                    <div key={line.id} className="p-3.5 space-y-1.5">
+                      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+                        <div>
+                          {line.label && <span className="mr-1 text-slate-400 font-medium">{line.label}:</span>}
+                          <span className="font-semibold text-slate-900">{line.productName}</span>
+                          {(line.batchNumber || line.expiryDate) && (
+                            <div className="mt-0.5 text-[11px] text-slate-400">
+                              {line.batchNumber ? `Lot ${line.batchNumber}` : ''}
+                              {line.batchNumber && line.expiryDate ? ' · ' : ''}
+                              {line.expiryDate ? `Expires ${new Date(line.expiryDate).toLocaleDateString()}` : ''}
+                            </div>
+                          )}
+                        </div>
+                        <span className="font-semibold text-slate-900">{line.quantity}{line.unitName ? ` ${line.unitName}` : ''}</span>
                       </div>
-                      <span className="font-semibold text-slate-900">{line.quantity}{line.unitName ? ` ${line.unitName}` : ''}</span>
-                      {line.quantityNote && <div className="w-full text-right text-[11px] text-slate-400">{line.quantityNote}</div>}
+                      {line.quantityNote && <div className="text-right text-[11px] text-slate-400">{line.quantityNote}</div>}
+                      {line.stockWarning && (
+                        <div className="p-2 bg-amber-50/80 border border-amber-200/80 rounded-lg text-[11px] text-amber-900 leading-relaxed font-normal">
+                          ⚠️ {line.stockWarning}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
