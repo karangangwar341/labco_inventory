@@ -27,6 +27,11 @@ import { useAuth } from "../../auth/auth.store";
 import { CyclesGridView } from "./CyclesGridView";
 import { ReRunCycleModal } from "./ReRunCycleModal";
 import { ManufacturingAnalyticsView } from "./ManufacturingAnalyticsView";
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from "../../../components/data-display/DateQuickFilterBar";
 
 export interface ManufacturingViewProps {
   clientId?: string;
@@ -41,9 +46,15 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const urlRunId = searchParams.get("runId");
 
   const { role, user } = useAuth();
-  const canCreateRuns = role === "CLIENT_ADMIN";
   const isClientAdmin = role === "CLIENT_ADMIN";
   const isSuperAdmin = role === "SUPER_ADMIN";
+  // Super Admin client filter for runs & analytics
+  const [runsClientId, setRunsClientId] = useState<string>(propClientId || "");
+
+  const effectiveTargetClientId = isClientAdmin
+    ? (user?.clientId ?? undefined)
+    : (propClientId || runsClientId || undefined);
+  const canCreateRuns = isClientAdmin || (isSuperAdmin && Boolean(effectiveTargetClientId));
 
   // Active top-level tab
   const [activeTab, setActiveTab] = useState<"CYCLES" | "RUNS" | "ANALYTICS">(() => {
@@ -63,8 +74,10 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  // Super Admin client filter for runs & analytics
-  const [runsClientId, setRunsClientId] = useState<string>(propClientId || "");
+  // Date Quick Filters for Runs
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>('TODAY');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   // Synchronize when propClientId changes
   useEffect(() => {
@@ -111,10 +124,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     error: optionsError,
     refetch: refetchOptions,
   } = useQuery({
-    queryKey: queryKeys.catalog.manufacturingOptions(
-      user?.clientId ?? undefined,
-    ),
-    queryFn: () => catalogService.getManufacturingOptions(),
+    queryKey: queryKeys.catalog.manufacturingOptions(effectiveTargetClientId),
+    queryFn: () => catalogService.getManufacturingOptions(effectiveTargetClientId),
     enabled: canCreateRuns,
     staleTime: 2 * 60 * 1000,
   });
@@ -526,6 +537,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     createMutation.mutate(
       {
         mode: "LINKED",
+        clientId: isSuperAdmin ? effectiveTargetClientId : undefined,
         productionReference: productionReference.trim() || undefined,
         actualOutput: effectiveActualOutput,
         wastage: wastage ? Number(wastage) : undefined,
@@ -572,13 +584,22 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     return runs.filter((r) => r.status === "PENDING_APPROVAL");
   }, [runs]);
 
+  const olderRunsCount = useMemo(() => {
+    return runs.filter((run) => {
+      if (statusFilter !== "ALL" && run.status !== statusFilter) return false;
+      if (runsClientId && run.clientId !== runsClientId && run.client?.id !== runsClientId) return false;
+      return !isDateInRange(run.createdAt, 'TODAY');
+    }).length;
+  }, [runs, statusFilter, runsClientId]);
+
   const visibleRuns = useMemo(() => {
     return runs.filter((run) => {
       if (statusFilter !== "ALL" && run.status !== statusFilter) return false;
       if (runsClientId && run.clientId !== runsClientId && run.client?.id !== runsClientId) return false;
+      if (!isDateInRange(run.createdAt, dateFilter, customStart, customEnd)) return false;
       return true;
     });
-  }, [runs, statusFilter, runsClientId]);
+  }, [runs, statusFilter, runsClientId, dateFilter, customStart, customEnd]);
 
   // Trigger re-run modal for a cycle
   const handleReRunFromCycle = (cycle: ProductionCycle) => {
@@ -792,51 +813,70 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             ))}
           </section>
 
-          {/* Status filter pills & Super Admin client selector */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {["ALL", "DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"].map(
-                (status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => setStatusFilter(status)}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
-                      statusFilter === status
-                        ? "border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold shadow-2xs"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
+          {/* Status filter pills, client selector, and date filters */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slate-500 font-medium mr-1 text-[11px] uppercase tracking-wider">
+                  Status:
+                </span>
+                {["ALL", "DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"].map(
+                  (status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setStatusFilter(status)}
+                      className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        statusFilter === status
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold shadow-2xs"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {status === "ALL"
+                        ? "All Runs"
+                        : status === "PENDING_APPROVAL"
+                          ? "Waiting Approval"
+                          : status
+                              .replaceAll("_", " ")
+                              .toLowerCase()
+                              .replace(/^\w/, (letter) => letter.toUpperCase())}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              {isSuperAdmin && !propClientId && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-medium">Filter Client:</span>
+                  <select
+                    value={runsClientId}
+                    onChange={(e) => setRunsClientId(e.target.value)}
+                    className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
                   >
-                    {status === "ALL"
-                      ? "All Runs"
-                      : status === "PENDING_APPROVAL"
-                        ? "Waiting Approval"
-                        : status
-                            .replaceAll("_", " ")
-                            .toLowerCase()
-                            .replace(/^\w/, (letter) => letter.toUpperCase())}
-                  </button>
-                ),
+                    <option value="">All Clients</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
 
-            {isSuperAdmin && !propClientId && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 font-medium">Filter Client:</span>
-                <select
-                  value={runsClientId}
-                  onChange={(e) => setRunsClientId(e.target.value)}
-                  className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
-                >
-                  <option value="">All Clients</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Date Quick Filter Bar */}
+            <div className="pt-2 border-t border-slate-100">
+              <DateQuickFilterBar
+                value={dateFilter}
+                onChange={setDateFilter}
+                customStart={customStart}
+                customEnd={customEnd}
+                onCustomStartChange={setCustomStart}
+                onCustomEndChange={setCustomEnd}
+                totalOlderCount={olderRunsCount}
+                onViewOlder={() => setDateFilter('ALL')}
+              />
+            </div>
           </div>
 
           {isLoadingRuns ? (

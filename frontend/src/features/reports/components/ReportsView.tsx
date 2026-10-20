@@ -211,6 +211,40 @@ export function ReportsView() {
     setClientId('');
   };
 
+  const setQuickRange = (preset: 'TODAY' | 'YESTERDAY' | 'LAST_WEEK' | 'LAST_MONTH' | 'ALL') => {
+    const now = new Date();
+    const format = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    if (preset === 'TODAY') {
+      const today = format(now);
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === 'YESTERDAY') {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const yStr = format(y);
+      setStartDate(yStr);
+      setEndDate(yStr);
+    } else if (preset === 'LAST_WEEK') {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 7);
+      setStartDate(format(past));
+      setEndDate(format(now));
+    } else if (preset === 'LAST_MONTH') {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 30);
+      setStartDate(format(past));
+      setEndDate(format(now));
+    } else if (preset === 'ALL') {
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Page Header with primary print / CSV actions */}
@@ -283,10 +317,33 @@ export function ReportsView() {
 
           {/* Form Filter Row */}
           <div className="pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-slate-700 tracking-tight">
-                Filter Parameters
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-700 tracking-tight">
+                  Filter Parameters
+                </span>
+                <span className="text-slate-300">|</span>
+                <div className="flex items-center gap-1">
+                  {(
+                    [
+                      ['TODAY', 'Today'],
+                      ['YESTERDAY', 'Yesterday'],
+                      ['LAST_WEEK', 'Last 7 Days'],
+                      ['LAST_MONTH', 'Last 30 Days'],
+                      ['ALL', 'All Time'],
+                    ] as const
+                  ).map(([preset, label]) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setQuickRange(preset)}
+                      className="px-2 py-0.5 text-[10px] font-medium rounded bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 transition-colors border border-slate-200/70"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {hasActiveFilters && (
                 <button
                   type="button"

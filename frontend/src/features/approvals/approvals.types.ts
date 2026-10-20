@@ -10,10 +10,13 @@ export interface QueueItem {
   type: string;
   requester: string;
   location: string;
+  clientId?: string;
+  clientName?: string;
   details: string;
   quantitySummary: string;
   lineItems?: QueueLineItem[];
   createdAt: string;
+  createdAtRaw?: string;
   priority: 'NORMAL' | 'URGENT';
 }
 

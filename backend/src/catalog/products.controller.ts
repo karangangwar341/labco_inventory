@@ -67,10 +67,13 @@ export class ProductsController {
   }
 
   @Get('manufacturing-options')
-  @Roles(UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.CLIENT_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'List this client’s stocked raw materials and approved manufactured products' })
-  manufacturingOptions(@CurrentUser() user: AuthenticatedUser) {
-    return this.productsService.getManufacturingOptions(user);
+  manufacturingOptions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('clientId') clientId?: string,
+  ) {
+    return this.productsService.getManufacturingOptions(user, clientId);
   }
 
   @Get(':id')

@@ -17,6 +17,12 @@ import { DataTable, ColumnDef } from '../../../components/ui/DataTable';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
+import { administrationService } from '../../administration/administration.service';
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from '../../../components/data-display/DateQuickFilterBar';
 
 const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
   REQUESTS: [],
@@ -57,6 +63,20 @@ export function ApprovalsQueue() {
   const [selectedDetailItem, setSelectedDetailItem] = useState<QueueItem | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Clientwise & Time-Series Date Filters
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>('TODAY');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  // Query: Clients for clientwise filtering
+  const { data: clients = [] } = useQuery({
+    queryKey: ['administration', 'clients'],
+    queryFn: () => administrationService.getClients(),
+    enabled: isAuthorized,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const {
     data: items = EMPTY_QUEUE,
@@ -148,18 +168,51 @@ export function ApprovalsQueue() {
     });
   };
 
+  const allCurrentTabList = items[activeTab] || [];
+
+  // Count items from earlier days to show in the hint pill when TODAY is selected
+  const olderItemsCount = useMemo(() => {
+    return allCurrentTabList.filter((i) => {
+      if (selectedClientId && i.clientId !== selectedClientId) return false;
+      return !isDateInRange(i.createdAtRaw || i.createdAt, 'TODAY');
+    }).length;
+  }, [allCurrentTabList, selectedClientId]);
+
   const currentTabItems = useMemo(() => {
-    const list = items[activeTab] || [];
-    return list.filter((i) => {
+    return allCurrentTabList.filter((i) => {
       const matchesPriority =
         priorityFilter === 'ALL' || i.priority === priorityFilter;
       const matchesRequester =
         !requesterSearch ||
         i.requester.toLowerCase().includes(requesterSearch.toLowerCase()) ||
-        i.id.toLowerCase().includes(requesterSearch.toLowerCase());
-      return matchesPriority && matchesRequester;
+        i.id.toLowerCase().includes(requesterSearch.toLowerCase()) ||
+        (i.location && i.location.toLowerCase().includes(requesterSearch.toLowerCase())) ||
+        (i.clientName && i.clientName.toLowerCase().includes(requesterSearch.toLowerCase()));
+      const matchesClient =
+        !selectedClientId ||
+        i.clientId === selectedClientId ||
+        (i.location &&
+          i.location.toLowerCase().includes(
+            clients.find((c: any) => c.id === selectedClientId)?.name?.toLowerCase() || '',
+          ));
+      const matchesDate = isDateInRange(
+        i.createdAtRaw || i.createdAt,
+        dateFilter,
+        customStart,
+        customEnd,
+      );
+      return matchesPriority && matchesRequester && matchesClient && matchesDate;
     });
-  }, [items, activeTab, priorityFilter, requesterSearch]);
+  }, [
+    allCurrentTabList,
+    priorityFilter,
+    requesterSearch,
+    selectedClientId,
+    dateFilter,
+    customStart,
+    customEnd,
+    clients,
+  ]);
 
   const tabs: { key: ApprovalTab; label: string; count: number }[] = [
     { key: 'REQUESTS', label: 'Stock Requests', count: items.REQUESTS?.length || 0 },
@@ -436,34 +489,73 @@ export function ApprovalsQueue() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-3 bg-white border border-slate-200/80 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-slate-500 font-medium">Priority:</span>
-          {(['ALL', 'URGENT', 'NORMAL'] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPriorityFilter(p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                priorityFilter === p
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/80'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-3 text-xs shadow-xs">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Priority Filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 font-medium">Priority:</span>
+              {(['ALL', 'URGENT', 'NORMAL'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPriorityFilter(p)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                    priorityFilter === p
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200/80'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            {/* Client Filter (Super Admin / Authorized) */}
+            {isAuthorized && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500 font-medium">Client:</span>
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white text-xs"
+                >
+                  <option value="">All Clients</option>
+                  {clients.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Search Input */}
+          <div className="w-full md:w-auto relative">
+            <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search requester or reference..."
+              value={requesterSearch}
+              onChange={(e) => setRequesterSearch(e.target.value)}
+              className="w-full md:w-64 pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-1 focus:ring-blue-600 transition-all text-xs"
+            />
+          </div>
         </div>
 
-        <div className="w-full sm:w-auto relative">
-          <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search requester or reference..."
-            value={requesterSearch}
-            onChange={(e) => setRequesterSearch(e.target.value)}
-            className="w-full sm:w-64 pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-1 focus:ring-blue-600 transition-all text-xs"
+        {/* Date Filter Bar */}
+        <div className="pt-2 border-t border-slate-100">
+          <DateQuickFilterBar
+            value={dateFilter}
+            onChange={setDateFilter}
+            customStart={customStart}
+            customEnd={customEnd}
+            onCustomStartChange={setCustomStart}
+            onCustomEndChange={setCustomEnd}
+            totalOlderCount={olderItemsCount}
+            onViewOlder={() => setDateFilter('ALL')}
           />
         </div>
       </div>

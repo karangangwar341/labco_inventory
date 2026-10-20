@@ -30,6 +30,11 @@ import { catalogService } from "@/features/catalog/catalog.service";
 import type { CatalogProduct } from "@/features/catalog/catalog.types";
 import { ManufacturingView } from "@/features/manufacturing/components/ManufacturingView";
 import { StaffManagementView } from "@/features/staff/components/StaffManagementView";
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from "@/components/data-display/DateQuickFilterBar";
 
 type ReportRow = Record<string, unknown>;
 type ReportResponse = { data: ReportRow[]; rowCount: number };
@@ -215,6 +220,41 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   );
   const manufacturingMovements = ledger.filter((row) =>
     getText(row, "transactionType").startsWith("MANUFACTURING_"),
+  );
+
+  // Date Filters for DEPARTMENTS and LEDGER tabs (default to TODAY)
+  const [deptDateFilter, setDeptDateFilter] = useState<DateQuickFilter>("TODAY");
+  const [deptCustomStart, setDeptCustomStart] = useState("");
+  const [deptCustomEnd, setDeptCustomEnd] = useState("");
+
+  const olderDeptCount = departmentActivity.filter(
+    (row) => !isDateInRange(getText(row, "date"), "TODAY"),
+  ).length;
+
+  const visibleDeptActivity = departmentActivity.filter((row) =>
+    isDateInRange(
+      getText(row, "date"),
+      deptDateFilter,
+      deptCustomStart,
+      deptCustomEnd,
+    ),
+  );
+
+  const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
+  const [ledgerCustomStart, setLedgerCustomStart] = useState("");
+  const [ledgerCustomEnd, setLedgerCustomEnd] = useState("");
+
+  const olderLedgerCount = manufacturingMovements.filter(
+    (row) => !isDateInRange(getText(row, "timestamp"), "TODAY"),
+  ).length;
+
+  const visibleLedgerMovements = manufacturingMovements.filter((row) =>
+    isDateInRange(
+      getText(row, "timestamp"),
+      ledgerDateFilter,
+      ledgerCustomStart,
+      ledgerCustomEnd,
+    ),
   );
 
   return (
@@ -643,55 +683,74 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
             )}
 
             {departmentActivity.length > 0 && (
-              <div className="overflow-x-auto pt-2">
-                <Table className="border-0 shadow-none">
-                  <TableHeader>
-                    <tr>
-                      <TableHead>Activity</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead align="right">Quantity</TableHead>
-                      <TableHead align="right">Date</TableHead>
-                    </tr>
-                  </TableHeader>
-                  <TableBody>
-                    {departmentActivity.slice(0, 10).map((row, index) => (
-                      <TableRow key={`${getText(row, "type")}-${index}`}>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              row.type === "DEPARTMENT_RETURN"
-                                ? "success"
-                                : "primary"
-                            }
-                            size="sm"
-                          >
-                            {getText(row, "type").replaceAll("_", " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-slate-700 font-medium">
-                          {getText(row, "department")}
-                        </TableCell>
-                        <TableCell className="text-slate-900 font-semibold">
-                          {getText(row, "product")}
-                        </TableCell>
-                        <TableCell align="right" numeric>
-                          {getText(row, "quantity")}{" "}
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            {getText(row, "unit", "")}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          mono
-                          className="text-slate-500 text-[11px]"
-                        >
-                          {getText(row, "date")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="pt-2 border-t border-slate-100 space-y-3">
+                <DateQuickFilterBar
+                  activeFilter={deptDateFilter}
+                  onFilterChange={setDeptDateFilter}
+                  customStart={deptCustomStart}
+                  customEnd={deptCustomEnd}
+                  onCustomStartChange={setDeptCustomStart}
+                  onCustomEndChange={setDeptCustomEnd}
+                  totalOlderCount={olderDeptCount}
+                  onViewAll={() => setDeptDateFilter("ALL")}
+                />
+
+                {visibleDeptActivity.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-lg border border-slate-200/60">
+                    No department issues or returns match the selected date filter.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table className="border-0 shadow-none">
+                      <TableHeader>
+                        <tr>
+                          <TableHead>Activity</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Product</TableHead>
+                          <TableHead align="right">Quantity</TableHead>
+                          <TableHead align="right">Date</TableHead>
+                        </tr>
+                      </TableHeader>
+                      <TableBody>
+                        {visibleDeptActivity.map((row, index) => (
+                          <TableRow key={`${getText(row, "type")}-${index}`}>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  row.type === "DEPARTMENT_RETURN"
+                                    ? "success"
+                                    : "primary"
+                                }
+                                size="sm"
+                              >
+                                {getText(row, "type").replaceAll("_", " ")}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-700 font-medium">
+                              {getText(row, "department")}
+                            </TableCell>
+                            <TableCell className="text-slate-900 font-semibold">
+                              {getText(row, "product")}
+                            </TableCell>
+                            <TableCell align="right" numeric>
+                              {getText(row, "quantity")}{" "}
+                              <span className="text-[10px] text-slate-400 font-sans">
+                                {getText(row, "unit", "")}
+                              </span>
+                            </TableCell>
+                            <TableCell
+                              align="right"
+                              mono
+                              className="text-slate-500 text-[11px]"
+                            >
+                              {getText(row, "date")}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -708,9 +767,26 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {manufacturingMovements.length === 0 ? (
+            {manufacturingMovements.length > 0 && (
+              <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+                <DateQuickFilterBar
+                  activeFilter={ledgerDateFilter}
+                  onFilterChange={setLedgerDateFilter}
+                  customStart={ledgerCustomStart}
+                  customEnd={ledgerCustomEnd}
+                  onCustomStartChange={setLedgerCustomStart}
+                  onCustomEndChange={setLedgerCustomEnd}
+                  totalOlderCount={olderLedgerCount}
+                  onViewAll={() => setLedgerDateFilter("ALL")}
+                />
+              </div>
+            )}
+
+            {visibleLedgerMovements.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">
-                No manufacturing stock movements recorded for this client.
+                {manufacturingMovements.length === 0
+                  ? "No manufacturing stock movements recorded for this client."
+                  : "No movements match the selected date filter."}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -724,7 +800,7 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
                     </tr>
                   </TableHeader>
                   <TableBody>
-                    {manufacturingMovements.map((row, index) => (
+                    {visibleLedgerMovements.map((row, index) => (
                       <TableRow key={`${getText(row, "timestamp")}-${index}`}>
                         <TableCell>
                           <Badge variant="purple" size="sm">

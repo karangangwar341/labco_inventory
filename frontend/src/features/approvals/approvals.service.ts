@@ -66,16 +66,21 @@ export const approvalsService = {
           : requestType === 'STOCK_OUT'
             ? `Out of ${source || destination || 'Location not available'}`
             : source && destination ? `${source} → ${destination}` : source || destination || 'Location not available';
+        const clientId = r.clientId || r.client?.id || r.destinationLocation?.clientId || r.sourceLocation?.clientId;
+        const clientName = r.client?.name || r.destinationLocation?.client?.name || r.sourceLocation?.client?.name;
         return {
-        id: r.id,
-        type: `STOCK_REQUEST (${requestType})`,
-        requester: r.requesterUsername || r.requester?.username || 'Store Admin',
-        location,
-        details: r.reason || r.notes || 'Review the requested products and quantities.',
-        quantitySummary: `${lineItems.length} ${lineItems.length === 1 ? 'product' : 'products'}`,
-        lineItems,
-        createdAt: r.submittedAt ? new Date(r.submittedAt).toLocaleString() : r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Recent',
-        priority: (r.priority === 'URGENT' ? 'URGENT' : 'NORMAL') as 'NORMAL' | 'URGENT',
+          id: r.id,
+          type: `STOCK_REQUEST (${requestType})`,
+          requester: r.requesterUsername || r.requester?.username || 'Store Admin',
+          location,
+          clientId,
+          clientName,
+          details: r.reason || r.notes || 'Review the requested products and quantities.',
+          quantitySummary: `${lineItems.length} ${lineItems.length === 1 ? 'product' : 'products'}`,
+          lineItems,
+          createdAt: r.submittedAt ? new Date(r.submittedAt).toLocaleString() : r.createdAt ? new Date(r.createdAt).toLocaleString() : 'Recent',
+          createdAtRaw: r.submittedAt || r.createdAt,
+          priority: (r.priority === 'URGENT' ? 'URGENT' : 'NORMAL') as 'NORMAL' | 'URGENT',
         };
       });
 
@@ -84,6 +89,8 @@ export const approvalsService = {
         type: 'SHIPMENT RECEIPT APPROVAL',
         requester: s.recipientUsername || 'Client Admin',
         location: s.destinationName || s.destinationLocation?.name || 'Client Location',
+        clientId: s.destinationLocation?.clientId || s.clientId,
+        clientName: s.destinationLocation?.client?.name || s.destinationName,
         details: `The client confirmed receipt${s.shipmentNumber ? ` for shipment ${s.shipmentNumber}` : ''}. Approve to add the received quantities to client stock.${s.notes ? ` Note: ${s.notes}` : ''}`,
         quantitySummary: `${s.lines?.length || 0} lines · awaiting receipt approval`,
         lineItems: (s.lines || []).map((line: any, index: number) => ({
@@ -98,6 +105,7 @@ export const approvalsService = {
             : undefined,
         })),
         createdAt: s.dispatchedAt ? new Date(s.dispatchedAt).toLocaleString() : 'Recent',
+        createdAtRaw: s.dispatchedAt || s.createdAt,
         priority: 'URGENT',
       }));
 
@@ -117,15 +125,18 @@ export const approvalsService = {
           label: 'Output',
         }));
         return {
-        id: p.id,
-        type: `PRODUCTION_RUN${p.runNumber || p.productionReference ? ` (${p.runNumber || p.productionReference})` : ''}`,
-        requester: p.submittedBy?.username || p.client?.name || 'Client Admin',
-        location: p.client?.name || 'Client location',
-        details: p.notes || `Review the production plan${p.plannedOutput ? ` for ${asDisplayQuantity(p.plannedOutput)} units` : ''}.`,
-        quantitySummary: `${inputs.length} inputs · ${outputs.length} outputs`,
-        lineItems: [...inputs, ...outputs],
-        createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Recent',
-        priority: 'NORMAL',
+          id: p.id,
+          type: `PRODUCTION_RUN${p.runNumber || p.productionReference ? ` (${p.runNumber || p.productionReference})` : ''}`,
+          requester: p.submittedBy?.username || p.client?.name || 'Client Admin',
+          location: p.client?.name || 'Client location',
+          clientId: p.clientId || p.client?.id,
+          clientName: p.client?.name,
+          details: p.notes || `Review the production plan${p.plannedOutput ? ` for ${asDisplayQuantity(p.plannedOutput)} units` : ''}.`,
+          quantitySummary: `${inputs.length} inputs · ${outputs.length} outputs`,
+          lineItems: [...inputs, ...outputs],
+          createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Recent',
+          createdAtRaw: p.submittedAt || p.createdAt,
+          priority: 'NORMAL',
         };
       });
 
@@ -134,6 +145,8 @@ export const approvalsService = {
         type: 'DEPARTMENT_ISSUE',
         requester: d.issuedBy?.username || d.requesterName || 'Department Admin',
         location: d.department?.name || d.departmentName || 'Client department',
+        clientId: d.clientId || d.department?.clientId,
+        clientName: d.client?.name || d.department?.client?.name,
         details: d.notes || 'Review the requested product and quantity.',
         quantitySummary: `${asDisplayQuantity(d.quantity)} ${d.unit?.unitName || d.unitNameSnapshot || ''}`.trim(),
         lineItems: [{
@@ -144,6 +157,7 @@ export const approvalsService = {
           batchNumber: d.batch?.batchNumber || null,
         }],
         createdAt: d.createdAt ? new Date(d.createdAt).toLocaleString() : 'Recent',
+        createdAtRaw: d.createdAt,
         priority: 'NORMAL',
       }));
 
@@ -152,6 +166,8 @@ export const approvalsService = {
         type: 'DEPARTMENT_ISSUE_BATCH',
         requester: batch.createdBy?.username || 'Client Admin',
         location: batch.client?.name || 'Client departments',
+        clientId: batch.clientId || batch.client?.id,
+        clientName: batch.client?.name,
         details: 'Review all department issues together. Approval posts every line atomically.',
         quantitySummary: `${batch.issues?.length || 0} issue lines · one decision`,
         lineItems: (batch.issues || []).map((issue: any, index: number) => ({
@@ -163,6 +179,7 @@ export const approvalsService = {
           label: issue.department?.name || 'Department',
         })),
         createdAt: batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : 'Recent',
+        createdAtRaw: batch.submittedAt || batch.createdAt,
         priority: 'NORMAL' as const,
       })));
 

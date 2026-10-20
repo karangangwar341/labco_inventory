@@ -560,12 +560,21 @@ export class ProductsService {
     return results;
   }
 
-  async getManufacturingOptions(user: AuthenticatedUser) {
-    if (user.role !== UserRole.CLIENT_ADMIN) {
-      throw new ForbiddenException('Manufacturing options are available to Client Admins only');
+  async getManufacturingOptions(
+    user: AuthenticatedUser,
+    explicitClientId?: string,
+  ) {
+    if (
+      user.role !== UserRole.CLIENT_ADMIN &&
+      user.role !== UserRole.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        'Manufacturing options are available to Client Admins and Super Admins',
+      );
     }
 
     const clientId =
+      (user.role === UserRole.SUPER_ADMIN ? explicitClientId : null) ||
       user.clientId ||
       (
         await this.prisma.user.findUnique({
@@ -573,7 +582,14 @@ export class ProductsService {
           select: { clientId: true },
         })
       )?.clientId;
-    if (!clientId) throw new ForbiddenException('Client Admin must belong to an organization');
+    if (!clientId) {
+      if (user.role === UserRole.SUPER_ADMIN) {
+        throw new BadRequestException(
+          'clientId is required when requesting manufacturing options as Super Admin',
+        );
+      }
+      throw new ForbiddenException('Client Admin must belong to an organization');
+    }
 
     const location = await this.prisma.stockLocation.findUnique({ where: { clientId } });
     const catalogScope: Prisma.ProductWhereInput = {

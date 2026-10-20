@@ -17,6 +17,11 @@ import { ErrorState } from '../../../components/feedback/ErrorState';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useAuth } from '../../auth/auth.store';
 import { groupItemsByDay } from '../../../lib/utils/date-grouping';
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from '../../../components/data-display/DateQuickFilterBar';
 
 type StatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 type RequestTypeFilter = 'ALL' | 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
@@ -67,6 +72,11 @@ export function RequestsList() {
   const [selectedClientId, setSelectedClientId] = useState(() => searchParams.get('clientId') || '');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
+
+  // Date Filter States (default to TODAY to prevent slow loading of historical data)
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>('TODAY');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
 
   // Query: Clients for dropdown filter
   const { data: clients = [] } = useQuery({
@@ -137,6 +147,35 @@ export function RequestsList() {
     return { all, pending, approved, rejected, drafts, stockIn, stockOut, transfers, totalUnits };
   }, [requests]);
 
+  // Count older requests hidden when TODAY is selected
+  const olderRequestsCount = useMemo(() => {
+    return requests.filter((r) => {
+      if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
+      if (typeFilter !== 'ALL') {
+        const t = (r.requestType || r.type || '').toUpperCase();
+        if (typeFilter === 'STOCK_IN' && !t.includes('STOCK_IN')) return false;
+        if (typeFilter === 'STOCK_OUT' && !t.includes('STOCK_OUT') && !t.includes('DISPATCH')) return false;
+        if (typeFilter === 'TRANSFER' && !t.includes('TRANSFER')) return false;
+        if (typeFilter === 'ADJUSTMENT' && !t.includes('ADJUSTMENT')) return false;
+      }
+      if (selectedClientId) {
+        const matchesClient =
+          r.clientId === selectedClientId ||
+          r.client?.id === selectedClientId ||
+          r.sourceLocation?.client?.id === selectedClientId ||
+          r.destinationLocation?.client?.id === selectedClientId;
+        if (!matchesClient) return false;
+      }
+      if (selectedWarehouseId) {
+        const matchesWarehouse =
+          r.sourceLocation?.warehouse?.id === selectedWarehouseId ||
+          r.destinationLocation?.warehouse?.id === selectedWarehouseId;
+        if (!matchesWarehouse) return false;
+      }
+      return !isDateInRange(r.createdAt, 'TODAY');
+    }).length;
+  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId]);
+
   // Client-side filtering
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
@@ -172,6 +211,11 @@ export function RequestsList() {
         if (!matchesWarehouse) return false;
       }
 
+      // Date Quick Filter
+      if (!isDateInRange(request.createdAt, dateFilter, customStart, customEnd)) {
+        return false;
+      }
+
       // Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -200,7 +244,7 @@ export function RequestsList() {
 
       return true;
     });
-  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId, searchQuery]);
+  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId, dateFilter, customStart, customEnd, searchQuery]);
 
   const dayGroups = useMemo(() => {
     return groupItemsByDay(
@@ -215,6 +259,7 @@ export function RequestsList() {
     typeFilter !== 'ALL' ||
     Boolean(selectedClientId) ||
     Boolean(selectedWarehouseId) ||
+    dateFilter !== 'TODAY' ||
     Boolean(searchQuery.trim());
 
   const resetFilters = () => {
@@ -222,6 +267,9 @@ export function RequestsList() {
     setTypeFilter('ALL');
     setSelectedClientId('');
     setSelectedWarehouseId('');
+    setDateFilter('TODAY');
+    setCustomStart('');
+    setCustomEnd('');
     setSearchQuery('');
   };
 
@@ -696,6 +744,20 @@ export function RequestsList() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Date Quick Filter Bar (Defaults to Today) */}
+          <div className="border-t border-slate-100 pt-2.5">
+            <DateQuickFilterBar
+              activeFilter={dateFilter}
+              onFilterChange={setDateFilter}
+              customStart={customStart}
+              customEnd={customEnd}
+              onCustomStartChange={setCustomStart}
+              onCustomEndChange={setCustomEnd}
+              totalOlderCount={olderRequestsCount}
+              onViewAll={() => setDateFilter('ALL')}
+            />
           </div>
         </CardContent>
       </Card>

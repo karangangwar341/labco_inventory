@@ -12,8 +12,9 @@ export const catalogService = {
     return apiClient.get<CatalogProduct[]>(`${endpoints.catalog.products()}${qs}`);
   },
 
-  getManufacturingOptions: async (): Promise<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }> => {
-    return apiClient.get<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }>(`${endpoints.catalog.products()}/manufacturing-options`);
+  getManufacturingOptions: async (clientId?: string): Promise<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }> => {
+    const qs = clientId ? `?clientId=${clientId}` : '';
+    return apiClient.get<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }>(`${endpoints.catalog.products()}/manufacturing-options${qs}`);
   },
 
   getProductById: async (id: string): Promise<CatalogProduct> => {
