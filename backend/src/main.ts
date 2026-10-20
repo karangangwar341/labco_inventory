@@ -18,21 +18,42 @@ async function bootstrap() {
 
   const rawCorsOrigins = process.env.CORS_ALLOWED_ORIGINS;
   const allowedOrigins = rawCorsOrigins
-    ? rawCorsOrigins.split(',').map((o) => o.trim())
+    ? rawCorsOrigins.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean)
     : ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (such as mobile apps, curl, or server-to-server)
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
-      ) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS blocked for untrusted origin: ${origin}`));
+      if (!origin) {
+        return callback(null, true);
       }
+      const normalizedOrigin = origin.replace(/\/$/, '');
+
+      // 1. Direct match with configured origins
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      // 2. Allow local origins in non-production
+      if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      // 3. Allow Vercel preview/production deployments for this project
+      const isVercelMatch = allowedOrigins.some((allowed) => {
+        if (allowed.includes('.vercel.app')) {
+          const baseName = allowed.replace(/^https?:\/\//, '').split('.')[0].replace(/-[a-z0-9]+$/, '');
+          return normalizedOrigin.includes(baseName) && normalizedOrigin.endsWith('.vercel.app');
+        }
+        return false;
+      });
+
+      if (isVercelMatch) {
+        return callback(null, true);
+      }
+
+      // Deny origin gracefully without throwing an unhandled 500 error in preflight
+      callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
