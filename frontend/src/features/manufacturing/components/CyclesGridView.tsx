@@ -1,20 +1,38 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/feedback/EmptyState";
 import { LoadingState } from "../../../components/feedback/LoadingState";
 import { ProductionCycle } from "../manufacturing.types";
 
+export interface BatchReRunItem {
+  cycle: ProductionCycle;
+  plannedOutput: number;
+  batchNumber?: string;
+  expiryDate?: string;
+}
+
 interface CyclesGridViewProps {
   cycles: ProductionCycle[];
   isLoading: boolean;
   canCreateRuns: boolean;
   onReRun: (cycle: ProductionCycle) => void;
+  onBatchReRun?: (
+    items: BatchReRunItem[],
+    submitForApproval: boolean,
+  ) => Promise<void>;
+  isBatchRunning?: boolean;
   onNewRun: () => void;
   onScanLowStock?: () => void;
   isScanning?: boolean;
+}
+
+interface RowConfig {
+  plannedOutput: number;
+  batchNumber: string;
+  expiryDate: string;
 }
 
 export function CyclesGridView({
@@ -22,17 +40,59 @@ export function CyclesGridView({
   isLoading,
   canCreateRuns,
   onReRun,
+  onBatchReRun,
+  isBatchRunning = false,
   onNewRun,
   onScanLowStock,
   isScanning = false,
 }: CyclesGridViewProps) {
   const [filter, setFilter] = useState<"ALL" | "LOW_STOCK" | "HEALTHY">("ALL");
   const [search, setSearch] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"TABLE" | "CARDS">("TABLE");
 
-  const lowStockCount = useMemo(
-    () => cycles.filter((c) => c.isLowStock || c.isOutOfStock).length,
+  // Selection & row configuration for high-speed tabular execution
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [rowConfigs, setRowConfigs] = useState<Record<string, RowConfig>>({});
+  const [autoSubmitForApproval, setAutoSubmitForApproval] = useState<boolean>(true);
+
+  const todayLotPrefix = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `LOT-${y}${m}${day}`;
+  }, []);
+
+  const defaultExpiry = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  // Initialize row configs when cycles change
+  useEffect(() => {
+    setRowConfigs((prev) => {
+      const next = { ...prev };
+      cycles.forEach((c, idx) => {
+        if (!next[c.cycleKey]) {
+          const pad = String(idx + 1).padStart(2, "0");
+          next[c.cycleKey] = {
+            plannedOutput: c.plannedOutput || 25,
+            batchNumber: `${todayLotPrefix}-${pad}`,
+            expiryDate: defaultExpiry,
+          };
+        }
+      });
+      return next;
+    });
+  }, [cycles, todayLotPrefix, defaultExpiry]);
+
+  const lowStockCycles = useMemo(
+    () => cycles.filter((c) => c.isLowStock || c.isOutOfStock),
     [cycles],
   );
+
+  const lowStockCount = lowStockCycles.length;
 
   const filteredCycles = useMemo(() => {
     return cycles.filter((c) => {
@@ -54,6 +114,100 @@ export function CyclesGridView({
     });
   }, [cycles, filter, search]);
 
+  const toggleSelectCycle = (cycleKey: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(cycleKey)) {
+        next.delete(cycleKey);
+      } else {
+        next.add(cycleKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedKeys((prev) => {
+      const allFilteredSelected = filteredCycles.every((c) => prev.has(c.cycleKey));
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        filteredCycles.forEach((c) => next.delete(c.cycleKey));
+      } else {
+        filteredCycles.forEach((c) => next.add(c.cycleKey));
+      }
+      return next;
+    });
+  };
+
+  const selectAllLowStock = () => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      lowStockCycles.forEach((c) => next.add(c.cycleKey));
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedKeys(new Set());
+  };
+
+  const updateRowConfig = (
+    cycleKey: string,
+    field: keyof RowConfig,
+    value: string | number,
+  ) => {
+    setRowConfigs((prev) => ({
+      ...prev,
+      [cycleKey]: {
+        ...(prev[cycleKey] || {
+          plannedOutput: 25,
+          batchNumber: `${todayLotPrefix}-01`,
+          expiryDate: defaultExpiry,
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleLaunchSelected = async () => {
+    if (!onBatchReRun || selectedKeys.size === 0) return;
+
+    const itemsToRun: BatchReRunItem[] = [];
+    for (const key of selectedKeys) {
+      const cycle = cycles.find((c) => c.cycleKey === key);
+      if (!cycle) continue;
+
+      const conf = rowConfigs[key] || {
+        plannedOutput: cycle.plannedOutput || 25,
+        batchNumber: `${todayLotPrefix}-01`,
+        expiryDate: defaultExpiry,
+      };
+
+      itemsToRun.push({
+        cycle,
+        plannedOutput: Number(conf.plannedOutput) || 25,
+        batchNumber: conf.batchNumber.trim() || undefined,
+        expiryDate: conf.expiryDate || undefined,
+      });
+    }
+
+    if (itemsToRun.length > 0) {
+      await onBatchReRun(itemsToRun, autoSubmitForApproval);
+      clearSelection();
+    }
+  };
+
+  const selectedCycles = useMemo(() => {
+    return cycles.filter((c) => selectedKeys.has(c.cycleKey));
+  }, [cycles, selectedKeys]);
+
+  const totalSelectedUnits = useMemo(() => {
+    return selectedCycles.reduce((sum, c) => {
+      const conf = rowConfigs[c.cycleKey];
+      return sum + (Number(conf?.plannedOutput) || c.plannedOutput || 25);
+    }, 0);
+  }, [selectedCycles, rowConfigs]);
+
   if (isLoading) {
     return <LoadingState message="Loading production cycles and stock levels..." />;
   }
@@ -70,11 +224,20 @@ export function CyclesGridView({
                 Replenishment Alert: {lowStockCount} Finished Product{lowStockCount > 1 ? "s" : ""} Below Threshold
               </h4>
               <p className="text-xs text-amber-700 mt-0.5">
-                Manufactured stock has dropped below minimum inventory requirements. Re-run cycles with 1-click to launch production batches.
+                Manufactured inventory has dropped below minimum threshold. Select all below to replenish in one consolidated batch run.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canCreateRuns && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={selectAllLowStock}
+              >
+                ⚡ Select All Low Stock ({lowStockCount})
+              </Button>
+            )}
             {onScanLowStock && (
               <Button
                 variant="secondary"
@@ -86,19 +249,46 @@ export function CyclesGridView({
               </Button>
             )}
             <Button
-              variant="primary"
+              variant="secondary"
               size="sm"
               onClick={() => setFilter("LOW_STOCK")}
             >
-              View Low Stock Cycles ({lowStockCount})
+              Filter Low Stock ({lowStockCount})
             </Button>
           </div>
         </div>
       )}
 
-      {/* Filter and search bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-xl shadow-xs">
-        <div className="flex items-center gap-2">
+      {/* Control Toolbar: View Toggle, Filters, and Search */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 border border-slate-200 rounded-xl shadow-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View mode toggle */}
+          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-100 mr-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("TABLE")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                viewMode === "TABLE"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>⚡ Daily Checklist</span>
+              <span className="text-[10px] text-slate-400 font-normal">Table</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("CARDS")}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                viewMode === "CARDS"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>📋 Cards</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setFilter("ALL")}
@@ -139,18 +329,29 @@ export function CyclesGridView({
           </button>
         </div>
 
-        <div className="w-full sm:w-72">
-          <input
-            type="text"
-            placeholder="Search cycle or product name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 focus:outline-none"
-          />
+        <div className="flex items-center gap-2">
+          {canCreateRuns && viewMode === "TABLE" && lowStockCount > 0 && (
+            <button
+              type="button"
+              onClick={selectAllLowStock}
+              className="text-xs font-semibold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1.5 rounded-lg border border-amber-200 shrink-0 transition-colors"
+            >
+              + Select {lowStockCount} Low Stock
+            </button>
+          )}
+
+          <div className="w-full sm:w-64">
+            <input
+              type="text"
+              placeholder="Search formula, product, or SKU..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Grid of Cycle Cards */}
       {filteredCycles.length === 0 ? (
         <EmptyState
           title={
@@ -171,7 +372,221 @@ export function CyclesGridView({
             ) : undefined
           }
         />
+      ) : viewMode === "TABLE" ? (
+        /* ===================================================================
+           TABULAR BULK PRODUCTION CHECKLIST (HIGH-SPEED GRID)
+           =================================================================== */
+        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                  {canCreateRuns && (
+                    <th className="py-2.5 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredCycles.length > 0 &&
+                          filteredCycles.every((c) => selectedKeys.has(c.cycleKey))
+                        }
+                        onChange={toggleSelectAllFiltered}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                        title="Select All Filtered Cycles"
+                      />
+                    </th>
+                  )}
+                  <th className="py-2.5 px-3">Formula & Finished Product</th>
+                  <th className="py-2.5 px-3">Finished Stock</th>
+                  <th className="py-2.5 px-3">BOM Raw Materials</th>
+                  <th className="py-2.5 px-3 text-right w-36">Batch Output</th>
+                  <th className="py-2.5 px-3 w-40">Target Lot / Batch #</th>
+                  <th className="py-2.5 px-3 w-36">Expiry Date</th>
+                  <th className="py-2.5 px-3 text-right w-24">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredCycles.map((cycle) => {
+                  const isSelected = selectedKeys.has(cycle.cycleKey);
+                  const conf = rowConfigs[cycle.cycleKey] || {
+                    plannedOutput: cycle.plannedOutput || 25,
+                    batchNumber: `${todayLotPrefix}-01`,
+                    expiryDate: defaultExpiry,
+                  };
+
+                  return (
+                    <tr
+                      key={cycle.cycleKey}
+                      className={`transition-colors ${
+                        isSelected
+                          ? "bg-indigo-50/60 hover:bg-indigo-50"
+                          : cycle.isOutOfStock
+                            ? "bg-rose-50/20 hover:bg-rose-50/40"
+                            : cycle.isLowStock
+                              ? "bg-amber-50/20 hover:bg-amber-50/40"
+                              : "hover:bg-slate-50/70"
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      {canCreateRuns && (
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectCycle(cycle.cycleKey)}
+                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                          />
+                        </td>
+                      )}
+
+                      {/* Formula & Finished Product */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-900 text-xs">
+                            {cycle.outputProductName}
+                          </span>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                            <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100 text-[10px]">
+                              {cycle.cycleReference}
+                            </span>
+                            {cycle.outputProductSku && (
+                              <span>SKU: {cycle.outputProductSku}</span>
+                            )}
+                            {cycle.clientName && (
+                              <span className="text-slate-400">· {cycle.clientName}</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Finished Stock Pill */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                              cycle.isOutOfStock
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : cycle.isLowStock
+                                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                  : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            }`}
+                          >
+                            <span>
+                              {cycle.isOutOfStock ? "🔴" : cycle.isLowStock ? "🟡" : "🟢"}
+                            </span>
+                            <span>
+                              {cycle.currentStock} / min {cycle.minQuantity} {cycle.unitName}
+                            </span>
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* BOM Raw Materials */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          {cycle.hasSufficientRawMaterials ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              <span>✓</span>
+                              <span>Raw Materials Ready</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                              <span>⚠</span>
+                              <span>Ingredient Shortage</span>
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-400">
+                            ({cycle.recipeInputs?.length || 0} inputs)
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Planned Output Qty Input */}
+                      <td className="py-2.5 px-3 text-right">
+                        {canCreateRuns ? (
+                          <div className="inline-flex items-center gap-1 justify-end">
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={conf.plannedOutput}
+                              onChange={(e) =>
+                                updateRowConfig(
+                                  cycle.cycleKey,
+                                  "plannedOutput",
+                                  Math.max(1, Number(e.target.value) || 1),
+                                )
+                              }
+                              className="w-20 text-right font-mono font-bold text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            />
+                            <span className="text-[11px] text-slate-500 w-10 text-left truncate">
+                              {cycle.unitName}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-semibold text-slate-700">
+                            {conf.plannedOutput} {cycle.unitName}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Target Lot Number */}
+                      <td className="py-2.5 px-3">
+                        {canCreateRuns ? (
+                          <input
+                            type="text"
+                            value={conf.batchNumber}
+                            onChange={(e) =>
+                              updateRowConfig(cycle.cycleKey, "batchNumber", e.target.value)
+                            }
+                            placeholder="LOT / Batch #"
+                            className="w-full font-mono text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          />
+                        ) : (
+                          <span className="font-mono text-slate-500 text-xs">
+                            {conf.batchNumber}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Expiry Date */}
+                      <td className="py-2.5 px-3">
+                        {canCreateRuns ? (
+                          <input
+                            type="date"
+                            value={conf.expiryDate}
+                            onChange={(e) =>
+                              updateRowConfig(cycle.cycleKey, "expiryDate", e.target.value)
+                            }
+                            className="w-full text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                          />
+                        ) : (
+                          <span className="text-slate-500 text-xs">
+                            {conf.expiryDate || "—"}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Action Button */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <Button
+                          variant={cycle.isLowStock || cycle.isOutOfStock ? "primary" : "secondary"}
+                          size="sm"
+                          onClick={() => onReRun(cycle)}
+                        >
+                          ⚡ Run
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
+        /* ===================================================================
+           ORIGINAL CARD GRID VIEW
+           =================================================================== */
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredCycles.map((cycle) => {
             const stockPct =
@@ -311,6 +726,55 @@ export function CyclesGridView({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Floating Bulk Execution Action Bar when items are selected */}
+      {selectedKeys.size > 0 && canCreateRuns && (
+        <div className="sticky bottom-4 z-40 bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-indigo-500 font-bold text-xs text-white">
+              {selectedKeys.size}
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-slate-100">
+                {selectedKeys.size} Production Formula{selectedKeys.size > 1 ? "s" : ""} Selected
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Total Planned Output: <strong className="text-emerald-400">{totalSelectedUnits.toLocaleString()} units</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+            <label className="flex items-center gap-2 text-xs text-slate-300 hover:text-white cursor-pointer select-none bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700">
+              <input
+                type="checkbox"
+                checked={autoSubmitForApproval}
+                onChange={(e) => setAutoSubmitForApproval(e.target.checked)}
+                className="rounded border-slate-600 text-indigo-500 focus:ring-indigo-400 h-3.5 w-3.5 cursor-pointer"
+              />
+              <span>🚀 Submit for Day-End Approval immediately</span>
+            </label>
+
+            <button
+              type="button"
+              onClick={clearSelection}
+              disabled={isBatchRunning}
+              className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Clear
+            </button>
+
+            <Button
+              variant="primary"
+              size="sm"
+              isLoading={isBatchRunning}
+              onClick={handleLaunchSelected}
+            >
+              🚀 Launch Selected Runs ({selectedKeys.size})
+            </Button>
+          </div>
         </div>
       )}
     </div>

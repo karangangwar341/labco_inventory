@@ -76,6 +76,15 @@ export function CreateRequestForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'GRID' | 'CARDS'>('GRID');
+
+  const totalRequestedUnits = useMemo(() => {
+    return lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
+  }, [lines]);
+
+  const distinctProductsCount = useMemo(() => {
+    return new Set(lines.map((l) => l.productId).filter(Boolean)).size;
+  }, [lines]);
 
   const isWarehouseUser = user?.role === 'STORE_ADMIN' || user?.role === 'SUPER_ADMIN';
   const isDispatch = direction === 'STOCK_OUT' && isWarehouseUser;
@@ -606,231 +615,497 @@ export function CreateRequestForm() {
           <Card>
             <CardHeader
               action={
-                <span className="text-xs font-mono text-slate-500 font-semibold">
-                  {lines.length} Line Item{lines.length > 1 ? 's' : ''}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('GRID')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                        viewMode === 'GRID'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>⚡</span>
+                      <span>Fast Grid</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('CARDS')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                        viewMode === 'CARDS'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>📋</span>
+                      <span>Cards</span>
+                    </button>
+                  </div>
+                  <span className="text-xs font-mono text-slate-600 font-semibold bg-slate-100 px-2 py-1 rounded-md border border-slate-200/80">
+                    {lines.length} Line{lines.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
               }
             >
               <CardTitle>Requested Products &amp; Quantities</CardTitle>
               <CardDescription>
-                Select products, base units, and batch or expiration lot data.
+                {viewMode === 'GRID'
+                  ? 'High-speed spreadsheet grid with live stock availability and instant keyboard navigation.'
+                  : 'Select products, base units, and batch or expiration lot data.'}
               </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {lines.map((line, index) => {
-                const product = selectedProductForLine(line);
-                const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
-                const precision = product?.quantityPrecision ?? 0;
-                const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
-                const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
-                const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
-                const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
-                const availableLots = product
-                  ? (balancesByProduct[product.id] || []).filter(
-                      (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-                    )
-                  : [];
-                const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
-                const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
-                const availableBase = product && hasCurrentAvailability
-                  ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
-                    ? Number(selectedLot.availableQty)
-                    : availableByProduct[product.id]
-                  : undefined;
-                const availableInSelectedUnit = availableBase === undefined
-                  ? undefined
-                  : availableBase / Number(selectedUnit?.conversionToBase || 1);
-                const quantityHelper = [
-                  precision > 0 ? `Up to ${precision} decimal places` : '',
-                  direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
-                    ? `${selectedLot ? 'Available in this lot' : 'Available here'}: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
-                    : '',
-                ].filter(Boolean).join(' · ') || undefined;
-
-                return (
-                  <div
-                    key={index}
-                    className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-3.5 relative transition-all duration-150 hover:border-slate-300"
-                  >
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold font-mono">
-                          {index + 1}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-800">
-                          {product ? product.name : `Line Item #${index + 1}`}
-                        </span>
-                        {product?.trackingMode && product.trackingMode !== 'NONE' && (
-                          <Badge variant="neutral" size="sm">
-                            {product.trackingMode.replaceAll('_', ' ')}
-                          </Badge>
-                        )}
-                        {product?.minOrderQuantity && Number(product.minOrderQuantity) > 1 && (
-                          <Badge variant="purple" size="sm">
-                            MOQ: {product.minOrderQuantity} {product.baseUnit}
-                          </Badge>
-                        )}
-                      </div>
-
-                      {lines.length > 1 && (
+              {viewMode === 'GRID' ? (
+                <div className="space-y-3">
+                  {/* Grid Quick Action Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/90 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setLines((curr) => [...curr, blankLine()])}
+                        className="text-xs px-2.5 py-1 gap-1"
+                      >
+                        <span>+</span>
+                        <span>Add Row</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setLines((curr) => [...curr, blankLine(), blankLine(), blankLine(), blankLine(), blankLine()])}
+                        className="text-xs px-2.5 py-1 gap-1"
+                      >
+                        <span>+5</span>
+                        <span>Add 5 Rows</span>
+                      </Button>
+                      {lines.some((l) => !l.productId && !l.quantity) && lines.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
-                          className="text-[11px] font-medium text-rose-600 hover:text-rose-800 flex items-center gap-1 transition-colors"
+                          onClick={() => setLines((curr) => {
+                            const kept = curr.filter((l) => l.productId || l.quantity);
+                            return kept.length ? kept : [blankLine()];
+                          })}
+                          className="text-[11px] text-slate-500 hover:text-slate-800 font-medium px-2 py-1"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Remove
+                          Clear Empty Rows
                         </button>
                       )}
                     </div>
-
-                    {/* Catalog filters narrow the product list while retaining stock-out availability rules. */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Select
-                        label="Category"
-                        value={line.categoryId}
-                        onChange={(e) => updateLine(index, { categoryId: e.target.value, subcategoryId: '', productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
-                      >
-                        <option value="">All categories</option>
-                        {topLevelCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                      </Select>
-                      <Select
-                        label="Subcategory / brand"
-                        value={line.subcategoryId}
-                        onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
-                        disabled={!line.categoryId || categoriesForLine(line.categoryId).length === 0}
-                      >
-                        <option value="">All subcategories</option>
-                        {categoriesForLine(line.categoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                      </Select>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-600 font-medium">
+                      <span>Products: <strong className="text-slate-900 font-mono">{distinctProductsCount}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span>Total Units: <strong className="text-slate-900 font-mono">{totalRequestedUnits.toLocaleString()}</strong></span>
                     </div>
+                  </div>
 
-                    {/* Product Selector */}
-                    <Select
-                      label="Product"
-                      value={line.productId}
-                      onChange={(e) => handleProductChange(index, e.target.value)}
-                      required
-                    >
-                      <option value="">{line.categoryId ? 'Select a product...' : 'Select a category or product...'}</option>
-                      {productsForLine(line).map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.brand ? `${option.name} · ${option.brand}` : option.name}
-                        </option>
-                      ))}
-                    </Select>
-                    {line.categoryId && productsForLine(line).length === 0 && (
-                      <p className="text-[11px] text-slate-500">No approved products match this category{direction === 'STOCK_OUT' ? ' with available stock at this location' : ''}.</p>
-                    )}
+                  {/* Fast Spreadsheet Table */}
+                  <div className="overflow-x-auto border border-slate-200/90 rounded-xl bg-white shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[10px]">
+                        <tr>
+                          <th className="py-2 px-2.5 w-8 text-center">#</th>
+                          <th className="py-2 px-2.5 min-w-[260px]">Product &amp; Brand</th>
+                          <th className="py-2 px-2 w-28 text-center">Stock</th>
+                          <th className="py-2 px-2.5 w-24">Quantity</th>
+                          <th className="py-2 px-2.5 w-32">Unit</th>
+                          <th className="py-2 px-2.5 min-w-[150px]">Batch / Lot</th>
+                          <th className="py-2 px-2.5 w-32">Expiry Date</th>
+                          <th className="py-2 px-2 w-10 text-center"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lines.map((line, index) => {
+                          const product = selectedProductForLine(line);
+                          const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
+                          const precision = product?.quantityPrecision ?? 0;
+                          const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
+                          const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
+                          const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
+                          const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
+                          const availableLots = product
+                            ? (balancesByProduct[product.id] || []).filter(
+                                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+                              )
+                            : [];
+                          const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
+                          const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
+                          const availableBase = product && hasCurrentAvailability
+                            ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
+                              ? Number(selectedLot.availableQty)
+                              : availableByProduct[product.id]
+                            : undefined;
+                          const availableInSelectedUnit = availableBase === undefined
+                            ? undefined
+                            : availableBase / Number(selectedUnit?.conversionToBase || 1);
 
-                    {direction === 'STOCK_OUT' && !isLoadingStock && selectableProducts.length === 0 && (
-                      <p className="text-[11px] text-amber-600 font-medium">
-                        No available stocked products at this location to dispatch.
-                      </p>
-                    )}
-                    {direction === 'STOCK_OUT' && isLoadingStock && (
-                      <p className="text-[11px] text-blue-600">Loading available stock balances…</p>
-                    )}
+                          return (
+                            <tr key={index} className="hover:bg-blue-50/20 transition-colors">
+                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-400">
+                                {index + 1}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                <select
+                                  value={line.productId}
+                                  onChange={(e) => handleProductChange(index, e.target.value)}
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  required
+                                >
+                                  <option value="">Select a product...</option>
+                                  {selectableProducts.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} {p.brand ? `· ${p.brand}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                {product ? (
+                                  availableBase !== undefined ? (
+                                    availableBase > 0 ? (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                                        {availableInSelectedUnit?.toLocaleString(undefined, { maximumFractionDigits: precision }) ?? availableBase} {selectedUnit?.unitName || product.baseUnit}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                        0 avail
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-slate-400 font-mono text-[11px]">—</span>
+                                  )
+                                ) : (
+                                  <span className="text-slate-300 font-mono text-[11px]">—</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min="0"
+                                  step={precision ? 1 / 10 ** precision : 1}
+                                  value={line.quantity}
+                                  onChange={(e) => updateLine(index, { quantity: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      if (index === lines.length - 1) {
+                                        setLines((curr) => [...curr, blankLine()]);
+                                      }
+                                    }
+                                  }}
+                                  required
+                                  placeholder="0"
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                />
+                              </td>
+                              <td className="py-2 px-2.5">
+                                <select
+                                  value={line.unitId}
+                                  onChange={(e) => updateLine(index, { unitId: e.target.value })}
+                                  disabled={!activeUnits.length}
+                                  required
+                                  className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                >
+                                  <option value="">Unit...</option>
+                                  {activeUnits.map((u) => (
+                                    <option key={u.id} value={u.id}>
+                                      {u.unitName} {u.isBaseUnit ? '(Base)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-2.5">
+                                {tracksBatch && direction === 'STOCK_OUT' && product ? (
+                                  availableLots.length > 0 ? (
+                                    <select
+                                      value={effectiveBatchNumber}
+                                      onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                                      required={availableLots.length > 1}
+                                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                    >
+                                      {availableLots.length > 1 && <option value="">Choose lot...</option>}
+                                      {availableLots.map((lot) => (
+                                        <option key={lot.batchNumber} value={lot.batchNumber || ''}>
+                                          {lot.batchNumber} ({Number(lot.availableQty)} {product.baseUnit})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-[11px] text-amber-600 italic">No lots in stock</span>
+                                  )
+                                ) : tracksBatch ? (
+                                  <input
+                                    type="text"
+                                    value={line.batchNumber}
+                                    onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                                    placeholder="Batch / Lot #"
+                                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  />
+                                ) : (
+                                  <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2.5">
+                                {tracksExpiry || tracksBatch || direction === 'STOCK_IN' ? (
+                                  <input
+                                    type="date"
+                                    value={line.expiryDate}
+                                    onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
+                                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  />
+                                ) : (
+                                  <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                {lines.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setLines((curr) => curr.filter((_, i) => i !== index))}
+                                    className="w-6 h-6 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center transition-colors text-xs font-bold"
+                                    title="Remove row"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    {/* Quantity & Unit Row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                      <Input
-                        label="Quantity"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step={precision ? 1 / 10 ** precision : 1}
-                        value={line.quantity}
-                        onChange={(e) => updateLine(index, { quantity: e.target.value })}
-                        required
-                        placeholder="e.g. 100"
-                        helperText={quantityHelper}
-                      />
+                  <button
+                    type="button"
+                    onClick={() => setLines((curr) => [...curr, blankLine()])}
+                    className="w-full py-2 border border-dashed border-slate-300 rounded-xl text-xs text-blue-600 hover:bg-blue-50/50 hover:border-blue-400 font-medium flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <span>+</span>
+                    <span>Add Another Line (or press Enter in Quantity cell)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {lines.map((line, index) => {
+                    const product = selectedProductForLine(line);
+                    const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
+                    const precision = product?.quantityPrecision ?? 0;
+                    const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
+                    const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
+                    const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
+                    const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
+                    const availableLots = product
+                      ? (balancesByProduct[product.id] || []).filter(
+                          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
+                        )
+                      : [];
+                    const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
+                    const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
+                    const availableBase = product && hasCurrentAvailability
+                      ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
+                        ? Number(selectedLot.availableQty)
+                        : availableByProduct[product.id]
+                      : undefined;
+                    const availableInSelectedUnit = availableBase === undefined
+                      ? undefined
+                      : availableBase / Number(selectedUnit?.conversionToBase || 1);
+                    const quantityHelper = [
+                      precision > 0 ? `Up to ${precision} decimal places` : '',
+                      direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
+                        ? `${selectedLot ? 'Available in this lot' : 'Available here'}: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
+                        : '',
+                    ].filter(Boolean).join(' · ') || undefined;
 
-                      <Select
-                        label="Packaging Unit"
-                        value={line.unitId}
-                        onChange={(e) => updateLine(index, { unitId: e.target.value })}
-                        required
-                        disabled={!activeUnits.length}
+                    return (
+                      <div
+                        key={index}
+                        className="p-4 bg-slate-50/70 border border-slate-200/80 rounded-xl space-y-3.5 relative transition-all duration-150 hover:border-slate-300"
                       >
-                        <option value="">Select unit...</option>
-                        {activeUnits.map((unit) => (
-                          <option key={unit.id} value={unit.id}>
-                            {unit.unitName} {unit.isBaseUnit ? '(Base)' : ''}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold font-mono">
+                              {index + 1}
+                            </span>
+                            <span className="text-xs font-semibold text-slate-800">
+                              {product ? product.name : `Line Item #${index + 1}`}
+                            </span>
+                            {product?.trackingMode && product.trackingMode !== 'NONE' && (
+                              <Badge variant="neutral" size="sm">
+                                {product.trackingMode.replaceAll('_', ' ')}
+                              </Badge>
+                            )}
+                            {product?.minOrderQuantity && Number(product.minOrderQuantity) > 1 && (
+                              <Badge variant="purple" size="sm">
+                                MOQ: {product.minOrderQuantity} {product.baseUnit}
+                              </Badge>
+                            )}
+                          </div>
 
-                    {/* Batch / Expiry Tracking Row */}
-                    {(tracksBatch || tracksExpiry || Boolean(line.expiryDate) || Boolean(line.batchNumber)) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
-                        {tracksBatch && direction === 'STOCK_OUT' && product && (
-                          availableLots.length > 0 ? (
-                            <Select
-                              label="Batch / Lot to dispatch"
-                              value={effectiveBatchNumber}
-                              onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                              required={availableLots.length > 1}
+                          {lines.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setLines((current) => current.filter((_, i) => i !== index))}
+                              className="text-[11px] font-medium text-rose-600 hover:text-rose-800 flex items-center gap-1 transition-colors"
                             >
-                              {availableLots.length > 1 && <option value="">Choose a lot...</option>}
-                              {availableLots.map((balance) => (
-                                <option key={balance.id} value={balance.batchNumber}>
-                                  {balance.batchNumber} · {Number(balance.availableQty).toLocaleString()} {balance.unit || product.baseUnit} available
-                                </option>
-                              ))}
-                            </Select>
-                          ) : (
-                            <p className="text-xs text-slate-500">No lot number is recorded for the available stock.</p>
-                          )
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Catalog filters narrow the product list while retaining stock-out availability rules. */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Select
+                            label="Category"
+                            value={line.categoryId}
+                            onChange={(e) => updateLine(index, { categoryId: e.target.value, subcategoryId: '', productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                          >
+                            <option value="">All categories</option>
+                            {topLevelCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                          </Select>
+                          <Select
+                            label="Subcategory / brand"
+                            value={line.subcategoryId}
+                            onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                            disabled={!line.categoryId || categoriesForLine(line.categoryId).length === 0}
+                          >
+                            <option value="">All subcategories</option>
+                            {categoriesForLine(line.categoryId).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                          </Select>
+                        </div>
+
+                        {/* Product Selector */}
+                        <Select
+                          label="Product"
+                          value={line.productId}
+                          onChange={(e) => handleProductChange(index, e.target.value)}
+                          required
+                        >
+                          <option value="">{line.categoryId ? 'Select a product...' : 'Select a category or product...'}</option>
+                          {productsForLine(line).map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.brand ? `${option.name} · ${option.brand}` : option.name}
+                            </option>
+                          ))}
+                        </Select>
+                        {line.categoryId && productsForLine(line).length === 0 && (
+                          <p className="text-[11px] text-slate-500">No approved products match this category{direction === 'STOCK_OUT' ? ' with available stock at this location' : ''}.</p>
                         )}
 
-                        {tracksBatch && direction !== 'STOCK_OUT' && (
+                        {direction === 'STOCK_OUT' && !isLoadingStock && selectableProducts.length === 0 && (
+                          <p className="text-[11px] text-amber-600 font-medium">
+                            No available stocked products at this location to dispatch.
+                          </p>
+                        )}
+                        {direction === 'STOCK_OUT' && isLoadingStock && (
+                          <p className="text-[11px] text-blue-600">Loading available stock balances…</p>
+                        )}
+
+                        {/* Quantity & Unit Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                           <Input
-                            label="Batch / Lot Number"
-                            value={line.batchNumber}
-                            onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                            placeholder="e.g. LOT-2026-X"
-                            helperText="Lot trace identifier for quarantine and recall"
+                            label="Quantity"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step={precision ? 1 / 10 ** precision : 1}
+                            value={line.quantity}
+                            onChange={(e) => updateLine(index, { quantity: e.target.value })}
+                            required
+                            placeholder="e.g. 100"
+                            helperText={quantityHelper}
                           />
-                        )}
 
-                        {(tracksExpiry || Boolean(line.expiryDate)) && (
-                          <div className="space-y-1.5 w-full">
-                            <label className="text-xs font-medium text-slate-700 block">
-                              Expiration Date
-                            </label>
-                            <input
-                              type="date"
-                              value={line.expiryDate}
-                              onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
-                              className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-                            />
-                            <p className="text-[11px] text-slate-500">Scheduled expiry shelf date</p>
+                          <Select
+                            label="Packaging Unit"
+                            value={line.unitId}
+                            onChange={(e) => updateLine(index, { unitId: e.target.value })}
+                            required
+                            disabled={!activeUnits.length}
+                          >
+                            <option value="">Select unit...</option>
+                            {activeUnits.map((unit) => (
+                              <option key={unit.id} value={unit.id}>
+                                {unit.unitName} {unit.isBaseUnit ? '(Base)' : ''}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+
+                        {/* Batch / Expiry Tracking Row */}
+                        {(tracksBatch || tracksExpiry || Boolean(line.expiryDate) || Boolean(line.batchNumber)) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
+                            {tracksBatch && direction === 'STOCK_OUT' && product && (
+                              availableLots.length > 0 ? (
+                                <Select
+                                  label="Batch / Lot to dispatch"
+                                  value={effectiveBatchNumber}
+                                  onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                                  required={availableLots.length > 1}
+                                >
+                                  {availableLots.length > 1 && <option value="">Choose a lot...</option>}
+                                  {availableLots.map((balance) => (
+                                    <option key={balance.id} value={balance.batchNumber}>
+                                      {balance.batchNumber} · {Number(balance.availableQty).toLocaleString()} {balance.unit || product.baseUnit} available
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : (
+                                <p className="text-xs text-slate-500">No lot number is recorded for the available stock.</p>
+                              )
+                            )}
+
+                            {tracksBatch && direction !== 'STOCK_OUT' && (
+                              <Input
+                                label="Batch / Lot Number"
+                                value={line.batchNumber}
+                                onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
+                                placeholder="e.g. LOT-2026-X"
+                                helperText="Lot trace identifier for quarantine and recall"
+                              />
+                            )}
+
+                            {(tracksExpiry || Boolean(line.expiryDate)) && (
+                              <div className="space-y-1.5 w-full">
+                                <label className="text-xs font-medium text-slate-700 block">
+                                  Expiration Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={line.expiryDate}
+                                  onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
+                                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                                />
+                                <p className="text-[11px] text-slate-500">Scheduled expiry shelf date</p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
 
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => setLines((current) => [...current, blankLine()])}
-                className="w-full py-2.5 border-dashed"
-              >
-                <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
-                + Add Another Product Line
-              </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setLines((current) => [...current, blankLine()])}
+                    className="w-full py-2.5 border-dashed"
+                  >
+                    <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    + Add Another Product Line
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 

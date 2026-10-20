@@ -620,6 +620,70 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     }
   };
 
+  const [isBatchReRunning, setIsBatchReRunning] = useState(false);
+
+  // Trigger batch re-run for multiple cycles from checklist
+  const handleBatchReRun = async (
+    items: {
+      cycle: ProductionCycle;
+      plannedOutput: number;
+      batchNumber?: string;
+      expiryDate?: string;
+    }[],
+    submitForApproval: boolean,
+  ) => {
+    setIsBatchReRunning(true);
+    setErrorMsg(null);
+    try {
+      const createdRuns: ProductionRun[] = [];
+      const errors: string[] = [];
+
+      for (const item of items) {
+        try {
+          const run = await manufacturingService.reRunCycle(item.cycle.latestRunId, {
+            plannedOutput: item.plannedOutput,
+            batchNumber: item.batchNumber?.trim() || undefined,
+            expiryDate: item.expiryDate || undefined,
+          });
+          createdRuns.push(run);
+        } catch (err) {
+          errors.push(
+            `${item.cycle.outputProductName}: ${err instanceof Error ? err.message : "Failed to re-run"}`,
+          );
+        }
+      }
+
+      if (createdRuns.length > 0) {
+        if (submitForApproval) {
+          const runIds = createdRuns.map((r) => r.id);
+          await manufacturingService.submitProductionRunBatch(
+            runIds,
+            `Continuous daily production batch (${new Date().toLocaleDateString()}) - ${createdRuns.length} cycles queued`,
+          );
+          setActionSuccess(
+            `Successfully created ${createdRuns.length} production run(s) and submitted all for Day-End Super Admin approval!`,
+          );
+        } else {
+          setActionSuccess(
+            `Successfully created ${createdRuns.length} production draft run(s). Formula recipes and BOMs ready.`,
+          );
+        }
+        await invalidateAll();
+        setActiveTab("RUNS");
+      }
+
+      if (errors.length > 0) {
+        setErrorMsg(`Some cycles could not be queued: ${errors.join("; ")}`);
+      }
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to execute batch production runs",
+      );
+    } finally {
+      setIsBatchReRunning(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {!hideHeader ? (
@@ -755,6 +819,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
           isLoading={isLoadingCycles}
           canCreateRuns={canCreateRuns}
           onReRun={handleReRunFromCycle}
+          onBatchReRun={handleBatchReRun}
+          isBatchRunning={isBatchReRunning}
           onNewRun={openNewRun}
           onScanLowStock={() => scanMutation.mutate()}
           isScanning={scanMutation.isPending}

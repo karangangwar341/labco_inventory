@@ -501,6 +501,96 @@ export function DepartmentsView() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
+                {/* Inline Fast Add Row (Zero-Modal Entry) */}
+                {issueDraftQuery.data?.status === 'DRAFT' && activeDepartments.length > 0 && stockedProducts.length > 0 && (
+                  <div className="p-3 bg-blue-50/50 border-b border-blue-100 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-[11px] font-bold text-blue-900 shrink-0">
+                      ⚡ Quick Add Line:
+                    </span>
+                    <select
+                      value={effectiveIssueDepartmentId}
+                      onChange={(e) => setIssueDepartmentId(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      {activeDepartments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={effectiveIssueProductId}
+                      onChange={(e) => {
+                        setIssueProductId(e.target.value);
+                        setIssueUnitId('');
+                        setIssueBalanceId('');
+                      }}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[220px]"
+                    >
+                      {stockedProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0.0001"
+                        placeholder="Qty"
+                        value={issueQuantity}
+                        onChange={(e) => setIssueQuantity(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && Number(issueQuantity) > 0) {
+                            e.preventDefault();
+                            saveIssueLineMutation.mutate();
+                          }
+                        }}
+                        className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      <select
+                        value={effectiveIssueUnitId}
+                        onChange={(e) => setIssueUnitId(e.target.value)}
+                        className="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      >
+                        {issueUnits.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.unitName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Clinical purpose / notes (optional)"
+                      value={issueNotes}
+                      onChange={(e) => setIssueNotes(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && Number(issueQuantity) > 0) {
+                          e.preventDefault();
+                          saveIssueLineMutation.mutate();
+                        }
+                      }}
+                      className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      disabled={!Number(issueQuantity) || saveIssueLineMutation.isPending}
+                      onClick={() => saveIssueLineMutation.mutate()}
+                      className="text-xs px-3 py-1.5 gap-1 shrink-0"
+                    >
+                      <span>+</span>
+                      <span>Add Line</span>
+                    </Button>
+                  </div>
+                )}
+
                 {issueDraftQuery.data?.issues?.length ? (
                   <Table>
                     <TableHeader>

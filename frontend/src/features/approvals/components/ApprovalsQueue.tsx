@@ -168,6 +168,15 @@ export function ApprovalsQueue() {
     });
   };
 
+  // Multi-Select Batch Actions State
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
+  // Clear selections when switching tab, client, or date
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, selectedClientId, dateFilter]);
+
   const allCurrentTabList = items[activeTab] || [];
 
   // Count items from earlier days to show in the hint pill when TODAY is selected
@@ -222,8 +231,91 @@ export function ApprovalsQueue() {
     { key: 'CORRECTIONS', label: 'Ledger Corrections', count: items.CORRECTIONS?.length || 0 },
   ];
 
+  const isAllSelected =
+    currentTabItems.length > 0 &&
+    currentTabItems.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(currentTabItems.map((item) => item.id));
+    }
+  };
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleBulkApprove = async () => {
+    if (!selectedIds.length) return;
+    setIsBulkProcessing(true);
+    setErrorMsg(null);
+
+    try {
+      if (activeTab === 'MANUFACTURING') {
+        const res = await approvalsService.approveManufacturingBatch(selectedIds, 'Approved batch runs');
+        setActionSuccess(`Batch approved! ${res.count} production run(s) approved and inventory updated.`);
+      } else {
+        let successCount = 0;
+        const failures: string[] = [];
+        for (const id of selectedIds) {
+          try {
+            await approvalsService.approveItem(activeTab, id);
+            successCount++;
+          } catch (err) {
+            failures.push(err instanceof Error ? err.message : 'Item failed');
+          }
+        }
+        if (failures.length) {
+          setErrorMsg(
+            `Approved ${successCount} item(s), but ${failures.length} item(s) failed: ${failures[0]}`,
+          );
+        } else {
+          setActionSuccess(`Successfully approved and posted all ${successCount} transactions.`);
+        }
+      }
+      setSelectedIds([]);
+      invalidation.afterInventoryApproval(queryClient);
+      setTimeout(() => setActionSuccess(null), 5000);
+    } catch (err) {
+      setErrorMsg(sanitizeError(err instanceof Error ? err.message : 'Bulk approval failed'));
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
   const columns: ColumnDef<QueueItem>[] = useMemo(
     () => [
+      ...(isAuthorized
+        ? [
+            {
+              id: 'select',
+              header: () => (
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  title={isAllSelected ? 'Deselect all' : 'Select all'}
+                />
+              ),
+              width: '4%',
+              minWidth: '38px',
+              valign: 'top' as const,
+              cell: (item: QueueItem) => (
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(item.id)}
+                  onChange={() => toggleSelectItem(item.id)}
+                  className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer mt-0.5"
+                />
+              ),
+            },
+          ]
+        : []),
       {
         id: 'item',
         header: 'Workflow Item',
@@ -416,7 +508,7 @@ export function ApprovalsQueue() {
         ),
       },
     ],
-    [isAuthorized, activeTab, approveMutation.isPending, rejectMutation.isPending]
+    [isAuthorized, activeTab, approveMutation.isPending, rejectMutation.isPending, selectedIds, isAllSelected]
   );
 
   return (
@@ -584,6 +676,40 @@ export function ApprovalsQueue() {
           >
             ✓ Approve All ({currentTabItems.length}) Runs
           </Button>
+        </div>
+      )}
+
+      {/* Floating Multi-Row Batch Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white rounded-xl shadow-md border border-blue-500/80 flex flex-wrap items-center justify-between gap-3 text-xs animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-white text-xs">
+              {selectedIds.length}
+            </span>
+            <span className="font-semibold text-white">
+              {selectedIds.length} item{selectedIds.length !== 1 ? 's' : ''} selected in {tabs.find((t) => t.key === activeTab)?.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="text-blue-200 hover:text-white underline text-xs font-medium ml-2"
+            >
+              Clear selection
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={isBulkProcessing}
+              onClick={handleBulkApprove}
+              className="bg-white text-blue-900 hover:bg-blue-50 font-bold px-4 py-1.5 shadow-xs border-0 text-xs"
+            >
+              {isBulkProcessing ? 'Posting Decisions...' : `⚡ Approve Selected (${selectedIds.length})`}
+            </Button>
+          </div>
         </div>
       )}
 
