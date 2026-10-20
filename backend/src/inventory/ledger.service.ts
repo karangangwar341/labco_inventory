@@ -164,12 +164,12 @@ export class LedgerService {
                 where: {
                   productId: line.productId,
                   locationId: { not: line.locationId },
-                  stockLocation: {
-                    type: LocationType.WAREHOUSE,
+                  location: {
+                    locationType: LocationType.WAREHOUSE,
                   },
                 },
                 include: {
-                  stockLocation: {
+                  location: {
                     include: {
                       warehouse: { select: { name: true } },
                     },
@@ -179,7 +179,7 @@ export class LedgerService {
 
               const warehouseStockMap = new Map<string, Prisma.Decimal>();
               for (const ob of otherBalances) {
-                const whName = ob.stockLocation?.warehouse?.name;
+                const whName = ob.location?.warehouse?.name;
                 if (!whName) continue;
                 const avail = ob.usableQty.minus(ob.reservedQty);
                 if (avail.greaterThan(0)) {

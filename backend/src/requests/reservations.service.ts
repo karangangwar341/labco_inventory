@@ -20,10 +20,10 @@ export class ReservationsService {
         where: {
           productId,
           locationId: { not: excludeLocationId },
-          stockLocation: { type: LocationType.WAREHOUSE },
+          location: { locationType: LocationType.WAREHOUSE },
         },
         include: {
-          stockLocation: {
+          location: {
             include: {
               warehouse: { select: { name: true } },
             },
@@ -33,7 +33,7 @@ export class ReservationsService {
 
       const map = new Map<string, Prisma.Decimal>();
       for (const ob of otherBalances) {
-        const whName = ob.stockLocation?.warehouse?.name;
+        const whName = ob.location?.warehouse?.name;
         if (!whName) continue;
         const avail = ob.usableQty.minus(ob.reservedQty);
         if (avail.greaterThan(0)) {

@@ -999,13 +999,13 @@ export class RequestsService {
               where: {
                 productId: line.productId,
                 locationId: { not: req.sourceLocationId },
-                stockLocation: { type: LocationType.WAREHOUSE },
+                location: { locationType: LocationType.WAREHOUSE },
               },
-              include: { stockLocation: { include: { warehouse: { select: { name: true } } } } },
+              include: { location: { include: { warehouse: { select: { name: true } } } } },
             });
             const whMap = new Map<string, Prisma.Decimal>();
             for (const ob of otherBals) {
-              const whName = ob.stockLocation?.warehouse?.name;
+              const whName = ob.location?.warehouse?.name;
               if (!whName) continue;
               const avail = ob.usableQty.minus(ob.reservedQty);
               if (avail.greaterThan(0)) {
@@ -1085,13 +1085,13 @@ export class RequestsService {
             where: {
               productId: line.productId,
               locationId: { not: request.sourceLocationId },
-              stockLocation: { type: LocationType.WAREHOUSE },
+              location: { locationType: LocationType.WAREHOUSE },
             },
-            include: { stockLocation: { include: { warehouse: { select: { name: true } } } } },
+            include: { location: { include: { warehouse: { select: { name: true } } } } },
           });
           const whMap = new Map<string, Prisma.Decimal>();
           for (const ob of otherBals) {
-            const whName = ob.stockLocation?.warehouse?.name;
+            const whName = ob.location?.warehouse?.name;
             if (!whName) continue;
             const avail = ob.usableQty.minus(ob.reservedQty);
             if (avail.greaterThan(0)) {
