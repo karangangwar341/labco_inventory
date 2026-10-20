@@ -170,8 +170,12 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
 
   const reqNumber = request.requestNumber || 'Stock request';
 
+  const isClientAdmin = user?.role === 'CLIENT_ADMIN';
+
   const typeLabel =
-    request.requestType === 'STOCK_IN'
+    isClientAdmin
+      ? 'Inbound Restock'
+      : request.requestType === 'STOCK_IN'
       ? 'Stock Arrival'
       : request.requestType === 'DISPATCH' || request.requestType === 'STOCK_OUT'
       ? 'Client Dispatch'
@@ -180,10 +184,12 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
       : request.requestType || 'Movement';
 
   const originName =
-    request.sourceLocation?.warehouse?.name ||
-    request.sourceLocation?.client?.name ||
-    request.sourceType ||
-    (request.requestType === 'STOCK_IN' ? 'Supplier' : 'Warehouse');
+    isClientAdmin
+      ? 'Central Supply'
+      : request.sourceLocation?.warehouse?.name ||
+        request.sourceLocation?.client?.name ||
+        request.sourceType ||
+        (request.requestType === 'STOCK_IN' ? 'Supplier' : 'Warehouse');
 
   const destinationName =
     request.destinationLocation?.client?.name ||
@@ -341,7 +347,12 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
       {/* Status Notice if Pending or Rejected */}
       {isPending && (
         <div className="py-2 px-3 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 flex items-center justify-between">
-          <span>⏳ <strong>Pending Approval:</strong> Stock is reserved at the origin facility while this request is reviewed.</span>
+          <span>
+            ⏳ <strong>Pending Approval:</strong>{' '}
+            {isClientAdmin
+              ? 'Your restock order has been received and is reserved for fulfillment.'
+              : 'Stock is reserved at the origin facility while this request is reviewed.'}
+          </span>
           <span className="text-slate-400 font-mono text-[10px]">Priority: {request.priority || 'NORMAL'}</span>
         </div>
       )}

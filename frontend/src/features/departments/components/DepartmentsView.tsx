@@ -21,6 +21,7 @@ import { invalidation } from '../../../lib/query/invalidation';
 import { useAuth } from '../../auth/auth.store';
 import { catalogService } from '../../catalog/catalog.service';
 import { inventoryService } from '../../inventory/inventory.service';
+import { groupItemsByDay } from '../../../lib/utils/date-grouping';
 
 export function DepartmentsView() {
   const { role, user } = useAuth();
@@ -73,6 +74,14 @@ export function DepartmentsView() {
     },
     staleTime: 2 * 60 * 1000,
   });
+
+  const historyDayGroups = useMemo(() => {
+    return groupItemsByDay(
+      history,
+      (tx: DepartmentIssue) => tx.createdAt,
+      (tx: DepartmentIssue) => Number(tx.quantity || 0),
+    );
+  }, [history]);
 
   const issueDraftQuery = useQuery({
     queryKey: queryKeys.departments.issueDraft(user?.clientId || user?.id),
@@ -582,54 +591,90 @@ export function DepartmentsView() {
             </Card>
           )}
 
-          <div>
-            <h3 className="text-sm font-semibold text-[#172033] mb-3">Stock Out History</h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#172033]">Stock Out History</h3>
+              {history.length > 0 && (
+                <span className="text-xs text-slate-500 font-medium">
+                  {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day recorded' : 'days recorded'} · {history.length} total entries
+                </span>
+              )}
+            </div>
+
             {history.length === 0 ? (
               <EmptyState
                 title="No department issues recorded"
                 description="Past department stock requests will appear here after they are submitted and processed."
               />
             ) : (
-              <Table>
-                <TableHeader sticky>
-                  <tr>
-                    <TableHead>Issue #</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Product and quantity</TableHead>
-                    <TableHead>Note</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Issued At</TableHead>
-                  </tr>
-                </TableHeader>
-                <TableBody>
-                  {history.map((tx: DepartmentIssue) => (
-                    <TableRow key={tx.id}>
-                      <TableCell className="font-mono font-medium text-[#172033]">
-                        {tx.issueNumber || 'Department issue'}
-                      </TableCell>
-                      <TableCell className="font-semibold text-[#172033]">
-                        {tx.department?.name || tx.departmentName || 'Department'}
-                      </TableCell>
-                      <TableCell>
-                        <span className="block text-xs text-[#172033]">
-                          {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-[#5b6678] text-xs">
-                        {tx.notes || '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
-                          {tx.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
-                        {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-4">
+                {historyDayGroups.map((group) => (
+                  <div key={group.dateKey} className="border border-slate-200/90 rounded-xl overflow-hidden bg-white shadow-2xs">
+                    {/* Day Group Header */}
+                    <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-200/80">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+                        <span className="text-xs font-bold text-slate-900 tracking-tight">{group.dayLabel}</span>
+                        {group.isToday && (
+                          <Badge variant="primary" size="sm">Today</Badge>
+                        )}
+                        {group.isYesterday && (
+                          <Badge variant="neutral" size="sm">Yesterday</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
+                        <span className="font-semibold text-slate-800">{group.items.length}</span> {group.items.length === 1 ? 'line' : 'lines'}
+                        <span>·</span>
+                        <span className="font-semibold text-slate-800 font-mono">{group.totalUnits.toLocaleString()}</span> units
+                      </div>
+                    </div>
+
+                    {/* Table of issues for this day */}
+                    <Table>
+                      <TableHeader sticky>
+                        <tr>
+                          <TableHead>Issue #</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Product and quantity</TableHead>
+                          <TableHead>Note</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Time</TableHead>
+                        </tr>
+                      </TableHeader>
+                      <TableBody>
+                        {group.items.map((tx: DepartmentIssue) => (
+                          <TableRow key={tx.id}>
+                            <TableCell className="font-mono font-medium text-[#172033]">
+                              {tx.issueNumber || 'Department issue'}
+                            </TableCell>
+                            <TableCell className="font-semibold text-[#172033]">
+                              {tx.department?.name || tx.departmentName || 'Department'}
+                            </TableCell>
+                            <TableCell>
+                              <span className="block text-xs text-[#172033]">
+                                {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-[#5b6678] text-xs">
+                              {tx.notes || '—'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'}>
+                                {tx.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-[11px] text-[#5b6678]">
+                              {tx.createdAt
+                                ? new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                : '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

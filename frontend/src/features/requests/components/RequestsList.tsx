@@ -16,21 +16,25 @@ import { DataTable, ColumnDef } from '../../../components/ui/DataTable';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useAuth } from '../../auth/auth.store';
+import { groupItemsByDay } from '../../../lib/utils/date-grouping';
 
 type StatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 type RequestTypeFilter = 'ALL' | 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
 
-function requestMeta(request: StockRequest): {
+function requestMeta(request: StockRequest, isClientAdmin?: boolean): {
   label: string;
   sublabel: string;
   variant: 'primary' | 'success' | 'purple' | 'warning' | 'neutral';
 } {
   const type = (request.requestType || request.type || '').toUpperCase();
+  if (isClientAdmin) {
+    return { label: 'Inbound Restock', sublabel: 'Central Supply Order', variant: 'success' };
+  }
   if (type.includes('STOCK_IN')) {
     return { label: 'Stock In', sublabel: 'Inbound Receipt', variant: 'success' };
   }
   if (type.includes('DISPATCH') || type.includes('STOCK_OUT')) {
-    return { label: 'Stock Out', sublabel: 'Consignment Out', variant: 'primary' };
+    return { label: 'Client Dispatch', sublabel: 'Consignment Out', variant: 'primary' };
   }
   if (type.includes('TRANSFER')) {
     return { label: 'Transfer', sublabel: 'Internal Move', variant: 'purple' };
@@ -198,6 +202,14 @@ export function RequestsList() {
     });
   }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId, searchQuery]);
 
+  const dayGroups = useMemo(() => {
+    return groupItemsByDay(
+      filteredRequests,
+      (r) => r.createdAt,
+      (r) => (r.lines || []).reduce((sum, l) => sum + Number(l.quantity || 0), 0),
+    );
+  }, [filteredRequests]);
+
   const hasActiveFilters =
     statusFilter !== 'ALL' ||
     typeFilter !== 'ALL' ||
@@ -234,9 +246,11 @@ export function RequestsList() {
             request.locationName ||
             'Destination';
           const originDisplay =
-            request.sourceLocation?.warehouse?.name ||
-            request.sourceLocation?.client?.name ||
-            'Central Warehouse';
+            user?.role === 'CLIENT_ADMIN'
+              ? 'Central Supply'
+              : request.sourceLocation?.warehouse?.name ||
+                request.sourceLocation?.client?.name ||
+                'Central Warehouse';
           const isUrgent = request.priority === 'URGENT' || request.priority === 'HIGH';
 
           return (
@@ -275,7 +289,7 @@ export function RequestsList() {
         minWidth: '130px',
         valign: 'top',
         cell: (request) => {
-          const meta = requestMeta(request);
+          const meta = requestMeta(request, user?.role === 'CLIENT_ADMIN');
           return (
             <div className="space-y-0.5">
               <Badge variant={meta.variant} size="sm">
@@ -693,9 +707,9 @@ export function RequestsList() {
           message={error instanceof Error ? error.message : 'Could not load your requests.'}
           onRetry={() => void fetchRequests()}
         />
-      ) : (
+      ) : filteredRequests.length === 0 ? (
         <DataTable
-          data={filteredRequests}
+          data={[]}
           columns={columns}
           keyExtractor={(request) => request.id}
           isLoading={isLoading}
@@ -718,16 +732,49 @@ export function RequestsList() {
               ) : (
                 <Link href="/requests/new">
                   <Button variant="primary" size="sm">
-                    Create First Request
+                    {user?.role === 'CLIENT_ADMIN' ? 'Create Restock Request' : 'Create First Request'}
                   </Button>
                 </Link>
               ),
           }}
-          pagination={{
-            pageSize: 10,
-            pageSizeOptions: [10, 25, 50],
-          }}
         />
+      ) : (
+        <div className="space-y-6">
+          {dayGroups.map((group) => (
+            <div key={group.dateKey} className="space-y-2.5">
+              {/* Day Group Header Banner */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-white rounded-xl border border-slate-200/90 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-xs" />
+                  <span className="text-xs font-bold text-slate-900 tracking-tight">{group.dayLabel}</span>
+                  {group.isToday && (
+                    <Badge variant="primary" size="sm">Today</Badge>
+                  )}
+                  {group.isYesterday && (
+                    <Badge variant="neutral" size="sm">Yesterday</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+                  <span>
+                    <strong className="text-slate-800 font-semibold">{group.items.length}</strong> {group.items.length === 1 ? 'request' : 'requests'}
+                  </span>
+                  <span className="text-slate-300">|</span>
+                  <span>
+                    <strong className="text-slate-800 font-mono font-semibold">{group.totalUnits.toLocaleString()}</strong> units total
+                  </span>
+                </div>
+              </div>
+
+              {/* Day Table */}
+              <DataTable
+                data={group.items}
+                columns={columns}
+                keyExtractor={(request) => request.id}
+                minWidth="min-w-[960px]"
+              />
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

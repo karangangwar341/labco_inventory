@@ -57,7 +57,7 @@ export function CreateRequestForm() {
   const { user } = useAuth();
   const userId = user?.id;
   const clientId = user?.clientId;
-  const [direction, setDirection] = useState<Direction>('STOCK_OUT');
+  const [direction, setDirection] = useState<Direction>(() => (user?.role === 'CLIENT_ADMIN' ? 'STOCK_IN' : 'STOCK_OUT'));
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [stockedProductIds, setStockedProductIds] = useState<Set<string>>(new Set());
@@ -201,8 +201,9 @@ export function CreateRequestForm() {
 
   useEffect(() => {
     const requestedDirection = searchParams.get('type');
-    if (user?.role === 'CLIENT_ADMIN' && requestedDirection !== 'STOCK_IN' && !searchParams.get('edit')) {
-      router.replace('/departments?tab=ISSUES');
+    if (user?.role === 'CLIENT_ADMIN') {
+      setDirection('STOCK_IN');
+      void loadFormOptions();
       return;
     }
     if (isStockInType(requestedDirection)) setDirection(requestedDirection);
@@ -446,19 +447,19 @@ export function CreateRequestForm() {
       <PageHeader
         title={editingDraftId
           ? 'Edit Stock Movement'
-          : direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
-            ? 'Record Received Stock'
+          : user?.role === 'CLIENT_ADMIN'
+            ? 'New Restock Request'
             : direction === 'STOCK_IN'
               ? 'Receive New Stock (Stock In)'
               : 'Send / Dispatch Stock (Stock Out)'}
         description={
-          isDispatch
-            ? 'Send items from your warehouse to a client clinic or hospital.'
-            : direction === 'STOCK_IN'
-              ? user?.role === 'CLIENT_ADMIN'
-                ? 'Record items that have already arrived at your client location. Super Admin approval is required before the stock is added.'
-                : 'Record new items arriving at your warehouse from a supplier or delivery truck.'
-              : 'Record items being dispatched, used, or transferred out of your store.'
+          user?.role === 'CLIENT_ADMIN'
+            ? 'Request diagnostic products and reagents from Central Supply to restock your clinic or lab inventory.'
+            : isDispatch
+              ? 'Send items from your warehouse to a client clinic or hospital.'
+              : direction === 'STOCK_IN'
+                ? 'Record new items arriving at your warehouse from a supplier or delivery truck.'
+                : 'Record items being dispatched, used, or transferred out of your store.'
         }
         actions={
           <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
@@ -467,32 +468,34 @@ export function CreateRequestForm() {
         }
       />
 
-      {/* Direction Switcher Segmented Control */}
-      <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex gap-1.5" aria-label="Stock direction">
-        {(['STOCK_OUT', 'STOCK_IN'] as const).map((value) => {
-          const isSelected = direction === value;
-          const isStockIn = value === 'STOCK_IN';
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={isSelected}
-              disabled={Boolean(editingDraftId)}
-              onClick={() => setDirection(value)}
-              className={`flex-1 py-3 px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
-                isSelected
-                  ? isStockIn
-                    ? 'bg-white text-emerald-800 shadow-sm border border-emerald-300'
-                    : 'bg-white text-blue-800 shadow-sm border border-blue-300'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-              }`}
-            >
-              <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
-              <span>{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Direction Switcher Segmented Control - Only shown for Warehouse / Store Admins */}
+      {user?.role !== 'CLIENT_ADMIN' && (
+        <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex gap-1.5" aria-label="Stock direction">
+          {(['STOCK_OUT', 'STOCK_IN'] as const).map((value) => {
+            const isSelected = direction === value;
+            const isStockIn = value === 'STOCK_IN';
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={isSelected}
+                disabled={Boolean(editingDraftId)}
+                onClick={() => setDirection(value)}
+                className={`flex-1 py-3 px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
+                  isSelected
+                    ? isStockIn
+                      ? 'bg-white text-emerald-800 shadow-sm border border-emerald-300'
+                      : 'bg-white text-blue-800 shadow-sm border border-blue-300'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                }`}
+              >
+                <span className={`w-2.5 h-2.5 rounded-full ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
+                <span>{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {formError && (
         <div role="alert" className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-1">

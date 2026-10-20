@@ -61,11 +61,15 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
     minute: '2-digit',
   });
 
+  const isClientUser = role === 'CLIENT_ADMIN';
+
   const originName =
-    request.sourceLocation?.warehouse?.name ||
-    request.sourceLocation?.client?.name ||
-    request.locationName ||
-    'Central Warehouse';
+    isClientUser
+      ? 'Central Supply'
+      : request.sourceLocation?.warehouse?.name ||
+        request.sourceLocation?.client?.name ||
+        request.locationName ||
+        'Central Supply';
 
   const destinationName =
     request.destinationLocation?.client?.name ||
@@ -75,7 +79,9 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
     'Client Facility / Department';
 
   const isWarehouseToClient = request.requestType === 'DISPATCH' || originName.toLowerCase().includes('warehouse');
-  const documentTitle = isWarehouseToClient
+  const documentTitle = isClientUser
+    ? 'STOCK RECEIPT & RESTOCK DELIVERY CHALLAN'
+    : isWarehouseToClient
     ? 'DELIVERY CHALLAN & STOCK DISPATCH SLIP'
     : 'INTERNAL STOCK TRANSFER & ISSUE VOUCHER';
 
@@ -509,7 +515,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                       Dispatched by: <strong style={{ color: '#0f172a' }}>{request.requester?.username || request.requesterUsername || 'Store Staff'}</strong>
                     </div>
                     <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
-                      Movement: {isWarehouseToClient ? 'Warehouse to Client Dispatch' : 'Internal Department Transfer'}
+                      Movement: {isClientUser ? 'Central Supply Restock' : isWarehouseToClient ? 'Warehouse to Client Dispatch' : 'Internal Department Transfer'}
                     </div>
                   </td>
                   <td style={{ width: '50%', padding: '10px 12px', verticalAlign: 'top' }}>
