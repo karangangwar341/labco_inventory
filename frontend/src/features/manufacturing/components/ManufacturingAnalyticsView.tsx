@@ -6,6 +6,11 @@ import { Button } from "../../../components/ui/Button";
 import { LoadingState } from "../../../components/feedback/LoadingState";
 import { EmptyState } from "../../../components/feedback/EmptyState";
 import { ManufacturingAnalytics } from "../manufacturing.types";
+import {
+  DateQuickFilterBar,
+  DateQuickFilter,
+  isDateInRange,
+} from "../../../components/data-display/DateQuickFilterBar";
 
 interface ManufacturingAnalyticsViewProps {
   analytics: ManufacturingAnalytics | undefined;
@@ -31,15 +36,28 @@ export function ManufacturingAnalyticsView({
   const isSuperAdmin = role === "SUPER_ADMIN";
   const [ledgerSearch, setLedgerSearch] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>("TODAY");
+  const [customStart, setCustomStart] = useState<string>("");
+  const [customEnd, setCustomEnd] = useState<string>("");
 
   const summary = analytics?.summary;
   const cycleBreakdown = analytics?.cycleBreakdown || [];
   const materialConsumption = analytics?.materialConsumption || [];
   const executionHistory = analytics?.executionHistory || [];
 
+  const olderHistoryCount = useMemo(() => {
+    return executionHistory.filter((item) => {
+      if (statusFilter !== "ALL" && item.status !== statusFilter) return false;
+      return !isDateInRange(item.submittedAt || item.approvedAt, "TODAY");
+    }).length;
+  }, [executionHistory, statusFilter]);
+
   const filteredHistory = useMemo(() => {
     return executionHistory.filter((item) => {
       if (statusFilter !== "ALL" && item.status !== statusFilter) return false;
+      if (!isDateInRange(item.submittedAt || item.approvedAt, dateFilter, customStart, customEnd)) {
+        return false;
+      }
       if (ledgerSearch.trim()) {
         const q = ledgerSearch.toLowerCase();
         const matchRun = item.runNumber?.toLowerCase().includes(q);
@@ -54,7 +72,7 @@ export function ManufacturingAnalyticsView({
       }
       return true;
     });
-  }, [executionHistory, statusFilter, ledgerSearch]);
+  }, [executionHistory, statusFilter, dateFilter, customStart, customEnd, ledgerSearch]);
 
   if (isLoading) {
     return <LoadingState message="Generating production analytics and cycle execution ledger..." />;
@@ -350,10 +368,43 @@ export function ManufacturingAnalyticsView({
           </div>
         </div>
 
+        {/* Date Quick Filter Bar for Ledger */}
+        <div className="pt-1">
+          <DateQuickFilterBar
+            value={dateFilter}
+            onChange={setDateFilter}
+            customStart={customStart}
+            customEnd={customEnd}
+            onCustomStartChange={setCustomStart}
+            onCustomEndChange={setCustomEnd}
+            totalOlderCount={olderHistoryCount}
+            onViewOlder={() => setDateFilter("ALL")}
+          />
+        </div>
+
         {filteredHistory.length === 0 ? (
           <EmptyState
             title="No Execution Records Found"
-            description="No production cycle runs match the current search or status filter."
+            description={
+              executionHistory.length === 0
+                ? "No production cycle runs have been executed yet."
+                : `No production cycle runs match the selected date range (${dateFilter}) or filters.`
+            }
+            action={
+              dateFilter !== "ALL" || statusFilter !== "ALL" || ledgerSearch.trim() ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setDateFilter("ALL");
+                    setStatusFilter("ALL");
+                    setLedgerSearch("");
+                  }}
+                >
+                  Clear Filters & Show All ({executionHistory.length}) Records
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto">

@@ -452,7 +452,7 @@ export function CreateRequestForm() {
   const locationLabel = direction === 'STOCK_IN' ? 'Destination Stock Location' : 'Source Warehouse / Origin';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={`mx-auto space-y-6 transition-all duration-150 ${viewMode === 'GRID' ? 'max-w-5xl' : 'max-w-3xl'}`}>
       <PageHeader
         title={editingDraftId
           ? 'Edit Stock Movement'
@@ -704,17 +704,17 @@ export function CreateRequestForm() {
 
                   {/* Fast Spreadsheet Table */}
                   <div className="overflow-x-auto border border-slate-200/90 rounded-xl bg-white shadow-2xs">
-                    <table className="w-full text-left text-xs border-collapse">
+                    <table className="w-full min-w-[880px] text-left text-xs border-collapse">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[10px]">
                         <tr>
-                          <th className="py-2 px-2.5 w-8 text-center">#</th>
-                          <th className="py-2 px-2.5 min-w-[260px]">Product &amp; Brand</th>
-                          <th className="py-2 px-2 w-28 text-center">Stock</th>
-                          <th className="py-2 px-2.5 w-24">Quantity</th>
-                          <th className="py-2 px-2.5 w-32">Unit</th>
-                          <th className="py-2 px-2.5 min-w-[150px]">Batch / Lot</th>
-                          <th className="py-2 px-2.5 w-32">Expiry Date</th>
-                          <th className="py-2 px-2 w-10 text-center"></th>
+                          <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">#</th>
+                          <th className="py-2.5 px-3 min-w-[240px] whitespace-nowrap">Product &amp; Brand</th>
+                          <th className="py-2.5 px-3 w-32 text-center whitespace-nowrap">Stock Available</th>
+                          <th className="py-2.5 px-3 w-28 whitespace-nowrap">Quantity</th>
+                          <th className="py-2.5 px-3 w-32 whitespace-nowrap">Packaging Unit</th>
+                          <th className="py-2.5 px-3 w-44 whitespace-nowrap">Batch / Lot</th>
+                          <th className="py-2.5 px-3 w-36 whitespace-nowrap">Expiry Date</th>
+                          <th className="py-2.5 px-2 w-10 text-center whitespace-nowrap"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -744,14 +744,14 @@ export function CreateRequestForm() {
 
                           return (
                             <tr key={index} className="hover:bg-blue-50/20 transition-colors">
-                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-400">
+                              <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-400 whitespace-nowrap">
                                 {index + 1}
                               </td>
-                              <td className="py-2 px-2.5">
+                              <td className="py-2 px-3 min-w-[240px]">
                                 <select
                                   value={line.productId}
                                   onChange={(e) => handleProductChange(index, e.target.value)}
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  className="w-full min-w-[220px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                   required
                                 >
                                   <option value="">Select a product...</option>
@@ -762,15 +762,15 @@ export function CreateRequestForm() {
                                   ))}
                                 </select>
                               </td>
-                              <td className="py-2 px-2 text-center">
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
                                 {product ? (
                                   availableBase !== undefined ? (
                                     availableBase > 0 ? (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono whitespace-nowrap">
                                         {availableInSelectedUnit?.toLocaleString(undefined, { maximumFractionDigits: precision }) ?? availableBase} {selectedUnit?.unitName || product.baseUnit}
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
                                         0 avail
                                       </span>
                                     )
@@ -781,7 +781,7 @@ export function CreateRequestForm() {
                                   <span className="text-slate-300 font-mono text-[11px]">—</span>
                                 )}
                               </td>
-                              <td className="py-2 px-2.5">
+                              <td className="py-2 px-3 w-28 whitespace-nowrap">
                                 <input
                                   type="number"
                                   inputMode="decimal"
@@ -799,16 +799,16 @@ export function CreateRequestForm() {
                                   }}
                                   required
                                   placeholder="0"
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  className="w-full min-w-[75px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs text-right"
                                 />
                               </td>
-                              <td className="py-2 px-2.5">
+                              <td className="py-2 px-3 w-32 whitespace-nowrap">
                                 <select
                                   value={line.unitId}
                                   onChange={(e) => updateLine(index, { unitId: e.target.value })}
                                   disabled={!activeUnits.length}
                                   required
-                                  className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                  className="w-full min-w-[100px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                 >
                                   <option value="">Unit...</option>
                                   {activeUnits.map((u) => (
@@ -818,14 +818,14 @@ export function CreateRequestForm() {
                                   ))}
                                 </select>
                               </td>
-                              <td className="py-2 px-2.5">
+                              <td className="py-2 px-3 w-44 whitespace-nowrap">
                                 {tracksBatch && direction === 'STOCK_OUT' && product ? (
                                   availableLots.length > 0 ? (
                                     <select
                                       value={effectiveBatchNumber}
                                       onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
                                       required={availableLots.length > 1}
-                                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                      className="w-full min-w-[130px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                     >
                                       {availableLots.length > 1 && <option value="">Choose lot...</option>}
                                       {availableLots.map((lot) => (
@@ -843,25 +843,25 @@ export function CreateRequestForm() {
                                     value={line.batchNumber}
                                     onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
                                     placeholder="Batch / Lot #"
-                                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                    className="w-full min-w-[120px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                   />
                                 ) : (
                                   <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
                                 )}
                               </td>
-                              <td className="py-2 px-2.5">
+                              <td className="py-2 px-3 w-36 whitespace-nowrap">
                                 {tracksExpiry || tracksBatch || direction === 'STOCK_IN' ? (
                                   <input
                                     type="date"
                                     value={line.expiryDate}
                                     onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
-                                    className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                    className="w-full min-w-[125px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                   />
                                 ) : (
                                   <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
                                 )}
                               </td>
-                              <td className="py-2 px-2 text-center">
+                              <td className="py-2 px-2 text-center whitespace-nowrap">
                                 {lines.length > 1 && (
                                   <button
                                     type="button"
