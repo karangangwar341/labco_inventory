@@ -213,4 +213,34 @@ export const approvalsService = {
       }
     }
   },
+
+  approveManufacturingBatch: async (
+    runIds: string[],
+    notes?: string,
+  ): Promise<{ count: number; status: string }> => {
+    const actionKey = `approve-mfg-batch-${runIds.join('-')}`;
+    const idempotencyKey = actionIdempotency.getKey(actionKey);
+
+    try {
+      const res = await apiClient.post<{ count: number; status: string }>(
+        endpoints.manufacturing.approveBatch(),
+        { runIds, reason: notes, idempotencyKey },
+        { idempotencyKey },
+      );
+      actionIdempotency.clearKey(actionKey);
+      return res;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  rejectManufacturingBatch: async (
+    runIds: string[],
+    reason: string,
+  ): Promise<{ count: number; status: string }> => {
+    return apiClient.post<{ count: number; status: string }>(
+      endpoints.manufacturing.rejectBatch(),
+      { runIds, reason },
+    );
+  },
 };

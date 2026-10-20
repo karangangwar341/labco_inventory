@@ -84,6 +84,16 @@ export const manufacturingService = {
     return apiClient.post<ProductionRun>(endpoints.manufacturing.submit(id));
   },
 
+  submitProductionRunBatch: async (
+    runIds: string[],
+    batchNotes?: string,
+  ): Promise<{ count: number; status: string }> => {
+    return apiClient.post<{ count: number; status: string }>(
+      endpoints.manufacturing.submitBatch(),
+      { runIds, batchNotes },
+    );
+  },
+
   approveProductionRun: async (
     id: string,
     notes?: string,
@@ -104,8 +114,38 @@ export const manufacturingService = {
     }
   },
 
+  approveProductionRunBatch: async (
+    runIds: string[],
+    notes?: string,
+  ): Promise<{ count: number; status: string }> => {
+    const actionKey = `approve-mfg-batch-${runIds.join('-')}`;
+    const idempotencyKey = actionIdempotency.getKey(actionKey);
+
+    try {
+      const res = await apiClient.post<{ count: number; status: string }>(
+        endpoints.manufacturing.approveBatch(),
+        { runIds, reason: notes, idempotencyKey },
+        { idempotencyKey },
+      );
+      actionIdempotency.clearKey(actionKey);
+      return res;
+    } catch (err) {
+      throw err;
+    }
+  },
+
   rejectProductionRun: async (id: string, reason: string): Promise<void> => {
     return apiClient.post(endpoints.manufacturing.reject(id), { reason });
+  },
+
+  rejectProductionRunBatch: async (
+    runIds: string[],
+    reason: string,
+  ): Promise<{ count: number; status: string }> => {
+    return apiClient.post<{ count: number; status: string }>(
+      endpoints.manufacturing.rejectBatch(),
+      { runIds, reason },
+    );
   },
 
   completeProductionRun: async (

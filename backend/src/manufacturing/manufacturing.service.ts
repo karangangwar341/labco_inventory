@@ -28,6 +28,10 @@ import {
   ApproveProductionRunDto,
   RejectProductionRunDto,
 } from './dto/decide-production-run.dto.js';
+import {
+  SubmitProductionRunBatchDto,
+  DecideProductionRunBatchDto,
+} from './dto/batch-production-run.dto.js';
 import { ReRunCycleDto } from './dto/re-run-cycle.dto.js';
 import { QueryManufacturingAnalyticsDto } from './dto/query-manufacturing-analytics.dto.js';
 
@@ -449,30 +453,48 @@ export class ManufacturingService {
   }
 
   /**
-   * Submit production run for Super Admin approval.
-   * Validates raw material stock availability at the client's location.
+   * Internal helper to validate and transition a single production run draft to PENDING_APPROVAL.
    */
-  async submitProductionRun(user: AuthenticatedUser, runId: string) {
-    const settings = await this.notificationsService.getSettings?.();
-    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
-    const submitted = await this.prisma.$transaction(async (tx) => {
+  private async submitProductionRunInternal(
+    user: AuthenticatedUser,
+    runId: string,
+    batchNotes?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM production_runs WHERE id = ${runId} FOR UPDATE`;
       const run = await tx.productionRun.findUnique({
         where: { id: runId },
         include: { inputs: { include: { product: true } } },
       });
-      if (!run)
+      if (!run) {
         throw new NotFoundException(`Production run ${runId} not found`);
+      }
       if (run.status !== ProductionStatus.DRAFT) {
         throw new ConflictException(
           `Production run ${runId} is not in DRAFT status`,
         );
       }
-      if (!run.actualOutput || !run.actualOutput.greaterThan(0)) {
-        throw new BadRequestException(
-          'Enter the actual finished quantity before submitting this production run',
-        );
+
+      // If actualOutput is not yet explicitly set, auto-default to plannedOutput so user is not blocked
+      let effectiveActualOutput = run.actualOutput;
+      if (!effectiveActualOutput || !effectiveActualOutput.greaterThan(0)) {
+        if (run.plannedOutput && run.plannedOutput.greaterThan(0)) {
+          effectiveActualOutput = run.plannedOutput;
+          await tx.productionRun.update({
+            where: { id: runId },
+            data: { actualOutput: effectiveActualOutput },
+          });
+          await tx.productionOutput.updateMany({
+            where: { productionRunId: runId },
+            data: { quantity: effectiveActualOutput },
+          });
+        } else {
+          throw new BadRequestException(
+            `Enter the actual finished quantity before submitting production run "${run.productionReference || runId}"`,
+          );
+        }
       }
+
       if (user.role !== UserRole.SUPER_ADMIN && run.submittedById !== user.id) {
         throw new ForbiddenException(
           'Only the submitter can submit this production run',
@@ -501,7 +523,7 @@ export class ManufacturingService {
             ? balance.usableQty.minus(balance.reservedQty)
             : new Prisma.Decimal(0);
         } else {
-          // If no specific batch is selected, check aggregate available usable stock across all batches at this location
+          // Check aggregate available usable stock across all batches at this location
           const balances = await tx.inventoryBalance.findMany({
             where: {
               locationId: clientLocation.id,
@@ -516,7 +538,6 @@ export class ManufacturingService {
               }
             }
           } else {
-            // Fallback to findFirst for backward compatibility with mock test setups
             const fallback = await tx.inventoryBalance.findFirst({
               where: {
                 locationId: clientLocation.id,
@@ -535,15 +556,33 @@ export class ManufacturingService {
           );
         }
       }
+
+      const updatedNotes = batchNotes
+        ? run.notes
+          ? `${run.notes} | ${batchNotes}`
+          : batchNotes
+        : run.notes;
+
       return tx.productionRun.update({
         where: { id: runId },
         data: {
           status: ProductionStatus.PENDING_APPROVAL,
           submittedAt: new Date(),
+          notes: updatedNotes,
         },
         include: { inputs: true, outputs: true },
       });
     });
+  }
+
+  /**
+   * Submit single production run for Super Admin approval.
+   * Validates raw material stock availability at the client's location.
+   */
+  async submitProductionRun(user: AuthenticatedUser, runId: string) {
+    const settings = await this.notificationsService.getSettings?.();
+    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
+    const submitted = await this.submitProductionRunInternal(user, runId);
     if (!requiresApproval) return this.approveProductionRun(user, runId, {}, true);
     await this.notificationsService.notifySuperAdmins(
       'Production run awaiting approval',
@@ -552,6 +591,131 @@ export class ManufacturingService {
       runId,
     );
     return submitted;
+  }
+
+  /**
+   * Submit multiple production runs as a single Day-End batch.
+   * Diagnostic production runs recorded continuously during the day can be bundled
+   * and submitted for single Super Admin approval.
+   */
+  async submitProductionRunBatch(
+    user: AuthenticatedUser,
+    dto: SubmitProductionRunBatchDto,
+  ) {
+    if (!dto.runIds || dto.runIds.length === 0) {
+      throw new BadRequestException('At least one production run must be selected');
+    }
+
+    const settings = await this.notificationsService.getSettings?.();
+    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
+
+    const submittedRuns = [];
+    for (const runId of dto.runIds) {
+      const submitted = await this.submitProductionRunInternal(
+        user,
+        runId,
+        dto.batchNotes,
+      );
+      submittedRuns.push(submitted);
+    }
+
+    if (!requiresApproval) {
+      const approvedResults = [];
+      for (const run of submittedRuns) {
+        const approved = await this.approveProductionRun(user, run.id, {}, true);
+        approvedResults.push(approved);
+      }
+      return {
+        count: approvedResults.length,
+        status: 'POSTED',
+        runs: approvedResults,
+      };
+    }
+
+    await this.notificationsService.notifySuperAdmins(
+      'Day-End production batch awaiting approval',
+      `Client submitted ${submittedRuns.length} continuous production runs for single day-end approval.`,
+      'PRODUCTION_RUN',
+      submittedRuns[0]?.id || '',
+    );
+
+    return {
+      count: submittedRuns.length,
+      status: 'PENDING_APPROVAL',
+      runs: submittedRuns,
+    };
+  }
+
+  /**
+   * Super Admin approves multiple production runs together (Day-End batch).
+   * Atomically executes inventory postings for each run.
+   */
+  async approveProductionRunBatch(
+    user: AuthenticatedUser,
+    dto: DecideProductionRunBatchDto,
+  ) {
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only Super Admin can approve production runs',
+      );
+    }
+    if (!dto.runIds || dto.runIds.length === 0) {
+      throw new BadRequestException(
+        'At least one production run must be provided',
+      );
+    }
+
+    const results = [];
+    for (const runId of dto.runIds) {
+      const approved = await this.approveProductionRun(user, runId, {
+        idempotencyKey: dto.idempotencyKey
+          ? `${dto.idempotencyKey}-${runId}`
+          : undefined,
+      });
+      results.push(approved);
+    }
+
+    return {
+      count: results.length,
+      status: 'APPROVED',
+      runs: results,
+    };
+  }
+
+  /**
+   * Super Admin rejects multiple production runs together.
+   */
+  async rejectProductionRunBatch(
+    user: AuthenticatedUser,
+    dto: DecideProductionRunBatchDto,
+  ) {
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only Super Admin can reject production runs',
+      );
+    }
+    if (!dto.reason || dto.reason.trim() === '') {
+      throw new BadRequestException('A non-empty reason is required for rejection');
+    }
+    if (!dto.runIds || dto.runIds.length === 0) {
+      throw new BadRequestException(
+        'At least one production run must be provided',
+      );
+    }
+
+    const results = [];
+    for (const runId of dto.runIds) {
+      const rejected = await this.rejectProductionRun(user, runId, {
+        reason: dto.reason,
+      });
+      results.push(rejected);
+    }
+
+    return {
+      count: results.length,
+      status: 'REJECTED',
+      runs: results,
+    };
   }
 
   /**

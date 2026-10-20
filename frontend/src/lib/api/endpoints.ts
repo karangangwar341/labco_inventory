@@ -115,8 +115,11 @@ export const endpoints = {
     delete: (id: string) => `/production-runs/${id}`,
     create: () => "/production-runs",
     submit: (id: string) => `/production-runs/${id}/submit`,
+    submitBatch: () => "/production-runs/batch-submit",
     approve: (id: string) => `/production-runs/${id}/approve`,
+    approveBatch: () => "/production-runs/batch-approve",
     reject: (id: string) => `/production-runs/${id}/reject`,
+    rejectBatch: () => "/production-runs/batch-reject",
     complete: (id: string) => `/production-runs/${id}/complete`,
   },
 

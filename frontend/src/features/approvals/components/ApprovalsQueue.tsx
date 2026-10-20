@@ -120,6 +120,19 @@ export function ApprovalsQueue() {
     },
   });
 
+  const batchApproveMutation = useMutation({
+    mutationFn: (runIds: string[]) =>
+      approvalsService.approveManufacturingBatch(runIds, 'Approved Day-End batch'),
+    onSuccess: (res) => {
+      setActionSuccess(`Batch approved! ${res.count} continuous production run(s) approved and inventory updated.`);
+      invalidation.afterInventoryApproval(queryClient);
+      setTimeout(() => setActionSuccess(null), 5000);
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(sanitizeError(err instanceof Error ? err.message : 'Batch approval failed'));
+    },
+  });
+
   const handleApprove = (item: QueueItem) => {
     setErrorMsg(null);
     approveMutation.mutate({ tab: activeTab, id: item.id });
@@ -454,6 +467,33 @@ export function ApprovalsQueue() {
           />
         </div>
       </div>
+
+      {/* Day-End Manufacturing Batch Approval Banner */}
+      {activeTab === 'MANUFACTURING' && currentTabItems.length > 0 && (
+        <div className="p-3.5 bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-slate-900 text-sm">
+                🏭 Continuous Production Day-End Batch ({currentTabItems.length} runs pending)
+              </span>
+              <Badge variant="warning">Day-End Queue</Badge>
+            </div>
+            <p className="text-slate-600 mt-0.5">
+              Continuous diagnostic production cycles submitted today. Approve individual runs below, or execute a single consolidated approval for all {currentTabItems.length} runs.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            isLoading={batchApproveMutation.isPending}
+            onClick={() => {
+              batchApproveMutation.mutate(currentTabItems.map((item) => item.id));
+            }}
+          >
+            ✓ Approve All ({currentTabItems.length}) Runs
+          </Button>
+        </div>
+      )}
 
       {/* Data Table */}
       <DataTable

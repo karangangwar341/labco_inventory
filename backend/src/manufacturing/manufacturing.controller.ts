@@ -28,6 +28,10 @@ import {
   ApproveProductionRunDto,
   RejectProductionRunDto,
 } from './dto/decide-production-run.dto.js';
+import {
+  SubmitProductionRunBatchDto,
+  DecideProductionRunBatchDto,
+} from './dto/batch-production-run.dto.js';
 import { ReRunCycleDto } from './dto/re-run-cycle.dto.js';
 import { QueryManufacturingAnalyticsDto } from './dto/query-manufacturing-analytics.dto.js';
 
@@ -96,6 +100,49 @@ export class ManufacturingController {
     @Body() dto?: ReRunCycleDto,
   ) {
     return this.manufacturingService.reRunCycle(user, id, dto);
+  }
+
+  @Post('batch-submit')
+  @Roles(UserRole.CLIENT_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary:
+      'Submit multiple production runs as a Day-End batch for single approval',
+  })
+  async submitProductionRunBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SubmitProductionRunBatchDto,
+  ) {
+    return this.manufacturingService.submitProductionRunBatch(user, dto);
+  }
+
+  @Post('batch-approve')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary:
+      'Super Admin approves multiple production runs together (Day-End batch)',
+  })
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  async approveProductionRunBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DecideProductionRunBatchDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.manufacturingService.approveProductionRunBatch(user, {
+      ...dto,
+      idempotencyKey: idempotencyKey || dto?.idempotencyKey,
+    });
+  }
+
+  @Post('batch-reject')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Super Admin rejects multiple production runs together',
+  })
+  async rejectProductionRunBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DecideProductionRunBatchDto,
+  ) {
+    return this.manufacturingService.rejectProductionRunBatch(user, dto);
   }
 
   @Get(':id')

@@ -42,6 +42,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
 
   const { role, user } = useAuth();
   const canCreateRuns = role === "CLIENT_ADMIN";
+  const isClientAdmin = role === "CLIENT_ADMIN";
   const isSuperAdmin = role === "SUPER_ADMIN";
 
   // Active top-level tab
@@ -97,6 +98,12 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const [batchNumber, setBatchNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+
+  // Day-End Continuous Batch Submission State
+  const [submittingAfterSave, setSubmittingAfterSave] = useState(false);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [isDayEndModalOpen, setIsDayEndModalOpen] = useState(false);
+  const [dayEndBatchNotes, setDayEndBatchNotes] = useState("");
 
   // Query: Catalog manufacturing options (raw materials, yield products)
   const {
@@ -388,6 +395,49 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
       ),
   });
 
+  // Mutation: Submit Day-End Batch
+  const batchSubmitMutation = useMutation({
+    mutationFn: ({ runIds, notes }: { runIds: string[]; notes?: string }) =>
+      manufacturingService.submitProductionRunBatch(runIds, notes),
+    onSuccess: async (res) => {
+      setIsDayEndModalOpen(false);
+      setSelectedDraftIds([]);
+      setActionSuccess(
+        `Successfully submitted ${res.count} continuous production run(s) for Day-End Super Admin approval!`,
+      );
+      await invalidateAll();
+      setTimeout(() => setActionSuccess(null), 6000);
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Could not submit production runs for day-end approval",
+      );
+    },
+  });
+
+  // Mutation: Super Admin Batch Approve
+  const batchApproveMutation = useMutation({
+    mutationFn: (runIds: string[]) =>
+      manufacturingService.approveProductionRunBatch(
+        runIds,
+        "Approved Day-End batch",
+      ),
+    onSuccess: async (res) => {
+      setActionSuccess(
+        `Approved ${res.count} continuous production runs! Raw materials consumed and finished goods updated.`,
+      );
+      await invalidateAll();
+      setTimeout(() => setActionSuccess(null), 6000);
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Could not approve day-end batch",
+      );
+    },
+  });
+
   // Mutation: Scan low stock cycles
   const scanMutation = useMutation({
     mutationFn: () => manufacturingService.checkLowStockCycles(),
@@ -444,8 +494,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     setIsModalOpen(true);
   };
 
-  const handleCreateRun = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveDraft = (andSubmit = false) => {
     setErrorMsg(null);
     if (
       !effectiveYieldProductId ||
@@ -466,34 +515,62 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
       );
       return;
     }
-    createMutation.mutate({
-      mode: "LINKED",
-      productionReference: productionReference.trim() || undefined,
-      actualOutput: actualQty ? Number(actualQty) : undefined,
-      wastage: wastage ? Number(wastage) : undefined,
-      notes: notes.trim() || undefined,
-      plannedOutput: Number(yieldQty),
-      inputs: effectiveInputLines.map((line) => ({
-        productId: line.productId,
-        unitId: line.unitId,
-        quantity: Number(line.quantity),
-      })),
-      outputs: [
-        {
-          productId: effectiveYieldProductId,
-          unitId: effectiveYieldUnitId,
-          quantity: Number(actualQty || yieldQty),
-          batchNumber: batchNumber.trim() || undefined,
-          expiryDate: expiryDate || undefined,
+
+    const effectiveActualOutput = actualQty
+      ? Number(actualQty)
+      : andSubmit
+        ? Number(yieldQty)
+        : undefined;
+
+    setSubmittingAfterSave(andSubmit);
+    createMutation.mutate(
+      {
+        mode: "LINKED",
+        productionReference: productionReference.trim() || undefined,
+        actualOutput: effectiveActualOutput,
+        wastage: wastage ? Number(wastage) : undefined,
+        notes: notes.trim() || undefined,
+        plannedOutput: Number(yieldQty),
+        inputs: effectiveInputLines.map((line) => ({
+          productId: line.productId,
+          unitId: line.unitId,
+          quantity: Number(line.quantity),
+        })),
+        outputs: [
+          {
+            productId: effectiveYieldProductId,
+            unitId: effectiveYieldUnitId,
+            quantity: effectiveActualOutput || Number(yieldQty),
+            batchNumber: batchNumber.trim() || undefined,
+            expiryDate: expiryDate || undefined,
+          },
+        ],
+      },
+      {
+        onSuccess: async (savedRun) => {
+          if (andSubmit) {
+            submitMutation.mutate(savedRun.id);
+          }
         },
-      ],
-    });
+        onSettled: () => {
+          setSubmittingAfterSave(false);
+        },
+      },
+    );
   };
 
   const currentError =
     errorMsg ||
     (runsError instanceof Error ? runsError.message : null) ||
     (optionsError instanceof Error ? optionsError.message : null);
+
+  const draftRuns = useMemo(() => {
+    return runs.filter((r) => r.status === "DRAFT");
+  }, [runs]);
+
+  const pendingRuns = useMemo(() => {
+    return runs.filter((r) => r.status === "PENDING_APPROVAL");
+  }, [runs]);
 
   const visibleRuns = useMemo(() => {
     return runs.filter((run) => {
@@ -785,7 +862,75 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
               }
             />
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <>
+              {/* Day-End Continuous Production Runs Banner for Client Admin */}
+              {isClientAdmin && draftRuns.length > 0 && (
+                <div className="mb-4 bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50 border border-indigo-200 rounded-xl p-4 shadow-xs">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-indigo-950 flex items-center gap-1.5">
+                          🏭 Continuous Daily Production Batch ({draftRuns.length} draft cycles)
+                        </span>
+                        <Badge variant="warning">
+                          {draftRuns.length} draft {draftRuns.length === 1 ? 'cycle' : 'cycles'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                        Continuous production happened throughout the day? Instead of submitting each run one by one, bundle all today&apos;s continuous runs for various products into a single Day-End batch for consolidated Super Admin approval.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 self-stretch md:self-auto shrink-0">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedDraftIds(draftRuns.map((r) => r.id));
+                          setDayEndBatchNotes(
+                            `Continuous daily production runs (${new Date().toLocaleDateString()})`,
+                          );
+                          setIsDayEndModalOpen(true);
+                        }}
+                      >
+                        🚀 Submit All ({draftRuns.length}) for Day-End Approval
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Super Admin Day-End Batch Approval Banner */}
+              {isSuperAdmin && pendingRuns.length > 1 && (
+                <div className="mb-4 bg-gradient-to-r from-amber-50 via-orange-50 to-indigo-50 border border-amber-200 rounded-xl p-4 shadow-xs">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-amber-950 flex items-center gap-1.5">
+                          ⚖️ Pending Continuous Production Runs ({pendingRuns.length} runs)
+                        </span>
+                        <Badge variant="warning">Awaiting Approval</Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                        Multiple continuous diagnostic production cycles were submitted for review. Approve all {pendingRuns.length} runs in one atomic batch.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        isLoading={batchApproveMutation.isPending}
+                        onClick={() => {
+                          batchApproveMutation.mutate(pendingRuns.map((r) => r.id));
+                        }}
+                      >
+                        ✓ Approve All ({pendingRuns.length}) Runs
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Runs List */}
               <div className="lg:col-span-2 space-y-3">
                 {visibleRuns.map((r) => {
@@ -1051,24 +1196,11 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
                           size="sm"
                           isLoading={submitMutation.isPending}
                           onClick={() => {
-                            if (
-                              selectedRun.actualOutput == null ||
-                              Number(selectedRun.actualOutput) <= 0
-                            ) {
-                              setErrorMsg(
-                                "Enter the actual finished quantity before submitting. The draft is open for editing now.",
-                              );
-                              openDraft(selectedRun);
-                              return;
-                            }
                             setErrorMsg(null);
                             submitMutation.mutate(selectedRun.id);
                           }}
                         >
-                          {selectedRun.actualOutput == null ||
-                          Number(selectedRun.actualOutput) <= 0
-                            ? "Enter actual output"
-                            : "Submit for approval"}
+                          Submit for approval
                         </Button>
                       </div>
                     )}
@@ -1112,7 +1244,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
                 )}
               </div>
             </div>
-          )}
+          </>
+        )}
         </div>
       )}
 
@@ -1200,7 +1333,13 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
         onClose={() => setIsModalOpen(false)}
         title={editingRun ? "Edit production draft" : "Start a production run"}
       >
-        <form onSubmit={handleCreateRun} className="space-y-3.5 text-xs">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSaveDraft(false);
+          }}
+          className="space-y-3.5 text-xs"
+        >
           <p className="rounded-md bg-slate-100 p-2 text-slate-600">
             Saving keeps this as a draft. No stock changes until Super Admin
             approval.
@@ -1501,7 +1640,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             ))}
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
+          <div className="pt-2 flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               variant="secondary"
@@ -1510,14 +1649,143 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
               Cancel
             </Button>
             <Button
-              variant="primary"
-              type="submit"
-              isLoading={createMutation.isPending}
+              variant="secondary"
+              type="button"
+              isLoading={createMutation.isPending && !submittingAfterSave}
+              onClick={() => handleSaveDraft(false)}
             >
               Save draft
             </Button>
+            <Button
+              variant="primary"
+              type="button"
+              isLoading={
+                (createMutation.isPending && submittingAfterSave) ||
+                submitMutation.isPending
+              }
+              onClick={() => handleSaveDraft(true)}
+            >
+              Save &amp; Submit for Approval
+            </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* DAY-END BATCH SUBMISSION MODAL */}
+      <Modal
+        isOpen={isDayEndModalOpen}
+        onClose={() => setIsDayEndModalOpen(false)}
+        title="Submit Continuous Runs for Day-End Single Approval"
+      >
+        <div className="space-y-4 text-xs">
+          <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl">
+            <p className="text-indigo-900 font-medium">
+              Bundle all continuous diagnostic cycles completed today into a single batch. Super Admin can review all runs and approve them together with one single decision.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span className="font-bold text-slate-800">
+              Select Production Cycles ({selectedDraftIds.length} of {draftRuns.length} selected)
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                onClick={() => setSelectedDraftIds(draftRuns.map((r) => r.id))}
+              >
+                Select all
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                type="button"
+                className="text-xs text-slate-500 hover:text-slate-700"
+                onClick={() => setSelectedDraftIds([])}
+              >
+                Deselect all
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+            {draftRuns.map((r) => {
+              const isChecked = selectedDraftIds.includes(r.id);
+              return (
+                <label
+                  key={r.id}
+                  className={`flex items-start gap-3 p-2.5 rounded-lg border transition-all cursor-pointer ${
+                    isChecked
+                      ? "border-indigo-400 bg-indigo-50/40"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedDraftIds((prev) => [...prev, r.id]);
+                      } else {
+                        setSelectedDraftIds((prev) => prev.filter((id) => id !== r.id));
+                      }
+                    }}
+                    className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-900 truncate">
+                        {r.yieldProductName || "Production run"}
+                      </span>
+                      <span className="font-bold text-emerald-800 shrink-0">
+                        Planned: {r.plannedQuantity} units
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 mt-0.5">
+                      <span>Ref: {r.productionReference || "Cycle"}</span>
+                      <span>{r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "Today"}</span>
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          <div>
+            <label className="block text-slate-600 font-semibold mb-1">
+              Day-End Batch Reference / Notes (Optional)
+            </label>
+            <input
+              type="text"
+              value={dayEndBatchNotes}
+              onChange={(e) => setDayEndBatchNotes(e.target.value)}
+              placeholder="e.g., Daily continuous diagnostic runs - 20 Oct 2026"
+              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsDayEndModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={selectedDraftIds.length === 0}
+              isLoading={batchSubmitMutation.isPending}
+              onClick={() => {
+                batchSubmitMutation.mutate({
+                  runIds: selectedDraftIds,
+                  notes: dayEndBatchNotes.trim() || undefined,
+                });
+              }}
+            >
+              🚀 Submit {selectedDraftIds.length} Run{selectedDraftIds.length === 1 ? "" : "s"} for Approval
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
