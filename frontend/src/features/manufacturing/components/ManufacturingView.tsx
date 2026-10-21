@@ -50,6 +50,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const isSuperAdmin = role === "SUPER_ADMIN";
   // Super Admin client filter for runs & analytics
   const [runsClientId, setRunsClientId] = useState<string>(propClientId || "");
+  const [analyticsClientId, setAnalyticsClientId] = useState<string>("");
 
   const effectiveTargetClientId = isClientAdmin
     ? (user?.clientId ?? undefined)
@@ -94,8 +95,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const [rejectingRunId, setRejectingRunId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>("");
 
-  // Super Admin client filter for analytics
-  const [analyticsClientId, setAnalyticsClientId] = useState<string>("");
 
   // New Run Form State
   const [yieldProductId, setYieldProductId] = useState("");

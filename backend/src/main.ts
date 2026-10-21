@@ -43,7 +43,9 @@ async function bootstrap() {
       const isVercelMatch = allowedOrigins.some((allowed) => {
         if (allowed.includes('.vercel.app')) {
           const baseName = allowed.replace(/^https?:\/\//, '').split('.')[0].replace(/-[a-z0-9]+$/, '');
-          return normalizedOrigin.includes(baseName) && normalizedOrigin.endsWith('.vercel.app');
+          const escapedBase = baseName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          const previewPattern = new RegExp(`^https:\\/\\/${escapedBase}(-[a-z0-9_-]+)?\\.vercel\\.app$`, 'i');
+          return previewPattern.test(normalizedOrigin);
         }
         return false;
       });

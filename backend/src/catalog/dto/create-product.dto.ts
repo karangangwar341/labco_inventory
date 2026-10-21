@@ -118,6 +118,11 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductUnitDto)
   units!: ProductUnitDto[];
+
+  @ApiPropertyOptional({ description: 'Client UUID for client-scoped products (Super Admin only)' })
+  @IsOptional()
+  @IsUUID('4', { message: 'clientId must be a valid UUID' })
+  clientId?: string;
 }
 
 export class ProposeProductVersionDto extends CreateProductDto {

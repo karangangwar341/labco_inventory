@@ -388,13 +388,20 @@ export class ReportsService {
       clientId = dbUser?.clientId || undefined;
     }
 
-    if (!clientId) {
+    if (!clientId && user.role !== UserRole.SUPER_ADMIN) {
       throw new BadRequestException('clientId is required for Client Consumption Report');
+    }
+
+    const issueWhere: Prisma.DepartmentIssueWhereInput = { status: 'APPROVED' };
+    const returnWhere: Prisma.DepartmentReturnWhereInput = { status: 'APPROVED' };
+    if (clientId) {
+      issueWhere.clientId = clientId;
+      returnWhere.clientId = clientId;
     }
 
     const [issues, returns] = await Promise.all([
       this.prisma.departmentIssue.findMany({
-        where: { clientId, status: 'APPROVED' },
+        where: issueWhere,
         include: {
           department: { select: { name: true } },
           product: { select: { name: true } },
@@ -402,7 +409,7 @@ export class ReportsService {
         orderBy: { issuedAt: 'desc' },
       }),
       this.prisma.departmentReturn.findMany({
-        where: { clientId, status: 'APPROVED' },
+        where: returnWhere,
         include: {
           department: { select: { name: true } },
           product: { select: { name: true } },

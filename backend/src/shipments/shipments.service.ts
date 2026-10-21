@@ -447,7 +447,11 @@ export class ShipmentsService {
   ) {
     const where: Prisma.ShipmentWhereInput = {};
     if (status) {
-      where.status = status;
+      if ((status as string) === 'ACTIVE') {
+        where.status = { in: [ShipmentStatus.IN_TRANSIT, ShipmentStatus.AWAITING_RECEIPT_APPROVAL] };
+      } else if (Object.values(ShipmentStatus).includes(status)) {
+        where.status = status;
+      }
     }
 
     if (user.role === UserRole.STORE_ADMIN) {

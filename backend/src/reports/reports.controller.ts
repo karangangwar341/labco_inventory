@@ -5,6 +5,7 @@ import {
   Query,
   UseGuards,
   Res,
+  ParseEnumPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -32,7 +33,7 @@ export class ReportsController {
   @ApiOperation({ summary: 'Generate authorized report (JSON data or downloadable CSV)' })
   async generateReport(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('reportType') reportType: ReportType,
+    @Param('reportType', new ParseEnumPipe(ReportType)) reportType: ReportType,
     @Query() query: QueryReportDto,
     @Res({ passthrough: true }) res: Response,
   ) {

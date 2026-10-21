@@ -159,7 +159,7 @@ export function DepartmentReturnsPanel({ issues }: Props) {
       {successMessage && <div role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-xs text-green-800">{successMessage}</div>}
       {errorMessage && <ErrorState message={errorMessage} onRetry={() => { void returnsQuery.refetch(); if (isSuperAdmin) void balancesQuery.refetch(); }} />}
 
-      {!showWriteOffs && role === 'CLIENT_ADMIN' && (
+      {!showWriteOffs && (role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') && (
         <form onSubmit={submitReturn} className="grid grid-cols-1 gap-3 rounded-lg border border-[#dbe3ee] bg-white p-4 md:grid-cols-2">
           <div>
             <label htmlFor="return-issue" className="mb-1 block text-xs font-medium text-[#172033]">Previously approved issue</label>

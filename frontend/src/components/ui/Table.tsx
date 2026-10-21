@@ -98,7 +98,7 @@ export function TableHead({
 
   return (
     <th
-      className={`py-3 px-4 font-semibold text-slate-500 text-[11px] ${alignClasses[align]} ${className}`}
+      className={`py-3 px-4 font-semibold text-slate-500 text-[11px] whitespace-nowrap ${alignClasses[align]} ${className}`}
     >
       {children}
     </th>

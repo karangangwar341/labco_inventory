@@ -298,11 +298,13 @@ export class DepartmentsService {
   // DEPARTMENT ISSUES
   // ==========================================
 
-  async getOpenIssueBatch(user: AuthenticatedUser) {
-    if (user.role !== UserRole.CLIENT_ADMIN) {
-      throw new ForbiddenException('Only Client Admins can manage a daily department issue draft');
+  async getOpenIssueBatch(user: AuthenticatedUser, targetClientId?: string) {
+    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Client Admins or Super Admin can manage a daily department issue draft');
     }
-    const clientId = await this.getClientForUser(user);
+    const clientId = user.role === UserRole.SUPER_ADMIN
+      ? (targetClientId || (await this.prisma.client.findFirst({ where: { status: 'ACTIVE' } }))?.id || null)
+      : await this.getClientForUser(user);
     if (!clientId) throw new ForbiddenException('Client account is not assigned to an organization');
     const include = { issues: { include: { department: true, product: true, unit: true, batch: true }, orderBy: { createdAt: 'asc' as const } } };
     const existing = await this.prisma.departmentIssueBatch.findFirst({
@@ -323,7 +325,10 @@ export class DepartmentsService {
 
   async saveIssueBatchLines(batchId: string, dto: SaveDepartmentIssueBatchDto, user: AuthenticatedUser) {
     const batch = await this.getIssueBatch(batchId, user);
-    if (user.role !== UserRole.CLIENT_ADMIN || batch.createdById !== user.id) {
+    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Client Admins or Super Admin can edit this draft');
+    }
+    if (user.role === UserRole.CLIENT_ADMIN && batch.createdById !== user.id) {
       throw new ForbiddenException('Only the Client Admin who owns this draft can edit it');
     }
     if (batch.status !== DepartmentIssueBatchStatus.DRAFT) {
@@ -377,7 +382,10 @@ export class DepartmentsService {
 
   async submitIssueBatch(batchId: string, user: AuthenticatedUser) {
     const batch = await this.getIssueBatch(batchId, user);
-    if (user.role !== UserRole.CLIENT_ADMIN || batch.createdById !== user.id) {
+    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Client Admins or Super Admin can submit this draft');
+    }
+    if (user.role === UserRole.CLIENT_ADMIN && batch.createdById !== user.id) {
       throw new ForbiddenException('Only the Client Admin who owns this draft can submit it');
     }
     if (batch.status !== DepartmentIssueBatchStatus.DRAFT) throw new ConflictException('This draft has already been submitted');

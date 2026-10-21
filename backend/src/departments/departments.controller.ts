@@ -107,10 +107,13 @@ export class DepartmentsController {
   // ==========================================
 
   @Post('issues/draft')
-  @Roles(UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
   @ApiOperation({ summary: 'Get or create the client daily department issue draft' })
-  async getOpenIssueBatch(@CurrentUser() user: AuthenticatedUser) {
-    return this.departmentsService.getOpenIssueBatch(user);
+  async getOpenIssueBatch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('clientId') clientId?: string,
+  ) {
+    return this.departmentsService.getOpenIssueBatch(user, clientId);
   }
 
   @Get('issues/batches')
@@ -124,7 +127,7 @@ export class DepartmentsController {
   }
 
   @Patch('issues/batches/:id/lines')
-  @Roles(UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
   @ApiOperation({ summary: 'Replace line items in an editable daily department issue draft' })
   async saveIssueBatchLines(
     @CurrentUser() user: AuthenticatedUser,
@@ -135,7 +138,7 @@ export class DepartmentsController {
   }
 
   @Post('issues/batches/:id/submit')
-  @Roles(UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
   @ApiOperation({ summary: 'Submit the daily department issue batch for posting or approval' })
   async submitIssueBatch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.departmentsService.submitIssueBatch(id, user);

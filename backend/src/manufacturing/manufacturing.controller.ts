@@ -176,7 +176,7 @@ export class ManufacturingController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
   @ApiOperation({
     summary:
       'Delete the caller’s own production draft; drafts have no inventory effect',

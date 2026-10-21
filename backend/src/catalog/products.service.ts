@@ -103,9 +103,6 @@ export class ProductsService {
     if (user.role === UserRole.CLIENT_ADMIN && dto.kind !== 'MANUFACTURED_PRODUCT') {
       throw new BadRequestException('Client Admins can create manufactured products only');
     }
-    if (user.role === UserRole.SUPER_ADMIN && dto.kind !== 'RAW_MATERIAL') {
-      throw new BadRequestException('Company catalog products must be raw materials');
-    }
 
     this.validateUnits(dto);
 
@@ -122,7 +119,20 @@ export class ProductsService {
     let clientId: string | null = null;
     let initialStatus: ProductStatus = ProductStatus.APPROVED; // Super Admin company products are immediately approved
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.SUPER_ADMIN) {
+      if (dto.kind === 'MANUFACTURED_PRODUCT' || dto.clientId) {
+        ownerScope = CatalogScope.CLIENT;
+        if (dto.clientId) {
+          clientId = dto.clientId;
+        } else {
+          const firstClient = await this.prisma.client.findFirst({
+            where: { status: 'ACTIVE' },
+            orderBy: { createdAt: 'asc' },
+          });
+          clientId = firstClient?.id || null;
+        }
+      }
+    } else if (user.role === UserRole.CLIENT_ADMIN) {
       ownerScope = CatalogScope.CLIENT;
       initialStatus = ProductStatus.PENDING_APPROVAL; // Client products require Super Admin approval
 
@@ -140,7 +150,7 @@ export class ProductsService {
     const rootClientId = category.parent ? category.parent.clientId : category.clientId;
     if (
       (ownerScope === CatalogScope.COMPANY && (category.ownerScope !== CatalogScope.COMPANY || rootScope !== CatalogScope.COMPANY)) ||
-      (ownerScope === CatalogScope.CLIENT && (category.ownerScope !== CatalogScope.CLIENT || category.clientId !== clientId || rootClientId !== clientId))
+      (ownerScope === CatalogScope.CLIENT && (category.ownerScope !== CatalogScope.CLIENT || (clientId && category.clientId !== clientId) || (clientId && rootClientId !== clientId)))
     ) {
       throw new ForbiddenException('Choose a category available in your catalog');
     }
@@ -248,11 +258,7 @@ export class ProductsService {
       throw new BadRequestException('Product type cannot be changed after creation. Create a separate product for the other type.');
     }
 
-    if (user.role === UserRole.SUPER_ADMIN) {
-      if (product.ownerScope !== CatalogScope.COMPANY) {
-        throw new ForbiddenException('Super Admins can edit company products; client products are managed by their client');
-      }
-    } else {
+    if (user.role === UserRole.CLIENT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
         select: { clientId: true },
@@ -573,7 +579,7 @@ export class ProductsService {
       );
     }
 
-    const clientId =
+    let clientId =
       (user.role === UserRole.SUPER_ADMIN ? explicitClientId : null) ||
       user.clientId ||
       (
@@ -582,12 +588,12 @@ export class ProductsService {
           select: { clientId: true },
         })
       )?.clientId;
+
+    if (!clientId && user.role === UserRole.SUPER_ADMIN) {
+      clientId = (await this.prisma.client.findFirst({ where: { status: 'ACTIVE' } }))?.id;
+    }
+
     if (!clientId) {
-      if (user.role === UserRole.SUPER_ADMIN) {
-        throw new BadRequestException(
-          'clientId is required when requesting manufacturing options as Super Admin',
-        );
-      }
       throw new ForbiddenException('Client Admin must belong to an organization');
     }
 

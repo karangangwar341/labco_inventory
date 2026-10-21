@@ -34,13 +34,32 @@ export function DepartmentsView() {
   const departmentIdFromNotification = searchParams.get('departmentId');
   const handledNotificationId = useRef<string | null>(null);
   const attemptedDepartmentRefresh = useRef<string | null>(null);
+  const handledActionRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'DEPARTMENTS' | 'ISSUES' | 'RETURNS'>('DEPARTMENTS');
+
+  const tabParam = searchParams.get('tab')?.toUpperCase();
+  const initialTab = (tabParam === 'ISSUES' || tabParam === 'RETURNS' || tabParam === 'DEPARTMENTS') ? tabParam : 'DEPARTMENTS';
+  const [activeTab, setActiveTab] = useState<'DEPARTMENTS' | 'ISSUES' | 'RETURNS'>(initialTab);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [highlightedDepartmentId, setHighlightedDepartmentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tabParam && (tabParam === 'ISSUES' || tabParam === 'RETURNS' || tabParam === 'DEPARTMENTS')) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  useEffect(() => {
+    const action = searchParams.get('action');
+    if (action === 'new-issue' && handledActionRef.current !== action) {
+      handledActionRef.current = action;
+      setActiveTab('ISSUES');
+      setIsIssueModalOpen(true);
+    }
+  }, [searchParams]);
 
   // New Department Form State
   const [deptName, setDeptName] = useState('');
@@ -103,7 +122,7 @@ export function DepartmentsView() {
   const issueDraftQuery = useQuery({
     queryKey: queryKeys.departments.issueDraft(user?.clientId || user?.id),
     queryFn: () => departmentsService.getOpenIssueBatch(),
-    enabled: role === 'CLIENT_ADMIN',
+    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 0,
   });
 
@@ -115,7 +134,7 @@ export function DepartmentsView() {
   } = useQuery({
     queryKey: queryKeys.catalog.products(`client-${user?.clientId || user?.id || 'current'}`),
     queryFn: () => catalogService.getProducts(),
-    enabled: role === 'CLIENT_ADMIN',
+    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 2 * 60 * 1000,
   });
 
@@ -127,7 +146,7 @@ export function DepartmentsView() {
   } = useQuery({
     queryKey: queryKeys.inventory.balances(user?.id || user?.role),
     queryFn: () => inventoryService.getBalances(),
-    enabled: role === 'CLIENT_ADMIN',
+    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 60 * 1000,
   });
 
@@ -316,7 +335,7 @@ export function DepartmentsView() {
     setErrorMsg(null);
     refetchDepts();
     refetchIssues();
-    if (role === 'CLIENT_ADMIN') {
+    if (role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') {
       void refetchCatalogProducts();
       void refetchBalances();
     }
@@ -330,7 +349,7 @@ export function DepartmentsView() {
         actions={
           activeTab !== 'RETURNS' ? (
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              {role === 'CLIENT_ADMIN' && (
+              {(role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') && (
                 <div className="flex flex-1 sm:flex-none items-center gap-2 w-full sm:w-auto">
                   <Button
                     variant="secondary"
@@ -487,7 +506,7 @@ export function DepartmentsView() {
         )
       ) : (
         <div className="space-y-6">
-          {role === 'CLIENT_ADMIN' && (
+          {(role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') && (
             <Card>
               <CardHeader
                 action={
@@ -528,6 +547,19 @@ export function DepartmentsView() {
                 <CardDescription>
                   Build your daily stock out list below. For each product, select which internal department receives it. When ready, submit the batch together for approval/posting.
                 </CardDescription>
+                {issueDraftQuery.data?.status === 'PENDING_APPROVAL' && (
+                  <div className="mt-3 p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-xl text-amber-900 flex items-start gap-2.5 text-xs">
+                    <svg className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="font-semibold text-amber-950">Batch Submitted for Super Admin Review</p>
+                      <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
+                        Quantities are held in reservation and will deduct from usable stock once approved. Hospital departments can begin using reagents while ledger commits finalize.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="p-0">
                 {/* Inline Fast Add Row (Zero-Modal Entry) */}

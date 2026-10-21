@@ -267,9 +267,16 @@ export class ManufacturingService {
       );
     } else if (user.role === UserRole.SUPER_ADMIN) {
       if (!resolvedClientId) {
-        throw new BadRequestException(
-          'clientId is required for Super Admin creation',
-        );
+        const firstClient = await this.prisma.client.findFirst({
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'asc' },
+        });
+        resolvedClientId = firstClient?.id;
+        if (!resolvedClientId) {
+          throw new BadRequestException(
+            'No active client found. Super Admin must specify clientId',
+          );
+        }
       }
     }
 
@@ -320,15 +327,15 @@ export class ManufacturingService {
     runId: string,
     dto: CreateProductionRunDto,
   ) {
-    if (user.role !== UserRole.CLIENT_ADMIN) {
+    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException(
-        'Only the Client Admin can edit their production draft',
+        'Only Client Admins or Super Admin can edit production drafts',
       );
     }
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
-    if (!dbUser?.clientId) {
+    if (user.role === UserRole.CLIENT_ADMIN && !dbUser?.clientId) {
       throw new ForbiddenException(
         'Client Admin is not assigned to any client',
       );
@@ -341,7 +348,7 @@ export class ManufacturingService {
       });
       if (!run)
         throw new NotFoundException(`Production run ${runId} not found`);
-      if (run.clientId !== dbUser.clientId || run.submittedById !== user.id) {
+      if (user.role === UserRole.CLIENT_ADMIN && (run.clientId !== dbUser?.clientId || run.submittedById !== user.id)) {
         throw new ForbiddenException(
           'You can only edit your own production drafts',
         );
@@ -354,13 +361,16 @@ export class ManufacturingService {
 
       const inputs = await this.processInputs(dto.inputs, tx, run.clientId);
       const outputs = await this.processOutputs(dto.outputs, tx, run.clientId);
+      const updateWhere: Prisma.ProductionRunWhereInput = {
+        id: runId,
+        status: ProductionStatus.DRAFT,
+      };
+      if (user.role === UserRole.CLIENT_ADMIN) {
+        updateWhere.clientId = dbUser!.clientId!;
+        updateWhere.submittedById = user.id;
+      }
       const claimed = await tx.productionRun.updateMany({
-        where: {
-          id: runId,
-          clientId: dbUser.clientId,
-          submittedById: user.id,
-          status: ProductionStatus.DRAFT,
-        },
+        where: updateWhere,
         data: {
           mode: dto.mode || ProductionMode.LINKED,
           productionReference: dto.productionReference || null,
@@ -404,15 +414,15 @@ export class ManufacturingService {
 
   /** Delete an owned draft. Drafts have no inventory or ledger effect. */
   async deleteProductionRun(user: AuthenticatedUser, runId: string) {
-    if (user.role !== UserRole.CLIENT_ADMIN) {
+    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException(
-        'Only the Client Admin can delete their production draft',
+        'Only Client Admins or Super Admin can delete production drafts',
       );
     }
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
-    if (!dbUser?.clientId) {
+    if (user.role === UserRole.CLIENT_ADMIN && !dbUser?.clientId) {
       throw new ForbiddenException(
         'Client Admin is not assigned to any client',
       );
@@ -423,7 +433,7 @@ export class ManufacturingService {
       const run = await tx.productionRun.findUnique({ where: { id: runId } });
       if (!run)
         throw new NotFoundException(`Production run ${runId} not found`);
-      if (run.clientId !== dbUser.clientId || run.submittedById !== user.id) {
+      if (user.role === UserRole.CLIENT_ADMIN && (run.clientId !== dbUser?.clientId || run.submittedById !== user.id)) {
         throw new ForbiddenException(
           'You can only delete your own production drafts',
         );
@@ -434,19 +444,9 @@ export class ManufacturingService {
         );
       }
 
-      const deleted = await tx.productionRun.deleteMany({
-        where: {
-          id: runId,
-          clientId: dbUser.clientId,
-          submittedById: user.id,
-          status: ProductionStatus.DRAFT,
-        },
+      await tx.productionRun.delete({
+        where: { id: runId },
       });
-      if (deleted.count !== 1) {
-        throw new ConflictException(
-          'This production draft has changed. Refresh and try again.',
-        );
-      }
     });
 
     return { success: true };

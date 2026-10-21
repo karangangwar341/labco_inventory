@@ -84,19 +84,43 @@ export function ClientAdminDashboard() {
                 </span>
               </Button>
             </Link>
-            <Link href="/departments?tab=ISSUES">
+            <Link href="/departments?tab=ISSUES&action=new-issue">
               <Button variant="primary">
                 <span className="flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                   </svg>
-                  <span>Stock out</span>
+                  <span>Daily Department Issue</span>
                 </span>
               </Button>
             </Link>
           </div>
         }
       />
+
+      {/* Quick Daily Action Bar for Lab Managers */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50/50 to-white border border-blue-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-base">
+            🧪
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">
+              Daily Department Reagent Dispensing
+            </h4>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Issue diagnostic kits, media, and reagents to internal hospital testing departments (Biochemistry, Pathology, Hematology).
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link href="/departments?tab=ISSUES&action=new-issue">
+            <Button variant="primary" size="sm" className="whitespace-nowrap">
+              <span>+ Issue Reagents to Department</span>
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       {/* Low-Stock Threshold Alert Notice */}
       {lowStockBalances.length > 0 && (

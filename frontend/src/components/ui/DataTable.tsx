@@ -224,7 +224,7 @@ export function DataTable<T>({
                   <th
                     key={col.id}
                     style={cellStyle}
-                    className={`py-3 px-3.5 font-semibold text-slate-500 text-[11px] ${alignCls} ${
+                    className={`py-3 px-3.5 font-semibold text-slate-500 text-[11px] whitespace-nowrap ${alignCls} ${
                       isTailwindWidth ? col.width : ''
                     } ${isTailwindMinWidth ? col.minWidth : ''} ${col.maxWidth || ''} ${col.headerClassName || ''}`}
                   >

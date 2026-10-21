@@ -82,6 +82,15 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
+  // Date Filters for DEPARTMENTS and LEDGER tabs (default to TODAY)
+  const [deptDateFilter, setDeptDateFilter] = useState<DateQuickFilter>("TODAY");
+  const [deptCustomStart, setDeptCustomStart] = useState("");
+  const [deptCustomEnd, setDeptCustomEnd] = useState("");
+
+  const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
+  const [ledgerCustomStart, setLedgerCustomStart] = useState("");
+  const [ledgerCustomEnd, setLedgerCustomEnd] = useState("");
+
   const overviewQuery = useQuery({
     queryKey: ["administration", "client-overview", clientId],
     queryFn: async () => {
@@ -222,10 +231,6 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
     getText(row, "transactionType").startsWith("MANUFACTURING_"),
   );
 
-  // Date Filters for DEPARTMENTS and LEDGER tabs (default to TODAY)
-  const [deptDateFilter, setDeptDateFilter] = useState<DateQuickFilter>("TODAY");
-  const [deptCustomStart, setDeptCustomStart] = useState("");
-  const [deptCustomEnd, setDeptCustomEnd] = useState("");
 
   const olderDeptCount = departmentActivity.filter(
     (row) => !isDateInRange(getText(row, "date"), "TODAY"),
@@ -240,9 +245,6 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
     ),
   );
 
-  const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
-  const [ledgerCustomStart, setLedgerCustomStart] = useState("");
-  const [ledgerCustomEnd, setLedgerCustomEnd] = useState("");
 
   const olderLedgerCount = manufacturingMovements.filter(
     (row) => !isDateInRange(getText(row, "timestamp"), "TODAY"),

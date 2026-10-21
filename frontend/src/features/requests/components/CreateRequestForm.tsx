@@ -104,7 +104,8 @@ export function CreateRequestForm() {
 
   const sourceLocations = useMemo(() => {
     if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
-    return locations.filter((location) => location.locationType === 'WAREHOUSE');
+    if (user?.role === 'STORE_ADMIN') return locations.filter((location) => location.locationType === 'WAREHOUSE');
+    return locations;
   }, [locations, user?.role]);
 
   const dispatchTargets = useMemo(
@@ -398,12 +399,15 @@ export function CreateRequestForm() {
     setIsSubmitting(true);
     try {
       const selectedDestination = dispatchTargets.find((location) => location.id === destinationLocationId);
+      const selectedLocation = locations.find((location) => location.id === locationId);
       const payload: CreateStockRequestPayload = {
         requestType: isDispatch ? 'DISPATCH' : direction,
         sourceType: direction === 'STOCK_IN' ? sourceType : undefined,
         sourceLocationId: direction === 'STOCK_OUT' ? locationId : undefined,
         destinationLocationId: direction === 'STOCK_IN' ? locationId : isDispatch ? destinationLocationId : undefined,
-        clientId: user.role === 'CLIENT_ADMIN' ? user.clientId || undefined : selectedDestination?.clientId || undefined,
+        clientId: user.role === 'CLIENT_ADMIN'
+          ? (user.clientId || undefined)
+          : (selectedDestination?.clientId || selectedLocation?.clientId || undefined),
         priority: 'NORMAL',
         reason: reason.trim() || undefined,
         lines: lines.map((line) => {

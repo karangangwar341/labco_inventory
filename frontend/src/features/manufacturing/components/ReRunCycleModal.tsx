@@ -16,16 +16,19 @@ interface ReRunCycleModalProps {
   stockByProductId?: Map<string, { availableQty: number; usableQty: number; unit?: string }>;
 }
 
-export function ReRunCycleModal({
+export function ReRunCycleModal(props: ReRunCycleModalProps) {
+  if (!props.isOpen || !props.cycle) return null;
+  return <ReRunCycleModalContent {...props} cycle={props.cycle} />;
+}
+
+function ReRunCycleModalContent({
   isOpen,
   onClose,
   cycle,
   onSubmit,
   isSubmitting = false,
   stockByProductId,
-}: ReRunCycleModalProps) {
-  if (!cycle) return null;
-
+}: ReRunCycleModalProps & { cycle: ProductionCycle }) {
   const defaultPlanned = cycle.plannedOutput || 25;
   const [plannedQty, setPlannedQty] = useState<number>(defaultPlanned);
   const [batchNumber, setBatchNumber] = useState<string>(() => {

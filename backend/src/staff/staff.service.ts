@@ -17,15 +17,20 @@ import { Decimal } from '@prisma/client/runtime/library';
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private resolveClientId(
+  private async resolveClientId(
     user: AuthenticatedUser,
     requestedClientId?: string,
     requireExplicit = true,
-  ): string | undefined {
+  ): Promise<string | undefined> {
     if (user.role === UserRole.SUPER_ADMIN) {
       if (requestedClientId) return requestedClientId;
       if (user.clientId) return user.clientId;
       if (requireExplicit) {
+        const firstClient = await this.prisma.client.findFirst({
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (firstClient) return firstClient.id;
         throw new BadRequestException('Super Admin must specify clientId parameter when creating a staff member');
       }
       return undefined;
@@ -46,7 +51,7 @@ export class StaffService {
     clientIdParam?: string,
     pagination?: { page?: number; limit?: number },
   ) {
-    const clientId = this.resolveClientId(user, clientIdParam, false);
+    const clientId = await this.resolveClientId(user, clientIdParam, false);
     const where = clientId ? { clientId } : {};
 
     const take = pagination?.limit ? Math.min(Number(pagination.limit), 200) : undefined;
@@ -110,7 +115,7 @@ export class StaffService {
   }
 
   async createStaffMember(dto: CreateStaffMemberDto, user: AuthenticatedUser) {
-    const clientId = this.resolveClientId(user, dto.clientId, true)!;
+    const clientId = (await this.resolveClientId(user, dto.clientId, true))!;
 
     // Check duplicate staffNumber within the same client
     const existing = await this.prisma.clientStaffMember.findUnique({
@@ -214,7 +219,7 @@ export class StaffService {
     clientIdParam?: string,
     pagination?: { page?: number; limit?: number },
   ) {
-    const clientId = this.resolveClientId(user, clientIdParam, false);
+    const clientId = await this.resolveClientId(user, clientIdParam, false);
     const where = clientId ? { clientId } : {};
 
     const take = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 200;

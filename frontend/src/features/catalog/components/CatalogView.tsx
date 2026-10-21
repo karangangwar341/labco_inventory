@@ -359,7 +359,7 @@ export function CatalogView() {
 
   const canEdit = (product: CatalogProduct) =>
     role === 'SUPER_ADMIN'
-      ? product.ownerScope === 'COMPANY'
+      ? true
       : role === 'CLIENT_ADMIN' && product.ownerScope === 'CLIENT' && product.clientId === user?.clientId;
 
   const categoryLabel = (product: CatalogProduct) => {

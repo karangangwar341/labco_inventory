@@ -206,35 +206,37 @@ export function LoginForm() {
         </Button>
       </form>
 
-      {/* Quick Role Fill for Testing */}
-      <div className="pt-3 border-t border-slate-100 space-y-2">
-        <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
-          <span>Quick fill role credentials:</span>
+      {/* Quick Role Fill for Testing (Development / Non-Production Only) */}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="pt-3 border-t border-slate-100 space-y-2">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <span>Quick fill role credentials (Dev only):</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleFillDemoRole('superadmin')}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
+            >
+              Super Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFillDemoRole('storeadmin')}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
+            >
+              Store Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => handleFillDemoRole('clientadmin')}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
+            >
+              Client Admin
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => handleFillDemoRole('superadmin')}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
-          >
-            Super Admin
-          </button>
-          <button
-            type="button"
-            onClick={() => handleFillDemoRole('storeadmin')}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
-          >
-            Store Admin
-          </button>
-          <button
-            type="button"
-            onClick={() => handleFillDemoRole('clientadmin')}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
-          >
-            Client Admin
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Security Policy Reminder */}
       <div className="pt-1 text-center space-y-1">

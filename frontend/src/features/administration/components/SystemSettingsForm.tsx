@@ -93,16 +93,41 @@ export function SystemSettingsForm() {
       <form onSubmit={save} className="space-y-4">
         <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
           <div>
-            <h2 className="text-base font-semibold text-[#172033]">Approval requirements</h2>
-            <p className="mt-1 text-sm text-[#5b6678]">Choose which inventory workflows wait for Super Admin review. When review is off, validated transactions post immediately and are recorded in the ledger.</p>
+            <h2 className="text-base font-semibold text-[#172033]">Approval requirements &amp; Dual-Control Governance</h2>
+            <p className="mt-1 text-sm text-[#5b6678]">Choose which inventory workflows wait for Super Admin review. A policy change applies strictly to new submissions.</p>
+            <div className="mt-2.5 p-3 rounded-lg bg-blue-50/70 border border-blue-200/80 text-xs text-blue-900 flex items-start gap-2">
+              <svg className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>
+                <strong>Operational Impact:</strong> When enabled, requests require explicit Super Admin approval before stock is committed or released. When disabled, validated submissions post atomically to balances upon receipt.
+              </span>
+            </div>
           </div>
-          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 pt-1">
             {APPROVAL_LABELS.map(([key, label]) => {
               const [group, field] = key.split('.');
               const enabled = field
                 ? Boolean((draft.approvalRequirements[group as 'stockRequests' | 'imports'] as Record<string, boolean>)[field])
                 : Boolean(draft.approvalRequirements[group as 'shipmentReceipt' | 'manufacturing' | 'departmentIssue' | 'departmentReturn']);
-              return <label key={key} className="flex min-h-11 items-center gap-3 text-sm text-[#172033]"><input type="checkbox" checked={enabled} onChange={(event) => setDraft((current) => setApprovalRequirement(current, key, event.target.checked))} />{label}</label>;
+              return (
+                <div key={key} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                  <label className="flex items-start gap-2.5 text-sm font-medium text-[#172033] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                      checked={enabled}
+                      onChange={(event) => setDraft((current) => setApprovalRequirement(current, key, event.target.checked))}
+                    />
+                    <div>
+                      <span>{label}</span>
+                      <p className="text-[11px] font-normal text-slate-500 mt-0.5">
+                        {enabled ? '🛡️ Requires Super Admin approval' : '⚡ Posts atomically on submission'}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              );
             })}
           </div>
         </section>

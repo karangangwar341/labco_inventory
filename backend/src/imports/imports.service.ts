@@ -64,9 +64,9 @@ export class ImportsService {
     }
 
     const ext = dto.sourceFilename.split('.').pop()?.toLowerCase();
-    const allowedExts = ['csv', 'json', 'txt', 'pdf', 'png', 'jpg', 'jpeg'];
+    const allowedExts = ['csv', 'json', 'txt'];
     if (!ext || !allowedExts.includes(ext)) {
-      throw new BadRequestException(`Unsupported file type ".${ext}". Allowed: ${allowedExts.join(', ')}`);
+      throw new BadRequestException(`Unsupported file type ".${ext}". Allowed import formats: ${allowedExts.join(', ')}`);
     }
 
     // Check for malicious payload / dangerous signatures
@@ -82,7 +82,7 @@ export class ImportsService {
     const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
     const storageKey = `imports/${Date.now()}-${checksum.substring(0, 12)}.${ext}`;
 
-    // 2. Store Attachment metadata (clean scan)
+    // 2. Store Attachment metadata (pending malware scan)
     const attachment = await this.prisma.attachment.create({
       data: {
         storageKey,
@@ -90,7 +90,7 @@ export class ImportsService {
         mimeType: dto.mimeType || (ext === 'csv' ? 'text/csv' : 'application/json'),
         sizeBytes: buffer.length,
         checksum,
-        scanStatus: FileScanStatus.CLEAN,
+        scanStatus: FileScanStatus.PENDING,
         uploadedById: user.id,
       },
     });

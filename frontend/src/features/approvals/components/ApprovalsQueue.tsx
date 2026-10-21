@@ -34,6 +34,13 @@ const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
 
 const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'MANUFACTURING', 'DEPARTMENTS', 'CORRECTIONS'];
 
+const QUICK_REJECTION_REASONS = [
+  'Insufficient available stock at facility',
+  'Lot number or batch expiry discrepancy',
+  'Duplicate requisition submission',
+  'Incomplete department allocation details',
+];
+
 function sanitizeError(msg: string): string {
   return msg.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '').replace(/\s{2,}/g, ' ').trim();
 }
@@ -46,6 +53,9 @@ export function ApprovalsQueue() {
   const priorityParam = searchParams.get('priority');
   const idParam = searchParams.get('id');
   const isAuthorized = canApproveWorkflows(user?.role);
+
+  const VALID_DATE_FILTERS: DateQuickFilter[] = ['TODAY', 'YESTERDAY', 'LAST_WEEK', 'LAST_MONTH', 'ALL'];
+  const dateParam = searchParams.get('dateRange') as DateQuickFilter | null;
 
   const [activeTab, setActiveTab] = useState<ApprovalTab>(() => {
     if (tabParam && VALID_TABS.includes(tabParam)) {
@@ -66,9 +76,25 @@ export function ApprovalsQueue() {
 
   // Clientwise & Time-Series Date Filters
   const [selectedClientId, setSelectedClientId] = useState('');
-  const [dateFilter, setDateFilter] = useState<DateQuickFilter>('TODAY');
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>(() => {
+    if (dateParam && VALID_DATE_FILTERS.includes(dateParam)) return dateParam;
+    return 'TODAY';
+  });
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  // Persist tab & filter state across queue switches (SA-01)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', activeTab);
+    if (dateFilter !== 'TODAY') params.set('dateRange', dateFilter);
+    else params.delete('dateRange');
+    if (priorityFilter !== 'ALL') params.set('priority', priorityFilter);
+    else params.delete('priority');
+    const newQuery = params.toString() ? `?${params.toString()}` : '';
+    window.history.replaceState(null, '', `${window.location.pathname}${newQuery}`);
+  }, [activeTab, dateFilter, priorityFilter]);
 
   // Query: Clients for clientwise filtering
   const { data: clients = [] } = useQuery({
@@ -860,6 +886,18 @@ export function ApprovalsQueue() {
             <label className="block text-xs font-semibold text-slate-800 mb-1.5">
               Rejection Reason &amp; Corrective Guidance
             </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {QUICK_REJECTION_REASONS.map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  onClick={() => setRejectionReason((prev) => prev ? `${prev}; ${reason}` : reason)}
+                  className="text-[11px] px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md border border-slate-200/80 transition-colors text-left"
+                >
+                  + {reason}
+                </button>
+              ))}
+            </div>
             <textarea
               required
               rows={3}

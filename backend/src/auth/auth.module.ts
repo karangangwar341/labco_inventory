@@ -26,7 +26,7 @@ import { ShipmentPrivacyInterceptor } from './interceptors/shipment-privacy.inte
         return {
           secret,
           signOptions: {
-            expiresIn: (configService.get<string>('JWT_EXPIRATION') || '15m') as any,
+            expiresIn: (configService.get<string>('JWT_EXPIRATION') || '30d') as any,
           },
         };
       },
