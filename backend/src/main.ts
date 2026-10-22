@@ -130,7 +130,9 @@ async function bootstrap() {
     next();
   });
 
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/', 'health'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -162,8 +164,8 @@ async function bootstrap() {
     SwaggerModule.setup('api/v1/docs', app, document);
   }
 
-  const port = process.env.PORT ?? 4000;
-  await app.listen(port);
+  const port = process.env.X_ZOHO_CATALYST_LISTEN_PORT || process.env.PORT || 4000;
+  await app.listen(port, '0.0.0.0');
   console.log(`Application is listening on port ${port}.`);
   if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_API_DOCS === 'true') {
     console.log(`Swagger documentation: /api/v1/docs`);

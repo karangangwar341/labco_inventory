@@ -1,0 +1,191 @@
+name: Backend CI/CD - Zoho Catalyst AppSail
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'catalyst.json'
+      - '.github/workflows/deploy-backend-catalyst.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'catalyst.json'
+      - '.github/workflows/deploy-backend-catalyst.yml'
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Catalyst Target Environment'
+        required: true
+        default: 'Development'
+        type: choice
+        options:
+          - Development
+          - Production
+
+permissions:
+  contents: read
+
+jobs:
+  # ========================================================
+  # JOB 1: Continuous Integration & Quality Gate
+  # ========================================================
+  test-and-build:
+    name: Test & Build Quality Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: warehouse_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d warehouse_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/warehouse_test_db?schema=public"
+      JWT_SECRET: "ci-test-secret-key-at-least-32-characters-long"
+      STORAGE_DRIVER: "local"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Verify Secret Hygiene
+        run: |
+          echo "Scanning for accidental secrets or tracked .env files..."
+          if git ls-files | grep -E '(^|/)\.env($|\.)|\.key$|\.pem$' | grep -Ev '\.example$'; then
+            echo "ERROR: Tracked .env or secret file detected in git index!"
+            exit 1
+          fi
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Validate and Apply Migrations to Ephemeral DB
+        run: npm run prisma:migrate:deploy --workspace backend
+
+      - name: Typecheck Backend
+        run: npm run typecheck --workspace backend
+
+      - name: Lint Backend
+        run: npm run lint --workspace backend
+
+      - name: Run Backend Tests
+        env:
+          NODE_ENV: test
+        run: npm test --workspace backend
+
+      - name: Build Backend Artifacts
+        run: npm run build --workspace backend
+
+  # ========================================================
+  # JOB 2: Deploy to Zoho Catalyst AppSail
+  # ========================================================
+  deploy-to-catalyst:
+    name: Deploy to Zoho Catalyst AppSail
+    needs: test-and-build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    env:
+      ZCATALYST_NON_INTERACTIVE: "1"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Catalyst CLI
+        run: npm install -g zcatalyst-cli
+
+      - name: Verify Catalyst CLI Version
+        run: catalyst --version
+
+      - name: Install Root & Backend Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client & Build Backend
+        run: |
+          npm run prisma:generate
+          npm run build --workspace backend
+
+      - name: Deploy to Catalyst AppSail (Development)
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_env == 'Development')
+        env:
+          CATALYST_TOKEN: ${{ secrets.CATALYST_TOKEN }}
+          CATALYST_PROJECT_ID: ${{ secrets.CATALYST_PROJECT_ID }}
+          CATALYST_ORG_ID: ${{ secrets.CATALYST_ORG_ID }}
+          CATALYST_DC: ${{ secrets.CATALYST_DC || 'in' }}
+        run: |
+          echo "Deploying warehouse-backend service to Zoho Catalyst AppSail (Development)..."
+          catalyst deploy \
+            --only appsail:warehouse-backend \
+            --token "$CATALYST_TOKEN" \
+            --project "$CATALYST_PROJECT_ID" \
+            --org "$CATALYST_ORG_ID" \
+            --dc "$CATALYST_DC" \
+            -ni
+
+      - name: Deploy to Catalyst AppSail (Production)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.target_env == 'Production'
+        env:
+          CATALYST_TOKEN: ${{ secrets.CATALYST_TOKEN }}
+          CATALYST_PROJECT_ID: ${{ secrets.CATALYST_PROJECT_ID }}
+          CATALYST_ORG_ID: ${{ secrets.CATALYST_ORG_ID }}
+          CATALYST_DC: ${{ secrets.CATALYST_DC || 'in' }}
+        run: |
+          echo "Deploying warehouse-backend service to Zoho Catalyst AppSail (Production)..."
+          catalyst deploy \
+            --only appsail:warehouse-backend \
+            --production \
+            --token "$CATALYST_TOKEN" \
+            --project "$CATALYST_PROJECT_ID" \
+            --org "$CATALYST_ORG_ID" \
+            --dc "$CATALYST_DC" \
+            -ni
+
+      - name: Health Verification
+        if: env.CATALYST_APP_URL != ''
+        env:
+          CATALYST_APP_URL: ${{ secrets.CATALYST_APP_URL }}
+        run: |
+          echo "Verifying health endpoint at ${CATALYST_APP_URL}/health..."
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${CATALYST_APP_URL}/health" || echo "000")
+            if [ "$STATUS" -eq 200 ]; then
+              echo "AppSail instance is healthy and responding (HTTP 200)."
+              exit 0
+            fi
+            echo "Waiting for container startup (attempt $i/12, status: $STATUS)..."
+            sleep 5
+          done
+          echo "WARNING: Health check did not return 200 within 60 seconds."
+          exit 1
