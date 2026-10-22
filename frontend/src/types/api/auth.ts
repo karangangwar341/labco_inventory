@@ -10,7 +10,7 @@ export interface UserSummaryDto {
   username: string;
   role: UserRole;
   status: UserStatus;
-  clientId?: string | null;
+  projectId?: string | null;
   assignedWarehouseIds?: string[];
 }
 
@@ -31,20 +31,19 @@ export interface AppBootstrap {
     brand: string | null;
     description: string | null;
     categoryId: string;
-    ownerScope: 'COMPANY' | 'CLIENT';
-    clientId: string | null;
+    ownerScope: 'COMPANY' | 'PROJECT';
+    projectId: string | null;
     status: 'APPROVED';
     quantityPrecision: number;
     allowFractional: boolean;
     minQuantity: string;
     minOrderQuantity: string;
-    trackingMode: string;
     createdAt: string;
-    category: { id: string; name: string; parentId: string | null; ownerScope: 'COMPANY' | 'CLIENT'; clientId: string | null };
+    category: { id: string; name: string; parentId: string | null; ownerScope: 'COMPANY' | 'PROJECT'; projectId: string | null };
     units: Array<{ id: string; unitName: string; isBaseUnit: boolean; conversionToBase: string | number }>;
   }>;
-  categories: Array<{ id: string; name: string; parentId: string | null; ownerScope: 'COMPANY' | 'CLIENT'; clientId: string | null }>;
-  locations: Array<{ id: string; name: string; locationType: 'WAREHOUSE' | 'CLIENT'; warehouseId: string | null; clientId: string | null }>;
+  categories: Array<{ id: string; name: string; parentId: string | null; ownerScope: 'COMPANY' | 'PROJECT'; projectId: string | null }>;
+  locations: Array<{ id: string; name: string; locationType: 'WAREHOUSE' | 'PROJECT'; warehouseId: string | null; projectId: string | null }>;
 }
 
 export interface CurrentUserProfile {
@@ -53,6 +52,6 @@ export interface CurrentUserProfile {
   role: UserRole;
   status: UserStatus;
   sessionId?: string;
-  clientId?: string | null;
+  projectId?: string | null;
   assignedWarehouseIds?: string[];
 }

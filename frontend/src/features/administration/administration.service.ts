@@ -4,11 +4,11 @@ import { endpoints } from '../../lib/api/endpoints';
 export interface UserAccount {
   id: string;
   username: string;
-  role: 'SUPER_ADMIN' | 'STORE_ADMIN' | 'CLIENT_ADMIN';
+  role: 'SUPER_ADMIN' | 'STORE_ADMIN' | 'PROJECT_ADMIN';
   status: 'ACTIVE' | 'LOCKED' | 'DISABLED';
-  clientId?: string | null;
+  projectId?: string | null;
   warehouseId?: string | null;
-  client?: { id: string; name: string };
+  project?: { id: string; name: string };
   warehouse?: { id: string; name: string };
   createdAt: string;
 }
@@ -19,13 +19,13 @@ export interface OrganizationOption {
   status?: 'ACTIVE' | 'INACTIVE';
 }
 
-export interface ManagedClient extends OrganizationOption {
+export interface ManagedProject extends OrganizationOption {
   warehouseAssignments?: Array<{ id: string; warehouseId: string; isActive: boolean; warehouse: OrganizationOption }>;
 }
 
 export interface ManagedWarehouse extends OrganizationOption {
   locationDescription?: string | null;
-  clientAssignments?: Array<{ id: string; clientId: string; isActive: boolean; client: OrganizationOption }>;
+  projectAssignments?: Array<{ id: string; projectId: string; isActive: boolean; project: OrganizationOption }>;
 }
 
 export const administrationService = {
@@ -37,7 +37,7 @@ export const administrationService = {
     username: string;
     password?: string;
     role: string;
-    clientId?: string;
+    projectId?: string;
     warehouseId?: string;
   }): Promise<UserAccount> => {
     return apiClient.post<UserAccount>(endpoints.users.create(), payload);
@@ -51,24 +51,24 @@ export const administrationService = {
     return apiClient.post(endpoints.users.resetPassword(id), { newPassword });
   },
 
-  getClients: async (): Promise<ManagedClient[]> => {
-    return apiClient.get<ManagedClient[]>(endpoints.organization.clients());
+  getProjects: async (): Promise<ManagedProject[]> => {
+    return apiClient.get<ManagedProject[]>(endpoints.organization.projects());
   },
 
-  getClient: async (id: string): Promise<ManagedClient> => {
-    return apiClient.get<ManagedClient>(endpoints.organization.clientById(id));
+  getProject: async (id: string): Promise<ManagedProject> => {
+    return apiClient.get<ManagedProject>(endpoints.organization.projectById(id));
   },
 
   getWarehouses: async (): Promise<ManagedWarehouse[]> => {
     return apiClient.get<ManagedWarehouse[]>(endpoints.organization.warehouses());
   },
 
-  createClient: async (name: string): Promise<ManagedClient> => {
-    return apiClient.post(endpoints.organization.createClient(), { name });
+  createProject: async (name: string): Promise<ManagedProject> => {
+    return apiClient.post(endpoints.organization.createProject(), { name });
   },
 
-  updateClient: async (id: string, payload: { name?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<ManagedClient> => {
-    return apiClient.patch(endpoints.organization.updateClient(id), payload);
+  updateProject: async (id: string, payload: { name?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<ManagedProject> => {
+    return apiClient.patch(endpoints.organization.updateProject(id), payload);
   },
 
   createWarehouse: async (payload: { name: string; locationDescription?: string }): Promise<ManagedWarehouse> => {
@@ -79,11 +79,11 @@ export const administrationService = {
     return apiClient.patch(endpoints.organization.updateWarehouse(id), payload);
   },
 
-  assignWarehouse: async (clientId: string, warehouseId: string) => {
-    return apiClient.post(endpoints.organization.clientWarehouses(clientId), { warehouseId });
+  assignWarehouse: async (projectId: string, warehouseId: string) => {
+    return apiClient.post(endpoints.organization.projectWarehouses(projectId), { warehouseId });
   },
 
-  deactivateAssignment: async (clientId: string, warehouseId: string) => {
-    return apiClient.delete(endpoints.organization.clientWarehouseAssignment(clientId, warehouseId));
+  deactivateAssignment: async (projectId: string, warehouseId: string) => {
+    return apiClient.delete(endpoints.organization.projectWarehouseAssignment(projectId, warehouseId));
   },
 };

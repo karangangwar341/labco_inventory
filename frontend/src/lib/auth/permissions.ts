@@ -19,11 +19,11 @@ export function canCreateWarehouseDispatches(role?: UserRole): boolean {
 }
 
 export function canManageDepartments(role?: UserRole): boolean {
-  return role === 'SUPER_ADMIN' || role === 'CLIENT_ADMIN';
+  return role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 }
 
 export function canViewWarehouseIdentity(role?: UserRole): boolean {
-  return role !== 'CLIENT_ADMIN';
+  return role !== 'PROJECT_ADMIN';
 }
 
 export function canManageUsers(role?: UserRole): boolean {
@@ -31,5 +31,5 @@ export function canManageUsers(role?: UserRole): boolean {
 }
 
 export function canReceiveShipments(role?: UserRole): boolean {
-  return role === 'SUPER_ADMIN' || role === 'CLIENT_ADMIN';
+  return role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 }

@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ClientsService } from './clients.service.js';
+import { ProjectsService } from './projects.service.js';
 import { WarehousesService } from './warehouses.service.js';
 import { UserRole, OrganizationStatus } from '@prisma/client';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
-describe('Organization Services (Clients & Warehouses)', () => {
-  let clientsService: ClientsService;
+describe('Organization Services (Projects & Warehouses)', () => {
+  let projectsService: ProjectsService;
   let warehousesService: WarehousesService;
   let mockPrisma: any;
 
   beforeEach(() => {
     mockPrisma = {
-      client: {
+      project: {
         findUnique: vi.fn(),
         create: vi.fn(),
         findMany: vi.fn(),
@@ -23,7 +23,7 @@ describe('Organization Services (Clients & Warehouses)', () => {
         findMany: vi.fn(),
         update: vi.fn(),
       },
-      clientWarehouseAssignment: {
+      projectWarehouseAssignment: {
         findFirst: vi.fn(),
         findMany: vi.fn(),
         create: vi.fn(),
@@ -34,49 +34,49 @@ describe('Organization Services (Clients & Warehouses)', () => {
       },
     };
 
-    clientsService = new ClientsService(mockPrisma as any);
+    projectsService = new ProjectsService(mockPrisma as any);
     warehousesService = new WarehousesService(mockPrisma as any);
   });
 
-  describe('ClientsService', () => {
-    it('creates client with unique normalized name', async () => {
-      mockPrisma.client.findUnique.mockResolvedValue(null);
-      mockPrisma.client.create.mockResolvedValue({
+  describe('ProjectsService', () => {
+    it('creates project with unique normalized name', async () => {
+      mockPrisma.project.findUnique.mockResolvedValue(null);
+      mockPrisma.project.create.mockResolvedValue({
         id: 'c-1',
         name: 'Apex Manufacturing',
         status: OrganizationStatus.ACTIVE,
       });
 
-      const res = await clientsService.create({ name: '  Apex Manufacturing  ' });
+      const res = await projectsService.create({ name: '  Apex Manufacturing  ' });
 
-      expect(mockPrisma.client.findUnique).toHaveBeenCalledWith({ where: { name: 'Apex Manufacturing' } });
+      expect(mockPrisma.project.findUnique).toHaveBeenCalledWith({ where: { name: 'Apex Manufacturing' } });
       expect(res.name).toBe('Apex Manufacturing');
     });
 
-    it('throws ConflictException on duplicate client name', async () => {
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'c-1', name: 'Apex Manufacturing' });
+    it('throws ConflictException on duplicate project name', async () => {
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'c-1', name: 'Apex Manufacturing' });
 
-      await expect(clientsService.create({ name: 'Apex Manufacturing' })).rejects.toThrow(ConflictException);
+      await expect(projectsService.create({ name: 'Apex Manufacturing' })).rejects.toThrow(ConflictException);
     });
 
-    it('assigns warehouse to client', async () => {
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'c-1' });
+    it('assigns warehouse to project', async () => {
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'c-1' });
       mockPrisma.warehouse.findUnique.mockResolvedValue({ id: 'w-1' });
-      mockPrisma.clientWarehouseAssignment.findFirst.mockResolvedValue(null);
-      mockPrisma.clientWarehouseAssignment.create.mockResolvedValue({
+      mockPrisma.projectWarehouseAssignment.findFirst.mockResolvedValue(null);
+      mockPrisma.projectWarehouseAssignment.create.mockResolvedValue({
         id: 'a-1',
-        clientId: 'c-1',
+        projectId: 'c-1',
         warehouseId: 'w-1',
         isActive: true,
       });
 
-      const res = await clientsService.assignWarehouse('c-1', 'w-1', 'admin-id');
+      const res = await projectsService.assignWarehouse('c-1', 'w-1', 'admin-id');
 
       expect(res.isActive).toBe(true);
-      expect(mockPrisma.clientWarehouseAssignment.create).toHaveBeenCalledWith(
+      expect(mockPrisma.projectWarehouseAssignment.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            clientId: 'c-1',
+            projectId: 'c-1',
             warehouseId: 'w-1',
             isActive: true,
           }),
@@ -85,21 +85,21 @@ describe('Organization Services (Clients & Warehouses)', () => {
     });
 
     it('deactivates warehouse assignment', async () => {
-      mockPrisma.clientWarehouseAssignment.findFirst.mockResolvedValue({
+      mockPrisma.projectWarehouseAssignment.findFirst.mockResolvedValue({
         id: 'a-1',
-        clientId: 'c-1',
+        projectId: 'c-1',
         warehouseId: 'w-1',
         isActive: true,
       });
-      mockPrisma.clientWarehouseAssignment.update.mockResolvedValue({
+      mockPrisma.projectWarehouseAssignment.update.mockResolvedValue({
         id: 'a-1',
         isActive: false,
       });
 
-      const res = await clientsService.deactivateWarehouseAssignment('c-1', 'w-1', 'admin-id');
+      const res = await projectsService.deactivateWarehouseAssignment('c-1', 'w-1', 'admin-id');
 
       expect(res.isActive).toBe(false);
-      expect(mockPrisma.clientWarehouseAssignment.update).toHaveBeenCalledWith({
+      expect(mockPrisma.projectWarehouseAssignment.update).toHaveBeenCalledWith({
         where: { id: 'a-1' },
         data: expect.objectContaining({
           isActive: false,

@@ -32,8 +32,8 @@ export class ReportsService {
         const loc = await this.prisma.stockLocation.findUnique({ where: { warehouseId: query.warehouseId } });
         return loc ? [loc.id] : [];
       }
-      if (query.clientId) {
-        const loc = await this.prisma.stockLocation.findUnique({ where: { clientId: query.clientId } });
+      if (query.projectId) {
+        const loc = await this.prisma.stockLocation.findUnique({ where: { projectId: query.projectId } });
         return loc ? [loc.id] : [];
       }
       return undefined; // All locations
@@ -57,19 +57,19 @@ export class ReportsService {
       return [loc.id];
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.clientId) {
-        throw new ForbiddenException('Client Admin is not assigned to any client organization');
+      if (!dbUser?.projectId) {
+        throw new ForbiddenException('Project Admin is not assigned to any project organization');
       }
 
       const loc = await this.prisma.stockLocation.findUnique({
-        where: { clientId: dbUser.clientId },
+        where: { projectId: dbUser.projectId },
       });
       if (!loc) return [];
 
       if (query.locationId && query.locationId !== loc.id) {
-        throw new ForbiddenException('Client Admin cannot view other location data');
+        throw new ForbiddenException('Project Admin cannot view other location data');
       }
 
       return [loc.id];
@@ -89,9 +89,9 @@ export class ReportsService {
   ) {
     if (
       user.role === UserRole.STORE_ADMIN &&
-      (reportType === ReportType.CLIENT_CONSUMPTION || reportType === ReportType.PRODUCTION_RUNS)
+      (reportType === ReportType.PROJECT_CONSUMPTION || reportType === ReportType.PRODUCTION_RUNS)
     ) {
-      throw new ForbiddenException('Store Admin cannot view client-side activity reports');
+      throw new ForbiddenException('Store Admin cannot view project-side activity reports');
     }
 
     const scopedLocationIds = await this.getScopedLocations(user, query);
@@ -106,12 +106,8 @@ export class ReportsService {
         rows = await this.generateInventoryLedgerReport(scopedLocationIds, query, user);
         break;
 
-      case ReportType.BATCH_EXPIRY:
-        rows = await this.generateBatchExpiryReport(scopedLocationIds, query, user);
-        break;
-
-      case ReportType.CLIENT_CONSUMPTION:
-        rows = await this.generateClientConsumptionReport(user, query);
+      case ReportType.PROJECT_CONSUMPTION:
+        rows = await this.generateProjectConsumptionReport(user, query);
         break;
 
       case ReportType.PRODUCTION_RUNS:
@@ -120,6 +116,13 @@ export class ReportsService {
 
       case ReportType.SHIPMENTS:
         rows = await this.generateShipmentsReport(scopedLocationIds, query, user);
+        break;
+
+      case ReportType.MISSING_STOCK:
+        if (user.role !== UserRole.SUPER_ADMIN) {
+          throw new ForbiddenException('Missing stock report is available to Super Admin only');
+        }
+        rows = await this.generateMissingStockReport(scopedLocationIds, query);
         break;
 
       default:
@@ -189,7 +192,6 @@ export class ReportsService {
             id: true,
             name: true,
             minQuantity: true,
-            trackingMode: true,
             units: {
               where: { isBaseUnit: true },
               select: { unitName: true },
@@ -201,10 +203,9 @@ export class ReportsService {
             id: true,
             locationType: true,
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
-        batch: { select: { id: true, batchNumber: true, expiryDate: true } },
       },
       orderBy: [{ productId: 'asc' }, { locationId: 'asc' }],
     });
@@ -213,15 +214,12 @@ export class ReportsService {
       const usable = b.usableQty.toNumber();
       const reserved = b.reservedQty.toNumber();
       const available = Math.max(0, usable - reserved);
-      const damaged = b.damagedQty.toNumber();
-      const expired = b.expiredQty.toNumber();
-      const physical = usable + damaged + expired;
       const minQty = b.product.minQuantity.toNumber();
       const baseUnit = b.product.units?.[0]?.unitName || 'Units';
       const locationName =
         b.location.locationType === 'WAREHOUSE'
           ? b.location.warehouse?.name ?? 'Warehouse'
-          : b.location.client?.name ?? 'Client';
+          : b.location.project?.name ?? 'Project';
 
       return {
         productId: b.product.id,
@@ -229,14 +227,9 @@ export class ReportsService {
         baseUnit,
         locationName,
         locationType: b.location.locationType,
-        batchNumber: b.batch?.batchNumber || 'NONE',
-        expiryDate: b.batch?.expiryDate ? b.batch.expiryDate.toISOString().slice(0, 10) : 'NONE',
         usableQuantity: usable,
         reservedQuantity: reserved,
         availableQuantity: available,
-        damagedQuantity: damaged,
-        expiredQuantity: expired,
-        physicalQuantity: physical,
         minThreshold: minQty,
         lowStockAlert: available < minQty && minQty > 0,
       };
@@ -281,6 +274,7 @@ export class ReportsService {
             transactionType: true,
             sourceRefType: true,
             sourceRefId: true,
+            reason: true,
             postedAt: true,
             postedBy: { select: { id: true, username: true, role: true } },
           },
@@ -291,10 +285,9 @@ export class ReportsService {
             id: true,
             locationType: true,
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
-        batch: { select: { id: true, batchNumber: true } },
       },
       orderBy: { transaction: { postedAt: 'desc' } },
       take: 1000,
@@ -304,10 +297,10 @@ export class ReportsService {
       let locationName =
         e.location.locationType === 'WAREHOUSE'
           ? e.location.warehouse?.name ?? 'Warehouse'
-          : e.location.client?.name ?? 'Client';
+          : e.location.project?.name ?? 'Project';
 
-      // Tenant privacy invariant: Client Admin views must NOT reveal source warehouse identity
-      if (user.role === UserRole.CLIENT_ADMIN && e.location.locationType === 'WAREHOUSE') {
+      // Tenant privacy invariant: Project Admin views must NOT reveal source warehouse identity
+      if (user.role === UserRole.PROJECT_ADMIN && e.location.locationType === 'WAREHOUSE') {
         locationName = '[REDACTED]';
       }
 
@@ -317,8 +310,8 @@ export class ReportsService {
         sourceRefType: e.transaction.sourceRefType || 'DIRECT',
         sourceRefId: e.transaction.sourceRefId || null,
         productName: e.product.name,
-        batchNumber: e.batch?.batchNumber || 'NONE',
         condition: e.condition,
+        reason: e.transaction.reason,
         originalQuantity: e.originalQty.toNumber(),
         unitName: e.unitNameSnapshot,
         baseDelta: e.qtyDeltaBase.toNumber(),
@@ -330,89 +323,28 @@ export class ReportsService {
   }
 
   // ==========================================
-  // 3. BATCH EXPIRY REPORT
+  // 4. PROJECT CONSUMPTION REPORT
   // ==========================================
 
-  private async generateBatchExpiryReport(
-    scopedLocationIds: string[] | undefined,
-    query: QueryReportDto,
-    user: AuthenticatedUser,
-  ): Promise<Record<string, any>[]> {
-    const where: Prisma.StockBatchWhereInput = {
-      expiryDate: { not: null },
-    };
-    if (query.productId) {
-      where.productId = query.productId;
-    }
-    if (user.role === UserRole.STORE_ADMIN) {
-      where.product = { kind: ProductKind.RAW_MATERIAL };
-    }
-
-    const batches = await this.prisma.stockBatch.findMany({
-      where,
-      include: {
-        product: { select: { id: true, name: true } },
-        balances: {
-          where: scopedLocationIds ? { locationId: { in: scopedLocationIds } } : {},
-        },
-      },
-      orderBy: { expiryDate: 'asc' },
-    });
-
-    const now = new Date();
-
-    return batches.map((b) => {
-      let usable = 0;
-      let expired = 0;
-      let damaged = 0;
-
-      for (const bal of b.balances) {
-        usable += bal.usableQty.toNumber();
-        expired += bal.expiredQty.toNumber();
-        damaged += bal.damagedQty.toNumber();
-      }
-
-      const daysRemaining = b.expiryDate
-        ? Math.ceil((b.expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        : 0;
-
-      return {
-        productName: b.product.name,
-        batchNumber: b.batchNumber || b.id,
-        expiryDate: b.expiryDate?.toISOString().slice(0, 10),
-        daysRemaining,
-        batchStatus: b.status,
-        usableQuantity: usable,
-        expiredQuantity: expired,
-        damagedQuantity: damaged,
-        isExpired: daysRemaining <= 0,
-      };
-    });
-  }
-
-  // ==========================================
-  // 4. CLIENT CONSUMPTION REPORT
-  // ==========================================
-
-  private async generateClientConsumptionReport(
+  private async generateProjectConsumptionReport(
     user: AuthenticatedUser,
     query: QueryReportDto,
   ): Promise<Record<string, any>[]> {
-    let clientId = query.clientId;
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    let projectId = query.projectId;
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      clientId = dbUser?.clientId || undefined;
+      projectId = dbUser?.projectId || undefined;
     }
 
-    if (!clientId && user.role !== UserRole.SUPER_ADMIN) {
-      throw new BadRequestException('clientId is required for Client Consumption Report');
+    if (!projectId && user.role !== UserRole.SUPER_ADMIN) {
+      throw new BadRequestException('projectId is required for Project Consumption Report');
     }
 
     const issueWhere: Prisma.DepartmentIssueWhereInput = { status: 'APPROVED' };
     const returnWhere: Prisma.DepartmentReturnWhereInput = { status: 'APPROVED' };
-    if (clientId) {
-      issueWhere.clientId = clientId;
-      returnWhere.clientId = clientId;
+    if (projectId) {
+      issueWhere.projectId = projectId;
+      returnWhere.projectId = projectId;
     }
     if (query.productId) {
       issueWhere.productId = query.productId;
@@ -475,7 +407,6 @@ export class ReportsService {
         quantity: r.quantity.toNumber(),
         unit: r.unitNameSnapshot,
         baseQuantity: r.baseQuantity.toNumber(),
-        condition: r.condition,
         date: r.approvedAt?.toISOString().slice(0, 10) || r.createdAt.toISOString().slice(0, 10),
       });
     });
@@ -493,11 +424,11 @@ export class ReportsService {
   ): Promise<Record<string, any>[]> {
     const where: Prisma.ProductionRunWhereInput = {};
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      where.clientId = dbUser?.clientId || undefined;
-    } else if (query.clientId) {
-      where.clientId = query.clientId;
+      where.projectId = dbUser?.projectId || undefined;
+    } else if (query.projectId) {
+      where.projectId = query.projectId;
     }
 
     if (query.startDate || query.endDate) {
@@ -517,7 +448,7 @@ export class ReportsService {
     const runs = await this.prisma.productionRun.findMany({
       where,
       include: {
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         inputs: { include: { product: { select: { name: true } } } },
         outputs: { include: { product: { select: { name: true } } } },
       },
@@ -528,7 +459,7 @@ export class ReportsService {
       return {
         runId: r.id,
         productionReference: r.productionReference || 'N/A',
-        clientName: r.client.name,
+        projectName: r.project.name,
         mode: r.mode,
         status: r.status,
         plannedOutput: r.plannedOutput ? r.plannedOutput.toNumber() : 0,
@@ -590,7 +521,7 @@ export class ReportsService {
             id: true,
             locationType: true,
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
         destinationLocation: {
@@ -598,7 +529,7 @@ export class ReportsService {
             id: true,
             locationType: true,
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
         lines: {
@@ -615,15 +546,15 @@ export class ReportsService {
       let sourceName =
         s.sourceLocation.locationType === 'WAREHOUSE'
           ? s.sourceLocation.warehouse?.name ?? 'Warehouse'
-          : s.sourceLocation.client?.name ?? 'Client';
+          : s.sourceLocation.project?.name ?? 'Project';
 
       let destinationName =
         s.destinationLocation.locationType === 'WAREHOUSE'
           ? s.destinationLocation.warehouse?.name ?? 'Warehouse'
-          : s.destinationLocation.client?.name ?? 'Client';
+          : s.destinationLocation.project?.name ?? 'Project';
 
-      // Tenant privacy invariant: Client Admin must not see source warehouse name
-      if (user.role === UserRole.CLIENT_ADMIN && s.sourceLocation.locationType === 'WAREHOUSE') {
+      // Tenant privacy invariant: Project Admin must not see source warehouse name
+      if (user.role === UserRole.PROJECT_ADMIN && s.sourceLocation.locationType === 'WAREHOUSE') {
         sourceName = '[REDACTED]';
       }
 
@@ -644,6 +575,70 @@ export class ReportsService {
     });
   }
 
+  private async generateMissingStockReport(
+    scopedLocationIds: string[] | undefined,
+    query: QueryReportDto,
+  ): Promise<Record<string, any>[]> {
+    const resolvedAt: Prisma.DateTimeFilter = {};
+    if (query.startDate) {
+      const start = new Date(`${query.startDate}T00:00:00.000Z`);
+      if (Number.isNaN(start.getTime())) throw new BadRequestException('Invalid startDate');
+      resolvedAt.gte = start;
+    }
+    if (query.endDate) {
+      const end = new Date(`${query.endDate}T00:00:00.000Z`);
+      if (Number.isNaN(end.getTime())) throw new BadRequestException('Invalid endDate');
+      end.setUTCDate(end.getUTCDate() + 1);
+      resolvedAt.lt = end;
+    }
+    if (query.startDate && query.endDate && query.startDate > query.endDate) {
+      throw new BadRequestException('startDate must be on or before endDate');
+    }
+
+    const lines = await this.prisma.shipmentLine.findMany({
+      where: {
+        productId: query.productId || undefined,
+        discrepancyQty: { gt: 0 },
+        shipment: {
+          discrepancyResolution: 'MISSING',
+          discrepancyResolvedAt: Object.keys(resolvedAt).length ? resolvedAt : undefined,
+          ...(scopedLocationIds ? { OR: [
+            { sourceLocationId: { in: scopedLocationIds } },
+            { destinationLocationId: { in: scopedLocationIds } },
+          ] } : {}),
+        },
+      },
+      include: {
+        product: { select: { id: true, name: true, units: { where: { isBaseUnit: true }, select: { unitName: true }, take: 1 } } },
+        shipment: { select: { id: true, discrepancyResolvedAt: true, discrepancyResolutionNote: true } },
+      },
+      orderBy: { shipment: { discrepancyResolvedAt: 'asc' } },
+    });
+
+    const totals = new Map<string, { productName: string; unit: string; quantity: Prisma.Decimal; shipments: Set<string> }>();
+    for (const line of lines) {
+      const current = totals.get(line.productId) || {
+        productName: line.product.name,
+        unit: line.product.units[0]?.unitName || line.unitName,
+        quantity: new Prisma.Decimal(0),
+        shipments: new Set<string>(),
+      };
+      current.quantity = current.quantity.add(line.discrepancyQty!.mul(line.conversionToBaseSnapshot));
+      current.shipments.add(line.shipmentId);
+      totals.set(line.productId, current);
+    }
+
+    return [...totals.entries()]
+      .sort((a, b) => a[1].productName.localeCompare(b[1].productName))
+      .map(([productId, value]) => ({
+        productId,
+        productName: value.productName,
+        missingQuantity: value.quantity.toNumber(),
+        unit: value.unit,
+        shipmentCount: value.shipments.size,
+      }));
+  }
+
   // ==========================================
   // EXCEL (XLSX) GENERATION ENGINE
   // ==========================================
@@ -657,21 +652,15 @@ export class ReportsService {
       title: 'Movement History & Inventory Ledger',
       description: 'Immutable double-entry inventory audit trail and stock movement deltas.',
       deltaExplanation:
-        "Stock Delta ('baseDelta'): Net change in physical usable inventory in base packaging units. Positive (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). Negative (- / Direction 'OUT') = stock deducted (client dispatch, consumption, write-off).",
+        "Stock Delta ('baseDelta'): Net change in usable inventory in base packaging units. Positive (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). Negative (- / Direction 'OUT') = stock deducted (project dispatch, consumption, damaged stock-out).",
     },
     [ReportType.STOCK_BALANCE]: {
       title: 'Current Stock Balances & Availability',
-      description: 'Real-time projected usable, reserved, available, and quarantined quantities.',
+      description: 'Real-time usable, reserved, and available quantities.',
       deltaExplanation:
-        'Formula Invariants: Available = Usable - Reserved. Physical Total = Usable + Damaged + Expired. Low Stock Alert triggers when Available < Min Threshold.',
+        'Formula: Available = Usable - Reserved. Low Stock Alert triggers when Available < Min Threshold.',
     },
-    [ReportType.BATCH_EXPIRY]: {
-      title: 'Batch & Lot Expiry Forecast',
-      description: 'Lot-level expiration schedule, days remaining, and shelf-life tracking.',
-      deltaExplanation:
-        'Days Remaining shows calendar days until lot expiration. Batches with <= 0 days remaining are classified as Expired and locked from dispensing.',
-    },
-    [ReportType.CLIENT_CONSUMPTION]: {
+    [ReportType.PROJECT_CONSUMPTION]: {
       title: 'Clinical Department Consumption & Usage',
       description: 'Internal clinical and department stock issues and return activities.',
       deltaExplanation:
@@ -688,6 +677,11 @@ export class ReportsService {
       description: 'Inbound, outbound, and inter-facility stock movements, status, quantities, and dates.',
       deltaExplanation:
         'Dispatched quantity shows items en route from source to destination location.',
+    },
+    [ReportType.MISSING_STOCK]: {
+      title: 'Missing Stock by Product',
+      description: 'Short quantities confirmed as missing by a Super Admin, grouped by product in base units.',
+      deltaExplanation: 'Only discrepancies resolved as MISSING are included. Calculation mistakes returned to the source warehouse are excluded.',
     },
   };
 
@@ -801,38 +795,30 @@ export class ReportsService {
   private appendGlossarySheet(wb: XLSX.WorkBook) {
     const glossaryAoa: any[][] = [
       ['LABCO INSTRUMENTS WAREHOUSE MANAGEMENT SYSTEM — DATA DICTIONARY & GLOSSARY'],
-      ['Overview:', 'Audit-grade inventory movement ledgers, batch expiry forecasting, and stock telemetry definitions.'],
+      ['Overview:', 'Audit-grade inventory movement ledgers and stock telemetry definitions.'],
       [],
       ['COLUMN / FIELD', 'DATA TYPE', 'BUSINESS MEANING & DOMAIN INVARIANTS'],
-      ['baseDelta', 'Number (Decimal)', "STOCK DELTA: Net change in physical inventory balance measured in the catalog product's base unit. POSITIVE (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). NEGATIVE (- / Direction 'OUT') = stock deducted (client dispatch, consumption, write-off)."],
+      ['baseDelta', 'Number (Decimal)', "STOCK DELTA: Net change in usable inventory measured in the catalog product's base unit. POSITIVE (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). NEGATIVE (- / Direction 'OUT') = stock deducted (project dispatch, consumption, damaged stock-out)."],
       ['direction', 'String (IN / OUT)', "Operational stock flow relative to the location: 'IN' indicates stock entered inventory (+); 'OUT' indicates stock left inventory (-)."],
       ['timestamp', 'ISO 8601 Date', 'Exact date and time when the inventory transaction was finalized and immutably ledgered.'],
-      ['transactionType', 'Enum', 'Operational workflow type: TRANSFER (between facilities), DISPATCH (warehouse to client), STOCK_IN (receipt), STOCK_OUT (deduction), MANUFACTURING (production).'],
+      ['transactionType', 'Enum', 'Operational workflow type: TRANSFER (between facilities), DISPATCH (warehouse to project), STOCK_IN (receipt), STOCK_OUT (deduction), MANUFACTURING (production).'],
       ['sourceRefType', 'Enum', 'Authorizing document type: STOCK_REQUEST, SHIPMENT, DEPARTMENT_ISSUE, DEPARTMENT_RETURN, PRODUCTION_RUN, DIRECT.'],
       ['sourceRefId', 'UUID / String', 'Unique reference ID of the authorizing document, request, or shipment.'],
       ['productName', 'String', 'Standardized catalog name of the reagent, consumable, or diagnostic product.'],
-      ['batchNumber', 'String', 'Lot or Batch identifier tracking physical batch provenance and shelf life.'],
-      ['condition', 'Enum', 'Inventory quality classification: USABLE (available for use), DAMAGED (broken/quarantined), EXPIRED (past shelf life), QUARANTINE (holding).'],
+      ['condition', 'Enum', 'Transaction flag: USABLE or DAMAGED. DAMAGED is recorded only on approved stock-out transactions.'],
       ['originalQuantity', 'Number (Decimal)', 'Quantity specified in the transaction using the selected packaging unit snapshot.'],
       ['unitName', 'String', 'The packaging unit active during transaction entry (e.g., Pack, Kit, Vial, Box, Bottle).'],
-      ['locationName', 'String', 'The warehouse or client facility where the inventory transaction was executed.'],
+      ['locationName', 'String', 'The warehouse or project facility where the inventory transaction was executed.'],
       ['postedBy', 'String', 'Username of the authorized operator who submitted or posted the transaction.'],
       [],
       ['STOCK BALANCE FORMULAS & FIELDS', '', ''],
       ['usableQuantity', 'Number (Decimal)', 'Stock in usable condition available for immediate transfer, dispatch, or manufacturing.'],
       ['reservedQuantity', 'Number (Decimal)', 'Stock allocated to approved pending dispatches or in-progress runs, not yet shipped.'],
       ['availableQuantity', 'Number (Decimal)', 'Formula: Available = Usable - Reserved. Non-negotiable invariant: must never be negative.'],
-      ['damagedQuantity', 'Number (Decimal)', 'Stock damaged or compromised, held segregated from usable stock.'],
-      ['expiredQuantity', 'Number (Decimal)', 'Stock exceeding its expiration date, locked from dispensing pending write-off.'],
-      ['physicalQuantity', 'Number (Decimal)', 'Formula: Physical Total = Usable + Damaged + Expired.'],
       ['minThreshold', 'Number (Decimal)', 'Configured minimum safe reorder threshold for the product at this location.'],
       ['lowStockAlert', 'Boolean', 'True when Available Stock is below Min Threshold (Available < Min Threshold).'],
-      [],
-      ['EXPIRY & LOGISTICS FIELDS', '', ''],
-      ['daysRemaining', 'Integer', 'Number of calendar days remaining until lot expiration. Zero or negative indicates expired.'],
-      ['batchStatus', 'Enum', 'ACTIVE (safe shelf life), WARNING (approaching expiry <= 30 days), EXPIRED (shelf life ended).'],
       ['dispatchedQuantity', 'Number (Decimal)', 'Quantity of goods dispatched in an active shipment.'],
-      ['shipmentType', 'Enum', 'DISPATCH_TO_CLIENT (warehouse to client), TRANSFER (warehouse to warehouse).'],
+      ['shipmentType', 'Enum', 'DISPATCH_TO_PROJECT (warehouse to project), TRANSFER (warehouse to warehouse).'],
     ];
 
     const wsGlossary = XLSX.utils.aoa_to_sheet(glossaryAoa);
@@ -890,7 +876,7 @@ export class ReportsService {
       format: query.format || 'json',
       locationId: query.locationId || null,
       productId: query.productId || null,
-      clientId: query.clientId || null,
+      projectId: query.projectId || null,
       warehouseId: query.warehouseId || null,
       startDate: query.startDate || null,
       endDate: query.endDate || null,

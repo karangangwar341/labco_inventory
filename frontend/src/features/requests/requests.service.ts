@@ -12,7 +12,7 @@ export const requestsService = {
   getRequests: async (params?: {
     status?: RequestStatus;
     requestType?: string;
-    clientId?: string;
+    projectId?: string;
     warehouseId?: string;
     limit?: number;
     page?: number;

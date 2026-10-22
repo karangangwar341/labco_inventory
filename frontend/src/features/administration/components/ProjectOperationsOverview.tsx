@@ -49,7 +49,7 @@ const getText = (row: ReportRow, key: string, fallback = "—") => {
 };
 const getNumber = (row: ReportRow, key: string) => Number(row[key] ?? 0) || 0;
 
-export function ClientOperationsOverview({ clientId }: { clientId: string }) {
+export function ProjectOperationsOverview({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -92,27 +92,27 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   const [ledgerCustomEnd, setLedgerCustomEnd] = useState("");
 
   const overviewQuery = useQuery({
-    queryKey: ["administration", "client-overview", clientId],
+    queryKey: ["administration", "project-overview", projectId],
     queryFn: async () => {
-      const [client, stock, departmentActivity, production, ledger, catalog] =
+      const [project, stock, departmentActivity, production, ledger, catalog] =
         await Promise.all([
-          administrationService.getClient(clientId),
+          administrationService.getProject(projectId),
           reportsService.generateReport<ReportResponse>("STOCK_BALANCE", {
-            clientId,
+            projectId,
           }),
-          reportsService.generateReport<ReportResponse>("CLIENT_CONSUMPTION", {
-            clientId,
+          reportsService.generateReport<ReportResponse>("PROJECT_CONSUMPTION", {
+            projectId,
           }),
           reportsService.generateReport<ReportResponse>("PRODUCTION_RUNS", {
-            clientId,
+            projectId,
           }),
           reportsService.generateReport<ReportResponse>("INVENTORY_LEDGER", {
-            clientId,
+            projectId,
           }),
           catalogService.getProducts(),
         ]);
       return {
-        client,
+        project,
         stock: stock.data,
         departmentActivity: departmentActivity.data,
         production: production.data,
@@ -120,8 +120,8 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
         manufacturedProducts: catalog.filter(
           (product) =>
             product.kind === "MANUFACTURED_PRODUCT" &&
-            product.ownerScope === "CLIENT" &&
-            product.clientId === clientId,
+            product.ownerScope === "PROJECT" &&
+            product.projectId === projectId,
         ),
       };
     },
@@ -129,11 +129,11 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   });
 
   if (overviewQuery.isLoading)
-    return <LoadingState message="Loading client operations overview…" />;
+    return <LoadingState message="Loading project operations overview…" />;
   if (overviewQuery.error || !overviewQuery.data) {
     return (
       <ErrorState
-        title="Client overview could not be loaded"
+        title="Project overview could not be loaded"
         message={
           overviewQuery.error instanceof Error
             ? overviewQuery.error.message
@@ -145,7 +145,7 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   }
 
   const {
-    client,
+    project,
     stock,
     departmentActivity,
     production,
@@ -165,15 +165,11 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
       usableQuantity: 0,
       availableQuantity: 0,
       reservedQuantity: 0,
-      damagedQuantity: 0,
-      expiredQuantity: 0,
     };
     for (const field of [
       "usableQuantity",
       "availableQuantity",
       "reservedQuantity",
-      "damagedQuantity",
-      "expiredQuantity",
     ]) {
       previous[field] = getNumber(previous, field) + getNumber(row, field);
     }
@@ -262,29 +258,29 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`${client.name} Operations`}
-        description="Consolidated overview of client inventory balances, manufacturing runs, workforce, and clinical department activity."
+        title={`${project.name} Operations`}
+        description="Consolidated overview of project inventory balances, manufacturing runs, workforce, and clinical department activity."
         actions={
-          <Link href="/admin/clients">
-            <Button variant="secondary">← Back to Clients</Button>
+          <Link href="/admin/projects">
+            <Button variant="secondary">← Back to Projects</Button>
           </Link>
         }
       />
 
-      {/* Client Meta Banner */}
+      {/* Project Meta Banner */}
       <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3">
           <span className="font-semibold text-slate-800">Status:</span>
           <Badge
-            variant={client.status === "ACTIVE" ? "success" : "neutral"}
+            variant={project.status === "ACTIVE" ? "success" : "neutral"}
             size="sm"
           >
-            {client.status ?? "ACTIVE"}
+            {project.status ?? "ACTIVE"}
           </Badge>
           <span className="text-slate-300">|</span>
           <span className="text-slate-600">
             <strong>Assigned warehouses:</strong>{" "}
-            {client.warehouseAssignments
+            {project.warehouseAssignments
               ?.map((a) => a.warehouse.name)
               .join(", ") || "No warehouse assigned"}
           </span>
@@ -460,13 +456,13 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
             >
               <CardTitle>Manufactured products</CardTitle>
               <CardDescription>
-                Products created by this client, with current available stock where present.
+                Products created by this project, with current available stock where present.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               {manufacturedProducts.length === 0 ? (
                 <p className="p-6 text-center text-sm text-slate-500">
-                  This client has not created any manufactured products yet.
+                  This project has not created any manufactured products yet.
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -529,7 +525,7 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
             </CardContent>
           </Card>
 
-          {/* Client Stock Balances */}
+          {/* Project Stock Balances */}
           <Card>
             <CardHeader
               action={
@@ -538,16 +534,16 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
                 </span>
               }
             >
-              <CardTitle>Client Inventory Balances</CardTitle>
+              <CardTitle>Project Inventory Balances</CardTitle>
               <CardDescription>
-                Authoritative posted balances currently located at this client’s facility.
+                Authoritative posted balances currently located at this project’s facility.
               </CardDescription>
             </CardHeader>
 
             <CardContent className="p-0">
               {stockByProduct.size === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
-                  No inventory stock has been posted to this client yet.
+                  No inventory stock has been posted to this project yet.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -557,8 +553,6 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
                         <TableHead>Product</TableHead>
                         <TableHead align="right">Available</TableHead>
                         <TableHead align="right">Reserved</TableHead>
-                        <TableHead align="right">Damaged</TableHead>
-                        <TableHead align="right">Expired</TableHead>
                       </tr>
                     </TableHeader>
                     <TableBody>
@@ -585,22 +579,6 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
                             {getNumber(row, "reservedQuantity").toLocaleString()}{" "}
                             {getText(row, "baseUnit", "")}
                           </TableCell>
-                          <TableCell
-                            align="right"
-                            numeric
-                            className="text-rose-600"
-                          >
-                            {getNumber(row, "damagedQuantity").toLocaleString()}{" "}
-                            {getText(row, "baseUnit", "")}
-                          </TableCell>
-                          <TableCell
-                            align="right"
-                            numeric
-                            className="text-slate-500"
-                          >
-                            {getNumber(row, "expiredQuantity").toLocaleString()}{" "}
-                            {getText(row, "baseUnit", "")}
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -615,14 +593,14 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
       {/* Sub-Tab 2: MANUFACTURING */}
       {activeTab === "MANUFACTURING" && (
         <div className="pt-2">
-          <ManufacturingView clientId={clientId} hideHeader={true} />
+          <ManufacturingView projectId={projectId} hideHeader={true} />
         </div>
       )}
 
       {/* Sub-Tab 3: STAFF */}
       {activeTab === "STAFF" && (
         <div className="pt-2">
-          <StaffManagementView clientId={clientId} hideHeader={true} />
+          <StaffManagementView projectId={projectId} hideHeader={true} />
         </div>
       )}
 
@@ -787,7 +765,7 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
             {visibleLedgerMovements.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400">
                 {manufacturingMovements.length === 0
-                  ? "No manufacturing stock movements recorded for this client."
+                  ? "No manufacturing stock movements recorded for this project."
                   : "No movements match the selected date filter."}
               </div>
             ) : (
@@ -841,4 +819,4 @@ export function ClientOperationsOverview({ clientId }: { clientId: string }) {
   );
 }
 
-export default ClientOperationsOverview;
+export default ProjectOperationsOverview;

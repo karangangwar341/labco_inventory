@@ -7,26 +7,26 @@ import type { AuthenticatedUser } from './decorators/current-user.decorator.js';
 export class AuthorizationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async assertClientAccess(user: AuthenticatedUser, targetClientId: string): Promise<void> {
+  async assertProjectAccess(user: AuthenticatedUser, targetProjectId: string): Promise<void> {
     if (user.role === UserRole.SUPER_ADMIN) {
       return; // Global access
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
         : (await this.prisma.user.findUnique({
             where: { id: user.id },
-            select: { clientId: true },
-          }))?.clientId;
+            select: { projectId: true },
+          }))?.projectId;
 
-      if (!clientId || clientId !== targetClientId) {
-        throw new ForbiddenException('Forbidden: cross-client access prohibited');
+      if (!projectId || projectId !== targetProjectId) {
+        throw new ForbiddenException('Forbidden: cross-project access prohibited');
       }
       return;
     }
 
-    throw new ForbiddenException('Forbidden: Store Admin cannot access client scope');
+    throw new ForbiddenException('Forbidden: Store Admin cannot access project scope');
   }
 
   async assertWarehouseAccess(user: AuthenticatedUser, targetWarehouseId: string): Promise<void> {
@@ -48,21 +48,21 @@ export class AuthorizationService {
       return;
     }
 
-    throw new ForbiddenException('Forbidden: Client Admin cannot operate on warehouse scope directly');
+    throw new ForbiddenException('Forbidden: Project Admin cannot operate on warehouse scope directly');
   }
 
-  async assertActiveWarehouseClientAssignment(warehouseId: string, clientId: string): Promise<void> {
-    const assignment = await this.prisma.clientWarehouseAssignment.findFirst({
+  async assertActiveWarehouseProjectAssignment(warehouseId: string, projectId: string): Promise<void> {
+    const assignment = await this.prisma.projectWarehouseAssignment.findFirst({
       where: {
         warehouseId,
-        clientId,
+        projectId,
         isActive: true,
       },
     });
 
     if (!assignment) {
       throw new ForbiddenException(
-        `Warehouse is not actively assigned to this client. Operation blocked.`,
+        `Warehouse is not actively assigned to this project. Operation blocked.`,
       );
     }
   }

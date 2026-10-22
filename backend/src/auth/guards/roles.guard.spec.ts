@@ -24,7 +24,7 @@ describe('RolesGuard (RBAC)', () => {
 
   it('allows access if no roles are required', () => {
     mockReflector.getAllAndOverride.mockReturnValue(undefined);
-    const context = createMockContext({ role: UserRole.CLIENT_ADMIN });
+    const context = createMockContext({ role: UserRole.PROJECT_ADMIN });
 
     expect(rolesGuard.canActivate(context as any)).toBe(true);
   });

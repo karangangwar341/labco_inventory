@@ -7,7 +7,6 @@ import {
   LocationType,
   TransactionType,
   StockCondition,
-  TrackingMode,
   Prisma,
 } from '@prisma/client';
 import { BadRequestException, ConflictException } from '@nestjs/common';
@@ -21,7 +20,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
     id: 'prod-1',
     name: 'Beaker 500ml',
     quantityPrecision: 0,
-    trackingMode: TrackingMode.NONE,
     units: [
       {
         id: 'unit-box',
@@ -53,8 +51,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
           id: 'bal-1',
           usableQty: new Prisma.Decimal(0),
           reservedQty: new Prisma.Decimal(0),
-          damagedQty: new Prisma.Decimal(0),
-          expiredQty: new Prisma.Decimal(0),
           version: 0,
           ...args?.data,
         })),
@@ -101,17 +97,15 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
   });
 
   describe('Invariant: Projected Quantities Calculation', () => {
-    it('calculates physical = usable + damaged + expired, and available = usable - reserved', () => {
+    it('calculates physical = usable, and available = usable - reserved', () => {
       const balance = {
         usableQty: new Prisma.Decimal('100.5'),
         reservedQty: new Prisma.Decimal('20.5'),
-        damagedQty: new Prisma.Decimal('5.0'),
-        expiredQty: new Prisma.Decimal('2.0'),
       };
 
       const projected = calculateProjectedQuantities(balance);
 
-      expect(projected.physicalQty.toString()).toBe('107.5');
+      expect(projected.physicalQty.toString()).toBe('100.5');
       expect(projected.availableQty.toString()).toBe('80');
     });
 
@@ -119,8 +113,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       const balance = {
         usableQty: new Prisma.Decimal('50'),
         reservedQty: new Prisma.Decimal('50'),
-        damagedQty: new Prisma.Decimal('0'),
-        expiredQty: new Prisma.Decimal('0'),
       };
 
       const projected = calculateProjectedQuantities(balance);
@@ -158,8 +150,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
         id: 'bal-1',
         usableQty: new Prisma.Decimal(0),
         reservedQty: new Prisma.Decimal(0),
-        damagedQty: new Prisma.Decimal(0),
-        expiredQty: new Prisma.Decimal(0),
         version: 0,
       };
       mockPrisma.inventoryBalance.create.mockResolvedValue(createdBalance);
@@ -208,8 +198,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
         id: 'bal-1',
         usableQty: new Prisma.Decimal(10),
         reservedQty: new Prisma.Decimal(8),
-        damagedQty: new Prisma.Decimal(0),
-        expiredQty: new Prisma.Decimal(0),
         version: 1,
       });
 
@@ -232,23 +220,23 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('rejects deduction when damaged balance drops below zero', async () => {
+    it('posts damaged stock-out as a usable stock deduction with a damaged ledger flag', async () => {
       mockPrisma.ledgerTransaction.findUnique.mockResolvedValue(null);
       mockPrisma.product.findUnique.mockResolvedValue(mockProduct);
+      mockPrisma.inventoryBalance.update = vi.fn();
+      mockPrisma.ledgerTransaction.create.mockResolvedValue({ id: 'tx-damaged' });
 
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
         id: 'bal-1',
         usableQty: new Prisma.Decimal(10),
         reservedQty: new Prisma.Decimal(0),
-        damagedQty: new Prisma.Decimal(1),
-        expiredQty: new Prisma.Decimal(0),
         version: 1,
       });
 
-      await expect(
-        (ledgerService as any).postTransaction({
+      await (ledgerService as any).postTransaction({
           idempotencyKey: 'idem-damaged',
-          transactionType: TransactionType.ADJUSTMENT,
+          transactionType: TransactionType.STOCK_OUT,
+          reason: 'Container cracked during handling',
           lines: [
             {
               locationId: 'loc-1',
@@ -259,8 +247,19 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
               unitName: 'EACH',
             },
           ],
-        }, 'admin-1'),
-      ).rejects.toThrow(BadRequestException);
+        }, 'admin-1');
+
+      expect(mockPrisma.inventoryBalance.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ usableQty: new Prisma.Decimal(8) }),
+      }));
+      expect(mockPrisma.ledgerTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          reason: 'Container cracked during handling',
+          entries: expect.objectContaining({
+            create: expect.arrayContaining([expect.objectContaining({ condition: StockCondition.DAMAGED })]),
+          }),
+        }),
+      }));
     });
 
     it('enforces whole-unit precision constraint on base quantity', async () => {
@@ -296,7 +295,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
             id: 'entry-1',
             locationId: 'loc-1',
             productId: 'prod-1',
-            batchId: null,
             condition: StockCondition.USABLE,
             qtyDeltaBase: new Prisma.Decimal(20),
             originalQty: new Prisma.Decimal(20),
@@ -315,8 +313,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
         id: 'bal-1',
         usableQty: new Prisma.Decimal(30),
         reservedQty: new Prisma.Decimal(0),
-        damagedQty: new Prisma.Decimal(0),
-        expiredQty: new Prisma.Decimal(0),
         version: 1,
       });
 
@@ -378,7 +374,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
             id: 'entry-1',
             locationId: 'loc-1',
             productId: 'prod-1',
-            batchId: null,
             condition: StockCondition.USABLE,
             qtyDeltaBase: new Prisma.Decimal(20),
             originalQty: new Prisma.Decimal(20),
@@ -394,8 +389,6 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
         id: 'bal-1',
         usableQty: new Prisma.Decimal(30),
         reservedQty: new Prisma.Decimal(0),
-        damagedQty: new Prisma.Decimal(0),
-        expiredQty: new Prisma.Decimal(0),
         version: 1,
       });
 
@@ -451,11 +444,8 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
           id: 'b-1',
           locationId: 'loc-wh-1',
           productId: 'prod-1',
-          batchId: null,
           usableQty: new Prisma.Decimal(100),
           reservedQty: new Prisma.Decimal(10),
-          damagedQty: new Prisma.Decimal(5),
-          expiredQty: new Prisma.Decimal(0),
           updatedAt: new Date(),
         },
       ]);
@@ -463,7 +453,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       const balances = await inventoryService.getBalances(storeAdmin);
       expect(balances).toHaveLength(1);
       expect(balances[0].availableQty.toString()).toBe('90');
-      expect(balances[0].physicalQty.toString()).toBe('105');
+      expect(balances[0].physicalQty.toString()).toBe('100');
       expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {

@@ -229,10 +229,10 @@ export function LoginForm() {
             </button>
             <button
               type="button"
-              onClick={() => handleFillDemoRole('clientadmin')}
+              onClick={() => handleFillDemoRole('projectadmin')}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-[11px] font-medium text-slate-700 hover:text-blue-700 transition-colors text-center"
             >
-              Client Admin
+              Project Admin
             </button>
           </div>
         </div>

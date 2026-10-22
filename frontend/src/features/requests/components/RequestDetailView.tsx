@@ -170,32 +170,32 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
 
   const reqNumber = request.requestNumber || 'Stock request';
 
-  const isClientAdmin = user?.role === 'CLIENT_ADMIN';
+  const isProjectAdmin = user?.role === 'PROJECT_ADMIN';
 
   const typeLabel =
-    isClientAdmin
+    isProjectAdmin
       ? 'Inbound Restock'
       : request.requestType === 'STOCK_IN'
       ? 'Stock Arrival'
       : request.requestType === 'DISPATCH' || request.requestType === 'STOCK_OUT'
-      ? 'Client Dispatch'
+      ? 'Project Dispatch'
       : request.requestType === 'TRANSFER'
       ? 'Transfer'
       : request.requestType || 'Movement';
 
   const originName =
-    isClientAdmin
+    isProjectAdmin
       ? 'Central Supply'
       : request.sourceLocation?.warehouse?.name ||
-        request.sourceLocation?.client?.name ||
+        request.sourceLocation?.project?.name ||
         request.sourceType ||
         (request.requestType === 'STOCK_IN' ? 'Supplier' : 'Warehouse');
 
   const destinationName =
-    request.destinationLocation?.client?.name ||
+    request.destinationLocation?.project?.name ||
     request.destinationLocation?.warehouse?.name ||
-    request.client?.name ||
-    (request.requestType === 'STOCK_IN' ? 'Warehouse Stock' : 'Client Store');
+    request.project?.name ||
+    (request.requestType === 'STOCK_IN' ? 'Warehouse Stock' : 'Project Store');
 
   const totalUnits = request.lines.reduce((sum, l) => sum + Number(l.quantity || 0), 0);
 
@@ -349,7 +349,7 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
         <div className="py-2 px-3 rounded-lg bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 flex items-center justify-between">
           <span>
             ⏳ <strong>Pending Approval:</strong>{' '}
-            {isClientAdmin
+            {isProjectAdmin
               ? 'Your restock order has been received and is reserved for fulfillment.'
               : 'Stock is reserved at the origin facility while this request is reviewed.'}
           </span>
@@ -378,7 +378,6 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
             <tr>
               <TableHead className="w-10 text-center text-[11px]">#</TableHead>
               <TableHead className="text-[11px]">Item &amp; Details</TableHead>
-              <TableHead className="text-[11px]">Batch / Lot</TableHead>
               <TableHead className="text-[11px]">Condition</TableHead>
               <TableHead align="right" className="text-[11px]">Quantity</TableHead>
               <TableHead className="text-center text-[11px] w-24">Status</TableHead>
@@ -401,19 +400,9 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
                   <TableCell className="py-2">
                     <span className="font-semibold text-slate-900 text-xs block">{pName}</span>
                     <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                      {brand && role !== 'CLIENT_ADMIN' && <span>Brand: {brand}</span>}
+                      {brand && role !== 'PROJECT_ADMIN' && <span>Brand: {brand}</span>}
                       {category && <span>· {category}</span>}
                     </div>
-                  </TableCell>
-
-                  <TableCell className="py-2 font-mono text-xs text-slate-600">
-                    {line.batchNumber ? (
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] border border-slate-200">
-                        {line.batchNumber}
-                      </span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
                   </TableCell>
 
                   <TableCell className="py-2">

@@ -18,7 +18,7 @@ export class UserSummaryDto {
   warehouseId?: string | null;
 
   @ApiProperty({ required: false, nullable: true })
-  clientId?: string | null;
+  projectId?: string | null;
 }
 
 export class AuthResponseDto {

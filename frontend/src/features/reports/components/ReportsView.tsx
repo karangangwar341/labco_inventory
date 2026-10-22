@@ -19,39 +19,40 @@ import { ReportType, QueryReportDto } from '../reports.types';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 const REPORT_OPTIONS: Array<{ type: ReportType; label: string; description: string }> = [
-  { type: 'STOCK_BALANCE', label: 'Current stock', description: 'Real-time projected usable, reserved, available, and quarantined quantities' },
+  { type: 'STOCK_BALANCE', label: 'Current stock', description: 'Real-time usable, reserved, and available quantities' },
   { type: 'INVENTORY_LEDGER', label: 'Movement history', description: 'Immutable double-entry inventory audit trail and stock deltas' },
-  { type: 'BATCH_EXPIRY', label: 'Expiry forecast', description: 'Lot-level expiration schedule, days remaining, and shelf-life tracking' },
-  { type: 'CLIENT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department issues and returns' },
+  { type: 'PROJECT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department issues and returns' },
   { type: 'PRODUCTION_RUNS', label: 'Manufacturing', description: 'Work-in-progress runs, recipe inputs, outputs, and wastage' },
   { type: 'SHIPMENTS', label: 'Shipments & Logistics', description: 'Inbound, outbound, and inter-facility movements, status, quantities, and dates' },
+  { type: 'MISSING_STOCK', label: 'Missing stock', description: 'Quantities confirmed missing by Super Admin, grouped by product for any date range' },
 ];
 
 const LABELS: Record<string, string> = {
-  productName: 'Product', locationName: 'Location', locationType: 'Location type', batchNumber: 'Batch / Lot',
-  expiryDate: 'Expiry date', usableQuantity: 'Usable', reservedQuantity: 'Reserved', availableQuantity: 'Available',
-  damagedQuantity: 'Damaged', expiredQuantity: 'Expired', physicalQuantity: 'Physical total', minThreshold: 'Min threshold',
+  productName: 'Product', locationName: 'Location', locationType: 'Location type',
+  usableQuantity: 'Usable', reservedQuantity: 'Reserved', availableQuantity: 'Available',
+  minThreshold: 'Min threshold',
   lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source',
   condition: 'Condition', originalQuantity: 'Quantity', unitName: 'Unit', baseDelta: 'Stock delta',
-  direction: 'Direction', postedBy: 'Recorded by', daysRemaining: 'Days to expiry', batchStatus: 'Batch status',
-  isExpired: 'Expired', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
+  direction: 'Direction', postedBy: 'Recorded by', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
   baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', runId: 'Run ID', productionReference: 'Reference',
-  clientName: 'Client', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
+  projectName: 'Project', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
   shipmentId: 'Shipment ID', shipmentType: 'Shipment type', sourceLocation: 'Source location',
   destinationLocation: 'Destination location', dispatchedQuantity: 'Dispatched qty',
   dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at',
+  missingQuantity: 'Missing quantity', shipmentCount: 'Shipments',
 };
 
 const NUMERIC_COLUMNS = new Set([
-  'usableQuantity', 'reservedQuantity', 'availableQuantity', 'damagedQuantity',
-  'expiredQuantity', 'physicalQuantity', 'minThreshold', 'originalQuantity',
-  'baseDelta', 'daysRemaining', 'quantity', 'baseQuantity', 'plannedOutput',
+  'usableQuantity', 'reservedQuantity', 'availableQuantity',
+  'minThreshold', 'originalQuantity',
+  'baseDelta', 'quantity', 'baseQuantity', 'plannedOutput',
   'actualOutput', 'wastage', 'totalInputsCount', 'totalOutputsCount', 'dispatchedQuantity',
+  'missingQuantity', 'shipmentCount',
 ]);
 
 const MONO_COLUMNS = new Set([
-  'batchNumber', 'runId', 'productionReference', 'shipmentId', 'timestamp', 'date', 'createdAt', 'expiryDate',
+  'runId', 'productionReference', 'shipmentId', 'timestamp', 'date', 'createdAt',
 ]);
 
 function formatCellValue(column: string, value: unknown): React.ReactNode {
@@ -63,9 +64,6 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
   if (typeof value === 'boolean') {
     if (column === 'lowStockAlert') {
       return value ? <Badge variant="warning" size="sm">LOW STOCK</Badge> : <span className="text-slate-400">Normal</span>;
-    }
-    if (column === 'isExpired') {
-      return value ? <Badge variant="danger" size="sm">EXPIRED</Badge> : <Badge variant="success" size="sm">Active</Badge>;
     }
     return value ? 'Yes' : 'No';
   }
@@ -89,10 +87,10 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
     }
   }
 
-  // Batch / Run Status
-  if (column === 'batchStatus' || column === 'status') {
+  // Workflow status
+  if (column === 'status') {
     const s = String(value).toUpperCase();
-    if (s.includes('EXPIRED') || s.includes('REJECTED') || s.includes('FAILED')) {
+    if (s.includes('REJECTED') || s.includes('FAILED')) {
       return <Badge variant="danger" size="sm">{String(value)}</Badge>;
     }
     if (s.includes('ACTIVE') || s.includes('APPROVED') || s.includes('COMPLETED')) {
@@ -125,8 +123,8 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
     }
   }
 
-  // Batch / Code identifiers
-  if (column === 'batchNumber' || column === 'runId' || column === 'productionReference') {
+  // Run and reference identifiers
+  if (column === 'runId' || column === 'productionReference') {
     return (
       <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/80">
         {String(value)}
@@ -144,13 +142,14 @@ export function ReportsView() {
   const [endDate, setEndDate] = useState('');
   const [productId, setProductId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
-  const [clientId, setClientId] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const canViewClientActivity = user?.role !== 'STORE_ADMIN';
+  const canViewProjectActivity = user?.role !== 'STORE_ADMIN';
   const options = REPORT_OPTIONS.filter(
-    (item) => canViewClientActivity || !['CLIENT_CONSUMPTION', 'PRODUCTION_RUNS'].includes(item.type)
+    (item) => (canViewProjectActivity || !['PROJECT_CONSUMPTION', 'PRODUCTION_RUNS'].includes(item.type))
+      && (isSuperAdmin || item.type !== 'MISSING_STOCK')
   );
 
   const params: QueryReportDto = useMemo(() => ({
@@ -158,8 +157,8 @@ export function ReportsView() {
     ...(endDate ? { endDate } : {}),
     ...(productId ? { productId } : {}),
     ...(isSuperAdmin && warehouseId ? { warehouseId } : {}),
-    ...(isSuperAdmin && clientId ? { clientId } : {}),
-  }), [startDate, endDate, productId, isSuperAdmin, warehouseId, clientId]);
+    ...(isSuperAdmin && projectId ? { projectId } : {}),
+  }), [startDate, endDate, productId, isSuperAdmin, warehouseId, projectId]);
 
   const reportQuery = useQuery({
     queryKey: queryKeys.reports.view(reportType, { ...params }),
@@ -189,9 +188,9 @@ export function ReportsView() {
     staleTime: 10 * 60_000,
   });
 
-  const clientsQuery = useQuery({
-    queryKey: queryKeys.administration.clients(),
-    queryFn: administrationService.getClients,
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.administration.projects(),
+    queryFn: administrationService.getProjects,
     enabled: Boolean(isSuperAdmin),
     staleTime: 10 * 60_000,
   });
@@ -231,13 +230,13 @@ export function ReportsView() {
   const columns = rows.length ? Object.keys(rows[0]) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
-  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || clientId);
+  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId);
   const resetFilters = () => {
     setStartDate('');
     setEndDate('');
     setProductId('');
     setWarehouseId('');
-    setClientId('');
+    setProjectId('');
   };
 
   const setQuickRange = (preset: 'TODAY' | 'YESTERDAY' | 'LAST_WEEK' | 'LAST_MONTH' | 'ALL') => {
@@ -279,7 +278,7 @@ export function ReportsView() {
       {/* Page Header with primary print / CSV / Excel actions */}
       <PageHeader
         title="Reports & Analytics"
-        description="Comprehensive audit-grade inventory movement ledgers, batch expiry forecasting, and stock telemetry."
+        description="Inventory movement history, stock summaries, and operational reports."
         actions={
           <div className="flex flex-wrap items-center gap-2.5 print:hidden">
             <Button
@@ -445,14 +444,14 @@ export function ReportsView() {
                   </Select>
 
                   <Select
-                    label="Client Scope"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
+                    label="Project Scope"
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
                   >
-                    <option value="">All client accounts</option>
-                    {(clientsQuery.data ?? []).map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
+                    <option value="">All project accounts</option>
+                    {(projectsQuery.data ?? []).map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
                       </option>
                     ))}
                   </Select>
@@ -537,7 +536,7 @@ export function ReportsView() {
                 <p className="text-blue-800/90 leading-relaxed">
                   <strong>Stock delta (baseDelta)</strong> shows the exact net change in base packaging units for that specific ledger posting.
                   Positive values (<span className="text-emerald-700 font-mono font-semibold">+qty IN</span>) indicate stock additions (inbound supplier receipts, transfer receipts, manufacturing output).
-                  Negative values (<span className="text-rose-700 font-mono font-semibold">-qty OUT</span>) indicate stock deductions (client dispatches, department consumption, write-offs).
+                  Negative values (<span className="text-rose-700 font-mono font-semibold">-qty OUT</span>) indicate stock deductions, including damaged stock-outs.
                 </p>
               </div>
             </div>

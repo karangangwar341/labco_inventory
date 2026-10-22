@@ -62,7 +62,7 @@ export function CatalogView() {
   const [brandParentId, setBrandParentId] = useState('');
   const [brandError, setBrandError] = useState<string | null>(null);
 
-  const canCreate = role === 'SUPER_ADMIN' || role === 'CLIENT_ADMIN';
+  const canCreate = role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 
   // Queries
   const {
@@ -71,13 +71,13 @@ export function CatalogView() {
     error: queryError,
     refetch,
   } = useQuery({
-    queryKey: queryKeys.catalog.products(user?.clientId ? `client-${user.clientId}` : 'company'),
+    queryKey: queryKeys.catalog.products(user?.projectId ? `project-${user.projectId}` : 'company'),
     queryFn: () => catalogService.getProducts(),
     staleTime: 10 * 60 * 1000,
   });
 
   const { data: categories = [] } = useQuery({
-    queryKey: queryKeys.catalog.categories(user?.clientId ? `client-${user.clientId}` : 'company'),
+    queryKey: queryKeys.catalog.categories(user?.projectId ? `project-${user.projectId}` : 'company'),
     queryFn: () => catalogService.getCategories(),
     staleTime: 10 * 60 * 1000,
   });
@@ -102,8 +102,6 @@ export function CatalogView() {
         availableQty: number;
         usableQty: number;
         reservedQty: number;
-        damagedQty: number;
-        expiredQty: number;
         physicalQty: number;
         unit?: string;
       }
@@ -114,16 +112,12 @@ export function CatalogView() {
           availableQty: 0,
           usableQty: 0,
           reservedQty: 0,
-          damagedQty: 0,
-          expiredQty: 0,
           physicalQty: 0,
           unit: b.unit,
         };
         existing.availableQty += Number(b.availableQty || 0);
         existing.usableQty += Number(b.usableQty || 0);
         existing.reservedQty += Number(b.reservedQty || 0);
-        existing.damagedQty += Number(b.damagedQty || 0);
-        existing.expiredQty += Number(b.expiredQty || 0);
         existing.physicalQty += Number(b.physicalQty || 0);
         if (!existing.unit && b.unit) existing.unit = b.unit;
         map.set(b.productId, existing);
@@ -147,7 +141,7 @@ export function CatalogView() {
     if (attemptedProductLookup.current === productIdFromNotification) return;
     attemptedProductLookup.current = productIdFromNotification;
     catalogService.getProductById(productIdFromNotification).then((product) => {
-      const key = queryKeys.catalog.products(user?.clientId ? `client-${user.clientId}` : 'company');
+      const key = queryKeys.catalog.products(user?.projectId ? `project-${user.projectId}` : 'company');
       queryClient.setQueryData<CatalogProduct[]>(key, (current = []) =>
         current.some((item) => item.id === product.id) ? current : [...current, product],
       );
@@ -158,7 +152,7 @@ export function CatalogView() {
     }).catch((error: unknown) => {
       setNotificationLoadError(error instanceof Error ? error.message : 'This product request could not be opened. Refresh the catalog and try again.');
     });
-  }, [productIdFromNotification, role, isLoading, products, queryClient, router, user?.clientId]);
+  }, [productIdFromNotification, role, isLoading, products, queryClient, router, user?.projectId]);
 
   // Fast Category lookup
   const categoryById = useMemo(
@@ -187,9 +181,9 @@ export function CatalogView() {
         (category) =>
           !category.parentId &&
           (category.ownerScope === 'COMPANY' ||
-            (category.ownerScope === 'CLIENT' && category.clientId === user?.clientId)),
+            (category.ownerScope === 'PROJECT' && category.projectId === user?.projectId)),
       ),
-    [categories, user?.clientId],
+    [categories, user?.projectId],
   );
 
   // Subcategories grouped by parent
@@ -252,7 +246,7 @@ export function CatalogView() {
           product.name,
           product.sku,
           product.brand,
-          product.client?.name,
+          product.project?.name,
           category?.name,
           parent?.name,
         ].some((val) => val?.toLowerCase().includes(query));
@@ -375,7 +369,7 @@ export function CatalogView() {
   const canEdit = (product: CatalogProduct) =>
     role === 'SUPER_ADMIN'
       ? true
-      : role === 'CLIENT_ADMIN' && product.ownerScope === 'CLIENT' && product.clientId === user?.clientId;
+      : role === 'PROJECT_ADMIN' && product.ownerScope === 'PROJECT' && product.projectId === user?.projectId;
 
   const categoryLabel = (product: CatalogProduct) => {
     const category = categoryById.get(product.categoryId);
@@ -402,7 +396,7 @@ export function CatalogView() {
       {
         id: 'name',
         header: 'Product & SKU',
-        width: role === 'CLIENT_ADMIN' ? '36%' : '26%',
+        width: role === 'PROJECT_ADMIN' ? '36%' : '26%',
         minWidth: '200px',
         valign: 'top',
         cell: (product) => (
@@ -416,9 +410,9 @@ export function CatalogView() {
                   {product.sku}
                 </span>
               )}
-              {role === 'SUPER_ADMIN' && product.ownerScope === 'CLIENT' && (
+              {role === 'SUPER_ADMIN' && product.ownerScope === 'PROJECT' && (
                 <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-medium">
-                  {product.client?.name || 'Client Item'}
+                  {product.project?.name || 'Project Item'}
                 </span>
               )}
             </div>
@@ -440,7 +434,7 @@ export function CatalogView() {
       {
         id: 'category',
         header: 'Category / Hierarchy',
-        width: role === 'CLIENT_ADMIN' ? '24%' : '18%',
+        width: role === 'PROJECT_ADMIN' ? '24%' : '18%',
         minWidth: '140px',
         valign: 'top',
         cell: (product) => {
@@ -456,7 +450,7 @@ export function CatalogView() {
       },
     ];
 
-    if (role !== 'CLIENT_ADMIN') {
+    if (role !== 'PROJECT_ADMIN') {
       cols.push({
         id: 'brand',
         header: 'Brand / Maker',
@@ -592,7 +586,7 @@ export function CatalogView() {
     );
 
     return cols;
-  }, [categoryById, role, user?.clientId, stockByProductId]);
+  }, [categoryById, role, user?.projectId, stockByProductId]);
 
   return (
     <div className="space-y-6">
@@ -600,7 +594,7 @@ export function CatalogView() {
       <PageHeader
         title="Product Catalogue"
         description={
-          role === 'CLIENT_ADMIN'
+          role === 'PROJECT_ADMIN'
             ? 'Manage your manufactured product definitions and categories. Stock quantities are shown in Stock & Inventory.'
             : 'Approved product definitions for stock movements. This page lists what can be stocked; current quantities are shown in Stock & Inventory.'
         }
@@ -616,7 +610,7 @@ export function CatalogView() {
               >
                 {showCategoryForm ? 'Close Category Form' : '+ Add Category'}
               </Button>
-              {role !== 'CLIENT_ADMIN' && (
+              {role !== 'PROJECT_ADMIN' && (
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -629,12 +623,12 @@ export function CatalogView() {
                   + Add Brand
                 </Button>
               )}
-              {role !== 'CLIENT_ADMIN' && (
+              {role !== 'PROJECT_ADMIN' && (
                 <Link href="/catalog/new?kind=RAW_MATERIAL">
                   <Button variant="primary">+ Add Raw Material</Button>
                 </Link>
               )}
-              {role === 'CLIENT_ADMIN' && (
+              {role === 'PROJECT_ADMIN' && (
                 <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT">
                   <Button variant="primary">+ Add Manufactured Product</Button>
                 </Link>
@@ -685,13 +679,13 @@ export function CatalogView() {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <span>🏷️ {role === 'CLIENT_ADMIN' ? 'Categories Directory' : 'Categories & Brands Directory'}</span>
+            <span>🏷️ {role === 'PROJECT_ADMIN' ? 'Categories Directory' : 'Categories & Brands Directory'}</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'TAXONOMY' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {role === 'CLIENT_ADMIN'
+              {role === 'PROJECT_ADMIN'
                 ? `${categories.length} categories`
                 : `${categories.length} categories · ${brands.length} brands`}
             </span>
@@ -721,12 +715,12 @@ export function CatalogView() {
       {showCategoryForm && canCreate && (
         <Card className="max-w-2xl border-blue-200 shadow-sm animate-fade-in">
           <CardHeader>
-            <CardTitle>{categoryParentId ? 'Add Subcategory' : role === 'CLIENT_ADMIN' ? 'Add Client Category' : 'Add Company Category'}</CardTitle>
+            <CardTitle>{categoryParentId ? 'Add Subcategory' : role === 'PROJECT_ADMIN' ? 'Add Project Category' : 'Add Company Category'}</CardTitle>
             <CardDescription>
               {categoryParentId
                 ? `Creating a nested subcategory under "${categoryById.get(categoryParentId)?.name}".`
-                : role === 'CLIENT_ADMIN'
-                ? 'Private category scoped to your client organization for manufactured goods.'
+                : role === 'PROJECT_ADMIN'
+                ? 'Private category scoped to your project organization for manufactured goods.'
                 : 'Global category available for company raw materials and inventory classification.'}
             </CardDescription>
           </CardHeader>
@@ -743,7 +737,7 @@ export function CatalogView() {
                 onChange={(e) => setCategoryName(e.target.value)}
                 maxLength={100}
                 required
-                placeholder={role === 'CLIENT_ADMIN' ? 'e.g. Diagnostic Gauges' : 'e.g. Chemical Reagents'}
+                placeholder={role === 'PROJECT_ADMIN' ? 'e.g. Diagnostic Gauges' : 'e.g. Chemical Reagents'}
               />
               <Select
                 label="Parent Category (Optional)"
@@ -794,14 +788,14 @@ export function CatalogView() {
           {/* Comprehensive Filter Controls */}
           <Card className="border-slate-200/90 shadow-2xs">
             <CardContent className="p-4 space-y-3">
-              <div className={`grid grid-cols-2 sm:grid-cols-2 ${role === 'CLIENT_ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-2.5 sm:gap-3`}>
+              <div className={`grid grid-cols-2 sm:grid-cols-2 ${role === 'PROJECT_ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-2.5 sm:gap-3`}>
                 {/* Search Input */}
                 <div className="relative col-span-2 sm:col-span-2 lg:col-span-1">
                   <input
                     type="search"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder={role === 'CLIENT_ADMIN' ? 'Search name, SKU...' : 'Search name, brand, SKU...'}
+                    placeholder={role === 'PROJECT_ADMIN' ? 'Search name, SKU...' : 'Search name, brand, SKU...'}
                     className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                   />
                   <svg
@@ -839,7 +833,7 @@ export function CatalogView() {
                 </select>
 
                 {/* Brand Filter */}
-                {role !== 'CLIENT_ADMIN' && (
+                {role !== 'PROJECT_ADMIN' && (
                   <select
                     value={selectedBrand}
                     onChange={(e) => setSelectedBrand(e.target.value)}
@@ -900,7 +894,7 @@ export function CatalogView() {
                     </span>
                   )}
 
-                  {role !== 'CLIENT_ADMIN' && selectedBrand !== 'ALL' && (
+                  {role !== 'PROJECT_ADMIN' && selectedBrand !== 'ALL' && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[11px]">
                       Brand: {selectedBrand}
                       <button onClick={() => setSelectedBrand('ALL')} className="hover:text-blue-900 cursor-pointer">✕</button>
@@ -985,7 +979,7 @@ export function CatalogView() {
               </CardContent>
             </Card>
 
-            {role !== 'CLIENT_ADMIN' && (
+            {role !== 'PROJECT_ADMIN' && (
               <Card className="bg-gradient-to-br from-indigo-50/70 to-white border-indigo-200/80 shadow-2xs">
                 <CardContent className="p-3 sm:p-4">
                   <div className="text-[11px] sm:text-xs font-semibold text-indigo-900">Registered Brands</div>
@@ -997,7 +991,7 @@ export function CatalogView() {
               </Card>
             )}
 
-            <Card className={`bg-gradient-to-br from-emerald-50/70 to-white border-emerald-200/80 shadow-2xs ${role !== 'CLIENT_ADMIN' ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <Card className={`bg-gradient-to-br from-emerald-50/70 to-white border-emerald-200/80 shadow-2xs ${role !== 'PROJECT_ADMIN' ? 'col-span-2 sm:col-span-1' : ''}`}>
               <CardContent className="p-3 sm:p-4">
                 <div className="text-[11px] sm:text-xs font-semibold text-emerald-900">Catalog Coverage</div>
                 <div className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
@@ -1071,7 +1065,7 @@ export function CatalogView() {
                       <div>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
                           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                            {role === 'CLIENT_ADMIN' ? 'Subcategories' : 'Subcategories & Brands'} ({subs.length})
+                            {role === 'PROJECT_ADMIN' ? 'Subcategories' : 'Subcategories & Brands'} ({subs.length})
                           </span>
                           {canCreate && (
                             <div className="flex items-center gap-1.5">
@@ -1085,7 +1079,7 @@ export function CatalogView() {
                               >
                                 + Subcategory
                               </button>
-                              {role !== 'CLIENT_ADMIN' && (
+                              {role !== 'PROJECT_ADMIN' && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1130,7 +1124,7 @@ export function CatalogView() {
                       </div>
 
                       {/* Associated Brands in this category */}
-                      {role !== 'CLIENT_ADMIN' && rootBrands.length > 0 && (
+                      {role !== 'PROJECT_ADMIN' && rootBrands.length > 0 && (
                         <div>
                           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
                             Associated Brands ({rootBrands.length})
@@ -1156,7 +1150,7 @@ export function CatalogView() {
           </div>
 
           {/* Brands Directory Section */}
-          {role !== 'CLIENT_ADMIN' && (
+          {role !== 'PROJECT_ADMIN' && (
             <div className="space-y-3 pt-4 border-t border-slate-200">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
@@ -1232,7 +1226,7 @@ export function CatalogView() {
                 <Badge variant={selectedProduct.kind === 'MANUFACTURED_PRODUCT' ? 'purple' : 'neutral'}>
                   {selectedProduct.kind === 'MANUFACTURED_PRODUCT' ? 'Manufactured Item' : 'Raw Material'}
                 </Badge>
-                {selectedProduct.brand && role !== 'CLIENT_ADMIN' && (
+                {selectedProduct.brand && role !== 'PROJECT_ADMIN' && (
                   <span className="px-2 py-0.5 rounded bg-white text-slate-700 font-medium border border-slate-200 text-xs">
                     {selectedProduct.brand}
                   </span>
@@ -1253,8 +1247,6 @@ export function CatalogView() {
               const available = Number(stock?.availableQty ?? 0);
               const usable = Number(stock?.usableQty ?? 0);
               const reserved = Number(stock?.reservedQty ?? 0);
-              const damaged = Number(stock?.damagedQty ?? 0);
-              const expired = Number(stock?.expiredQty ?? 0);
               const minThreshold = Number(selectedProduct.minQuantity ?? selectedProduct.minThreshold ?? 0);
               const isOut = available <= 0;
               const isLow = minThreshold > 0 && available <= minThreshold;
@@ -1304,12 +1296,10 @@ export function CatalogView() {
                     </div>
                   </div>
 
-                  {(usable > 0 || reserved > 0 || damaged > 0 || expired > 0) && (
+                  {(usable > 0 || reserved > 0) && (
                     <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-3 text-[11px] text-slate-600 font-mono">
                       <span>Usable: <strong className="text-slate-900">{usable}</strong></span>
                       {reserved > 0 && <span>Reserved: <strong className="text-amber-800">{reserved}</strong></span>}
-                      {damaged > 0 && <span>Damaged: <strong className="text-rose-700">{damaged}</strong></span>}
-                      {expired > 0 && <span>Expired: <strong className="text-rose-700">{expired}</strong></span>}
                     </div>
                   )}
                 </div>
@@ -1339,14 +1329,6 @@ export function CatalogView() {
                 <div className="font-mono font-bold text-slate-900 text-sm mt-0.5">
                   {selectedProduct.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
                     selectedProduct.baseUnit}
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-slate-400">Tracking Mode</div>
-                <div className="mt-0.5">
-                  <Badge variant="neutral" size="sm">
-                    {(selectedProduct.trackingMode || 'NONE').replaceAll('_', ' ')}
-                  </Badge>
                 </div>
               </div>
             </div>
@@ -1396,7 +1378,7 @@ export function CatalogView() {
             {role === 'SUPER_ADMIN' && selectedProduct.status === 'PENDING_APPROVAL' && (
               <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                 <p className="text-xs font-semibold text-amber-900">
-                  This client catalog product proposal is awaiting Super Admin approval.
+                  This project catalog product proposal is awaiting Super Admin approval.
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -1474,7 +1456,7 @@ export function CatalogView() {
 
       {/* Register New Brand Modal */}
       <Modal
-        isOpen={role !== 'CLIENT_ADMIN' && showBrandModal}
+        isOpen={role !== 'PROJECT_ADMIN' && showBrandModal}
         onClose={() => setShowBrandModal(false)}
         title="Register New Brand / Manufacturer"
         description="Add a recognized laboratory manufacturer, supplier, or proprietary brand to your catalog taxonomy."

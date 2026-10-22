@@ -4,22 +4,18 @@ export interface StockBalanceDto {
   id: string;
   locationId: string;
   locationName?: string;
-  locationType?: 'WAREHOUSE' | 'CLIENT';
+  locationType?: 'WAREHOUSE' | 'PROJECT';
   warehouseId?: string | null;
-  clientId?: string | null;
+  projectId?: string | null;
   productId: string;
-  batchId?: string | null;
-  batchNumber?: string;
   productName?: string;
   brand?: string | null;
   categoryName?: string | null;
   categoryId?: string | null;
   usableQty: number;
   reservedQty: number;
-  damagedQty: number;
-  expiredQty: number;
-  physicalQty: number;
   availableQty: number;
+  physicalQty: number;
   unit?: string;
   version: number;
   minThreshold?: number;
@@ -28,9 +24,9 @@ export interface StockBalanceDto {
 
 export interface StockLocationDto {
   id: string;
-  locationType: 'WAREHOUSE' | 'CLIENT';
+  locationType: 'WAREHOUSE' | 'PROJECT';
   warehouseId?: string | null;
-  clientId?: string | null;
+  projectId?: string | null;
   name: string;
 }
 
@@ -42,7 +38,6 @@ export interface StockTransactionDto {
   transactionType: string;
   quantity: number;
   condition: StockCondition;
-  batchNumber?: string;
   referenceType?: string;
   referenceId?: string;
   createdAt: string;
@@ -57,7 +52,6 @@ export interface CorrectTransactionDto {
     productId: string;
     quantity: number;
     condition: StockCondition;
-    batchNumber?: string;
     locationId: string;
   }>;
 }

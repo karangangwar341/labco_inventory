@@ -28,11 +28,11 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({
     summary: 'Create product in catalog',
     description:
-      'Super Admin creates company raw materials. Client Admin creates manufactured products in their own client catalog and category scope; those products require approval. Store Admin forbidden. Enforces deterministic duplicate prevention (D-003).',
+      'Super Admin creates company raw materials. Project Admin creates manufactured products in their own project catalog and category scope; those products require approval. Store Admin forbidden. Enforces deterministic duplicate prevention (D-003).',
   })
   @ApiResponse({ status: 201, description: 'Product created' })
   @ApiResponse({ status: 409, description: 'Duplicate product detected' })
@@ -41,7 +41,7 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Propose a new product specification version for approval' })
   @ApiResponse({ status: 200, description: 'Product change submitted for review' })
   proposeVersion(
@@ -67,13 +67,13 @@ export class ProductsController {
   }
 
   @Get('manufacturing-options')
-  @Roles(UserRole.CLIENT_ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'List this client’s stocked raw materials and approved manufactured products' })
+  @Roles(UserRole.PROJECT_ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List this project’s stocked raw materials and approved manufactured products' })
   manufacturingOptions(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
   ) {
-    return this.productsService.getManufacturingOptions(user, clientId);
+    return this.productsService.getManufacturingOptions(user, projectId);
   }
 
   @Get(':id')
@@ -86,7 +86,7 @@ export class ProductsController {
   @Roles(UserRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Approve or reject a pending client product (Super Admin only)',
+    summary: 'Approve or reject a pending project product (Super Admin only)',
   })
   @ApiResponse({ status: 200, description: 'Product decision recorded' })
   review(

@@ -38,7 +38,7 @@ export const endpoints = {
     list: (params?: {
       status?: string;
       requestType?: string;
-      clientId?: string;
+      projectId?: string;
       warehouseId?: string;
       limit?: number;
       page?: number;
@@ -46,7 +46,7 @@ export const endpoints = {
       const q = new URLSearchParams();
       if (params?.status) q.set("status", params.status);
       if (params?.requestType) q.set("requestType", params.requestType);
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.warehouseId) q.set("warehouseId", params.warehouseId);
       if (params?.limit) q.set("limit", String(params.limit));
       if (params?.page) q.set("page", String(params.page));
@@ -74,6 +74,7 @@ export const endpoints = {
     byId: (id: string) => `/shipments/${id}`,
     receive: (id: string) => `/shipments/${id}/receive`,
     approveReceipt: (id: string) => `/shipments/${id}/approve-receipt`,
+    resolveDiscrepancy: (id: string) => `/shipments/${id}/resolve-discrepancy`,
   },
 
   catalog: {
@@ -88,22 +89,22 @@ export const endpoints = {
   },
 
   manufacturing: {
-    productionRuns: (params?: { status?: string; clientId?: string }) => {
+    productionRuns: (params?: { status?: string; projectId?: string }) => {
       const q = new URLSearchParams();
       if (params?.status) q.set("status", params.status);
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       const qs = q.toString();
       return qs ? `/production-runs?${qs}` : "/production-runs";
     },
     cycles: () => "/production-runs/cycles",
     analytics: (params?: {
-      clientId?: string;
+      projectId?: string;
       startDate?: string;
       endDate?: string;
       status?: string;
     }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.startDate) q.set("startDate", params.startDate);
       if (params?.endDate) q.set("endDate", params.endDate);
       if (params?.status) q.set("status", params.status);
@@ -126,9 +127,9 @@ export const endpoints = {
   },
 
   departments: {
-    list: (params?: { clientId?: string }) => {
+    list: (params?: { projectId?: string }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       const qs = q.toString();
       return qs ? `/departments?${qs}` : "/departments";
     },
@@ -138,12 +139,12 @@ export const endpoints = {
     approve: (id: string) => `/departments/${id}/approve`,
     reject: (id: string) => `/departments/${id}/reject`,
     issues: (params?: {
-      clientId?: string;
+      projectId?: string;
       departmentId?: string;
       status?: string;
     }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.departmentId) q.set("departmentId", params.departmentId);
       if (params?.status) q.set("status", params.status);
       const qs = q.toString();
@@ -164,11 +165,10 @@ export const endpoints = {
     createIssue: () => "/departments/issues",
     approveIssue: (id: string) => `/departments/issues/${id}/approve`,
     rejectIssue: (id: string) => `/departments/issues/${id}/reject`,
-    returns: (params?: { clientId?: string; departmentId?: string; condition?: string; status?: string }) => {
+    returns: (params?: { projectId?: string; departmentId?: string; status?: string }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.departmentId) q.set("departmentId", params.departmentId);
-      if (params?.condition) q.set("condition", params.condition);
       if (params?.status) q.set("status", params.status);
       const qs = q.toString();
       return qs ? `/departments/returns?${qs}` : "/departments/returns";
@@ -176,7 +176,6 @@ export const endpoints = {
     createReturn: () => "/departments/returns",
     approveReturn: (id: string) => `/departments/returns/${id}/approve`,
     rejectReturn: (id: string) => `/departments/returns/${id}/reject`,
-    writeOff: () => "/departments/write-offs",
   },
 
   imports: {
@@ -252,13 +251,13 @@ export const endpoints = {
   },
 
   organization: {
-    clients: () => "/clients",
-    clientById: (id: string) => `/clients/${id}`,
-    createClient: () => "/clients",
-    updateClient: (id: string) => `/clients/${id}`,
-    clientWarehouses: (id: string) => `/clients/${id}/warehouses`,
-    clientWarehouseAssignment: (clientId: string, warehouseId: string) =>
-      `/clients/${clientId}/warehouses/${warehouseId}`,
+    projects: () => "/projects",
+    projectById: (id: string) => `/projects/${id}`,
+    createProject: () => "/projects",
+    updateProject: (id: string) => `/projects/${id}`,
+    projectWarehouses: (id: string) => `/projects/${id}/warehouses`,
+    projectWarehouseAssignment: (projectId: string, warehouseId: string) =>
+      `/projects/${projectId}/warehouses/${warehouseId}`,
     warehouses: () => "/warehouses",
     warehouseById: (id: string) => `/warehouses/${id}`,
     createWarehouse: () => "/warehouses",
@@ -266,31 +265,31 @@ export const endpoints = {
   },
 
   staff: {
-    list: (params?: { clientId?: string; page?: number; limit?: number }) => {
+    list: (params?: { projectId?: string; page?: number; limit?: number }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.page) q.set("page", String(params.page));
       if (params?.limit) q.set("limit", String(params.limit));
       const qs = q.toString();
-      return qs ? `/client-staff?${qs}` : "/client-staff";
+      return qs ? `/project-staff?${qs}` : "/project-staff";
     },
-    byId: (id: string) => `/client-staff/${id}`,
-    create: () => "/client-staff",
-    update: (id: string) => `/client-staff/${id}`,
-    delete: (id: string) => `/client-staff/${id}`,
+    byId: (id: string) => `/project-staff/${id}`,
+    create: () => "/project-staff",
+    update: (id: string) => `/project-staff/${id}`,
+    delete: (id: string) => `/project-staff/${id}`,
     workLogs: (params?: {
-      clientId?: string;
+      projectId?: string;
       page?: number;
       limit?: number;
     }) => {
       const q = new URLSearchParams();
-      if (params?.clientId) q.set("clientId", params.clientId);
+      if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.page) q.set("page", String(params.page));
       if (params?.limit) q.set("limit", String(params.limit));
       const qs = q.toString();
-      return qs ? `/client-staff/work-logs?${qs}` : "/client-staff/work-logs";
+      return qs ? `/project-staff/work-logs?${qs}` : "/project-staff/work-logs";
     },
-    staffWorkLogs: (staffId: string) => `/client-staff/${staffId}/work-logs`,
-    createWorkLog: (staffId: string) => `/client-staff/${staffId}/work-logs`,
+    staffWorkLogs: (staffId: string) => `/project-staff/${staffId}/work-logs`,
+    createWorkLog: (staffId: string) => `/project-staff/${staffId}/work-logs`,
   },
 };

@@ -1,6 +1,6 @@
-export type UserRole = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'CLIENT_ADMIN';
+export type UserRole = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'PROJECT_ADMIN';
 
-export type StockCondition = 'USABLE' | 'DAMAGED' | 'EXPIRED';
+export type StockCondition = 'USABLE' | 'DAMAGED';
 
 export type RequestStatus =
   | 'DRAFT'
@@ -34,7 +34,7 @@ export interface UserSession {
   id: string;
   username: string;
   role: UserRole;
-  clientId?: string | null;
+  projectId?: string | null;
   assignedWarehouseIds?: string[];
 }
 

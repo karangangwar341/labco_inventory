@@ -1,10 +1,10 @@
 export type ReportType =
   | 'STOCK_BALANCE'
   | 'INVENTORY_LEDGER'
-  | 'BATCH_EXPIRY'
-  | 'CLIENT_CONSUMPTION'
+  | 'PROJECT_CONSUMPTION'
   | 'PRODUCTION_RUNS'
-  | 'SHIPMENTS';
+  | 'SHIPMENTS'
+  | 'MISSING_STOCK';
 
 export type ReportFormat = 'json' | 'csv' | 'xlsx';
 
@@ -14,7 +14,7 @@ export interface QueryReportDto {
   endDate?: string;
   locationId?: string;
   productId?: string;
-  clientId?: string;
+  projectId?: string;
   warehouseId?: string;
 }
 

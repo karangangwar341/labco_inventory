@@ -25,11 +25,6 @@ export class PostTransactionLineDto {
   @IsNotEmpty()
   productId!: string;
 
-  @ApiPropertyOptional({ description: 'Batch UUID if lot tracking enabled' })
-  @IsOptional()
-  @IsUUID('4')
-  batchId?: string;
-
   @ApiProperty({ enum: StockCondition, default: StockCondition.USABLE })
   @IsEnum(StockCondition)
   condition!: StockCondition;
@@ -53,6 +48,11 @@ export class PostTransactionDto {
   @ApiProperty({ enum: TransactionType })
   @IsEnum(TransactionType)
   transactionType!: TransactionType;
+
+  @ApiPropertyOptional({ description: 'Immutable transaction reason, required for damaged stock-outs' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 
   @ApiPropertyOptional({ description: 'Idempotency key to prevent double posting on retries' })
   @IsOptional()

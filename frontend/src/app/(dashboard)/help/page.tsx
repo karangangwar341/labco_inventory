@@ -27,7 +27,7 @@ export default function HelpPage() {
           <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-[#5b6678]">
             <li>Choose <strong className="text-[#172033]">Stock in</strong>.</li>
             <li>Choose the location, product, quantity, and unit.</li>
-            <li>Enter the lot number or expiry date if the form asks for it.</li>
+            <li>Add the product, quantity, and unit. The system tracks stock by product and location.</li>
             <li>Choose where the stock came from, then send the request for approval.</li>
           </ol>
         </GuideSection>
@@ -35,7 +35,7 @@ export default function HelpPage() {
         <GuideSection title="Remove or send stock">
           <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-[#5b6678]">
             <li>Choose <strong className="text-[#172033]">Stock out</strong>.</li>
-            <li>Choose the product, quantity, and unit. Warehouse users also choose the client receiving the stock.</li>
+            <li>Choose the product, quantity, and unit. Warehouse users also choose the project receiving the stock.</li>
             <li>Send the request for approval. Requested stock is held while the request is reviewed.</li>
           </ol>
         </GuideSection>
@@ -54,7 +54,6 @@ export default function HelpPage() {
           <ul className="list-disc space-y-2 pl-5 text-sm leading-6 text-[#5b6678]">
             <li><strong className="text-[#172033]">No product:</strong> ask an administrator to add or approve it.</li>
             <li><strong className="text-[#172033]">No location:</strong> ask an administrator to check your account assignment.</li>
-            <li><strong className="text-[#172033]">Lot or expiry requested:</strong> enter the details shown on the item. Some products require them.</li>
             <li><strong className="text-[#172033]">Not enough stock:</strong> lower the quantity or ask an administrator to review the available stock.</li>
           </ul>
         </GuideSection>

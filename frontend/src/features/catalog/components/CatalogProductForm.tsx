@@ -97,7 +97,7 @@ export function CatalogProductForm({
   const queryClient = useQueryClient();
   const { user, role } = useAuth();
   const isEditing = Boolean(productId);
-  const canManage = role === 'SUPER_ADMIN' || role === 'CLIENT_ADMIN';
+  const canManage = role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 
   // Core Form State
   const [name, setName] = useState('');
@@ -110,7 +110,6 @@ export function CatalogProductForm({
     { unitName: '', conversionToBase: '1', isBaseUnit: true },
   ]);
   const [attributes, setAttributes] = useState<AttributeDraft[]>([]);
-  const [trackingMode, setTrackingMode] = useState<CreateProductDto['trackingMode']>('NONE');
   const [allowFractional, setAllowFractional] = useState(false);
   const [quantityPrecision, setQuantityPrecision] = useState('0');
   const [minQuantity, setMinQuantity] = useState('0');
@@ -151,7 +150,7 @@ export function CatalogProductForm({
   });
 
   const { data: products = [], isLoading: isProductsLoading } = useQuery({
-    queryKey: queryKeys.catalog.products(user?.clientId ? `client-${user.clientId}` : 'company'),
+    queryKey: queryKeys.catalog.products(user?.projectId ? `project-${user.projectId}` : 'company'),
     queryFn: () => catalogService.getProducts(),
     staleTime: 10 * 60 * 1000,
   });
@@ -161,7 +160,7 @@ export function CatalogProductForm({
     isLoading: isCategoriesLoading,
     refetch: refetchCategories,
   } = useQuery({
-    queryKey: queryKeys.catalog.categories(user?.clientId ? `client-${user.clientId}` : 'company'),
+    queryKey: queryKeys.catalog.categories(user?.projectId ? `project-${user.projectId}` : 'company'),
     queryFn: () => catalogService.getCategories(),
   });
 
@@ -181,15 +180,15 @@ export function CatalogProductForm({
   // Categories scoped to current user
   const visibleCategories = useMemo(() => {
     const scoped = categories.filter((category) =>
-      role === 'CLIENT_ADMIN'
-        ? category.ownerScope === 'CLIENT' && category.clientId === user?.clientId
+      role === 'PROJECT_ADMIN'
+        ? category.ownerScope === 'PROJECT' && category.projectId === user?.projectId
         : category.ownerScope === 'COMPANY',
     );
     if (isEditing && product?.category && !scoped.some((c) => c.id === product.categoryId)) {
       return [...scoped, product.category];
     }
     return scoped;
-  }, [categories, isEditing, product, role, user?.clientId]);
+  }, [categories, isEditing, product, role, user?.projectId]);
 
   // Root categories (no parent)
   const roots = useMemo(
@@ -246,7 +245,7 @@ export function CatalogProductForm({
 
   const selectedKind = isEditing
     ? kind
-    : role === 'CLIENT_ADMIN'
+    : role === 'PROJECT_ADMIN'
     ? 'MANUFACTURED_PRODUCT'
     : 'RAW_MATERIAL';
 
@@ -288,7 +287,6 @@ export function CatalogProductForm({
       })),
     );
 
-    setTrackingMode(product.trackingMode || 'NONE');
     setAllowFractional(Boolean(product.allowFractional));
     setQuantityPrecision(String(product.quantityPrecision ?? 0));
     setMinQuantity(String(product.minQuantity ?? product.minThreshold ?? 0));
@@ -416,10 +414,9 @@ export function CatalogProductForm({
       kind: selectedKind,
       description: description.trim() || undefined,
       categoryId: finalCategoryId,
-      brand: role === 'CLIENT_ADMIN' ? undefined : (brand.trim() || undefined),
+      brand: role === 'PROJECT_ADMIN' ? undefined : (brand.trim() || undefined),
       quantityPrecision: allowFractional ? Number(quantityPrecision) : 0,
       allowFractional,
-      trackingMode,
       minQuantity: Number(minQuantity || 0),
       minOrderQuantity: Number(minOrderQuantity || 1),
       attributes: normalizedAttributes.map((attr, index) => ({
@@ -455,7 +452,7 @@ export function CatalogProductForm({
     return (
       <ErrorState
         title="Catalog editing is restricted"
-        message="Only Super Admins and Client Admins can create or modify catalog items."
+        message="Only Super Admins and Project Admins can create or modify catalog items."
       />
     );
   }
@@ -478,8 +475,8 @@ export function CatalogProductForm({
   if (isEditing && role === 'SUPER_ADMIN' && product?.ownerScope !== 'COMPANY') {
     return (
       <ErrorState
-        title="Client managed item"
-        message="Super Admins review client product proposals in the Approvals queue. Client Admins maintain their own catalog."
+        title="Project managed item"
+        message="Super Admins review project product proposals in the Approvals queue. Project Admins maintain their own catalog."
       />
     );
   }
@@ -500,8 +497,8 @@ export function CatalogProductForm({
         description={
           isEditing
             ? 'Your specification and packaging revisions will be submitted for review before taking effect.'
-            : role === 'CLIENT_ADMIN'
-            ? 'Add a finished formulation to your private client catalog. Specifications and bill of materials remain strictly scoped to your organization.'
+            : role === 'PROJECT_ADMIN'
+            ? 'Add a finished formulation to your private project catalog. Specifications and bill of materials remain strictly scoped to your organization.'
             : 'Register a chemical reagent, diagnostic component, or lab consumable into the master company catalog.'
         }
         actions={
@@ -649,7 +646,7 @@ export function CatalogProductForm({
               </div>
 
               {/* Brand / Manufacturer */}
-              {role !== 'CLIENT_ADMIN' && (
+              {role !== 'PROJECT_ADMIN' && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-medium text-slate-700 block tracking-tight">
@@ -873,70 +870,13 @@ export function CatalogProductForm({
           </CardContent>
         </Card>
 
-        {/* Section 3: Batch Tracking & Stock Thresholds */}
+        {/* Section 3: Stock Thresholds */}
         <Card>
           <CardHeader>
             <CardTitle>3. Inventory Tracking &amp; Replenishment Thresholds</CardTitle>
-            <CardDescription>
-              Set batch/lot enforcement rules, shelf-life monitoring, and minimum safety stock.
-            </CardDescription>
+            <CardDescription>Set minimum safety stock and replenishment thresholds.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Tracking Mode Options */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-700 block tracking-tight">
-                Traceability &amp; Expiry Enforcement Mode
-              </label>
-              <div className="grid gap-3 sm:grid-cols-4">
-                {[
-                  {
-                    value: 'NONE',
-                    label: 'No Tracking',
-                    desc: 'General consumables, racks, standard lab plasticware.',
-                  },
-                  {
-                    value: 'BATCH_ONLY',
-                    label: 'Lot / Batch Number',
-                    desc: 'Chemical raw materials, bulk solvent production runs.',
-                  },
-                  {
-                    value: 'EXPIRY_ONLY',
-                    label: 'Expiry Date Only',
-                    desc: 'Sterile disposables, consumables with shelf life.',
-                  },
-                  {
-                    value: 'BOTH',
-                    label: 'Lot & Expiry Date',
-                    desc: 'Diagnostic reagents, enzymes, calibration sera, controls.',
-                  },
-                ].map((mode) => (
-                  <label
-                    key={mode.value}
-                    className={`flex flex-col p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                      trackingMode === mode.value
-                        ? 'border-blue-600 bg-blue-50/50 shadow-2xs'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <input
-                        type="radio"
-                        name="trackingMode"
-                        value={mode.value}
-                        checked={trackingMode === mode.value}
-                        onChange={() =>
-                          setTrackingMode(mode.value as CreateProductDto['trackingMode'])
-                        }
-                        className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-xs font-semibold text-slate-900">{mode.label}</span>
-                    </div>
-                    <span className="text-[11px] text-slate-500 leading-tight">{mode.desc}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-slate-100">
               {/* Minimum Stock Alert */}
               <Input
@@ -1153,7 +1093,7 @@ export function CatalogProductForm({
             ? `Create a specialized subcategory nested under "${
                 roots.find((r) => r.id === modalParentId)?.name || 'the selected parent'
               }".`
-            : role === 'CLIENT_ADMIN'
+            : role === 'PROJECT_ADMIN'
             ? 'Create a private category scoped to your organization for manufactured products.'
             : 'Create a top-level category available for company raw materials and inventory.'
         }
@@ -1212,7 +1152,7 @@ export function CatalogProductForm({
 
       {/* Quick Brand Creation Modal */}
       <Modal
-        isOpen={role !== 'CLIENT_ADMIN' && showBrandModal}
+        isOpen={role !== 'PROJECT_ADMIN' && showBrandModal}
         onClose={() => setShowBrandModal(false)}
         title="Register New Brand / Manufacturer"
         description="Add a recognized laboratory manufacturer, supplier, or trade brand to your catalog taxonomy."

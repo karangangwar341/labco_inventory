@@ -21,45 +21,45 @@ import { CreateStaffMemberDto } from './dto/create-staff.dto.js';
 import { UpdateStaffMemberDto } from './dto/update-staff.dto.js';
 import { CreateWorkLogDto } from './dto/create-work-log.dto.js';
 
-@ApiTags('Client Staff & HR Operations')
+@ApiTags('Project Staff & HR Operations')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('client-staff')
+@Controller('project-staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'List client staff members' })
-  @ApiQuery({ name: 'clientId', required: false, description: 'Client ID (Super Admin only)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'List project staff members' })
+  @ApiQuery({ name: 'projectId', required: false, description: 'Project ID (Super Admin only)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async listStaffMembers(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.staffService.listStaffMembers(user, clientId, { page, limit });
+    return this.staffService.listStaffMembers(user, projectId, { page, limit });
   }
 
   @Get('work-logs')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'List recent work logs across all staff for the client facility' })
-  @ApiQuery({ name: 'clientId', required: false })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'List recent work logs across all staff for the project facility' })
+  @ApiQuery({ name: 'projectId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  async listAllClientWorkLogs(
+  async listAllProjectWorkLogs(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    return this.staffService.listAllClientWorkLogs(user, clientId, { page, limit });
+    return this.staffService.listAllProjectWorkLogs(user, projectId, { page, limit });
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Get staff member profile details and work logs' })
   async getStaffMember(
     @CurrentUser() user: AuthenticatedUser,
@@ -69,8 +69,8 @@ export class StaffController {
   }
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'Register a new staff member under the client organization' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Register a new staff member under the project organization' })
   async createStaffMember(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateStaffMemberDto,
@@ -79,7 +79,7 @@ export class StaffController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Update staff member profile or status' })
   async updateStaffMember(
     @CurrentUser() user: AuthenticatedUser,
@@ -90,7 +90,7 @@ export class StaffController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Delete staff member and their logged records' })
   async deleteStaffMember(
     @CurrentUser() user: AuthenticatedUser,
@@ -100,7 +100,7 @@ export class StaffController {
   }
 
   @Get(':id/work-logs')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List work logs for a specific staff member' })
   async listWorkLogsForStaff(
     @CurrentUser() user: AuthenticatedUser,
@@ -110,7 +110,7 @@ export class StaffController {
   }
 
   @Post(':id/work-logs')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Submit a daily work log entry for a staff member' })
   async createWorkLog(
     @CurrentUser() user: AuthenticatedUser,

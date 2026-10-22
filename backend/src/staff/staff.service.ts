@@ -17,50 +17,50 @@ import { Decimal } from '@prisma/client/runtime/library';
 export class StaffService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async resolveClientId(
+  private async resolveProjectId(
     user: AuthenticatedUser,
-    requestedClientId?: string,
+    requestedProjectId?: string,
     requireExplicit = true,
   ): Promise<string | undefined> {
     if (user.role === UserRole.SUPER_ADMIN) {
-      if (requestedClientId) return requestedClientId;
-      if (user.clientId) return user.clientId;
+      if (requestedProjectId) return requestedProjectId;
+      if (user.projectId) return user.projectId;
       if (requireExplicit) {
-        const firstClient = await this.prisma.client.findFirst({
+        const firstProject = await this.prisma.project.findFirst({
           where: { status: 'ACTIVE' },
           orderBy: { createdAt: 'asc' },
         });
-        if (firstClient) return firstClient.id;
-        throw new BadRequestException('Super Admin must specify clientId parameter when creating a staff member');
+        if (firstProject) return firstProject.id;
+        throw new BadRequestException('Super Admin must specify projectId parameter when creating a staff member');
       }
       return undefined;
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      if (!user.clientId) {
-        throw new ForbiddenException('Client Admin user is not associated with any client entity');
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      if (!user.projectId) {
+        throw new ForbiddenException('Project Admin user is not associated with any project entity');
       }
-      return user.clientId;
+      return user.projectId;
     }
 
-    throw new ForbiddenException('Access denied. Client Admin or Super Admin role required');
+    throw new ForbiddenException('Access denied. Project Admin or Super Admin role required');
   }
 
   async listStaffMembers(
     user: AuthenticatedUser,
-    clientIdParam?: string,
+    projectIdParam?: string,
     pagination?: { page?: number; limit?: number },
   ) {
-    const clientId = await this.resolveClientId(user, clientIdParam, false);
-    const where = clientId ? { clientId } : {};
+    const projectId = await this.resolveProjectId(user, projectIdParam, false);
+    const where = projectId ? { projectId } : {};
 
     const take = pagination?.limit ? Math.min(Number(pagination.limit), 200) : undefined;
     const skip = pagination?.page && take ? (Math.max(Number(pagination.page), 1) - 1) * take : undefined;
 
-    const members = await this.prisma.clientStaffMember.findMany({
+    const members = await this.prisma.projectStaffMember.findMany({
       where,
       include: {
-        client: {
+        project: {
           select: { id: true, name: true },
         },
         _count: {
@@ -78,8 +78,8 @@ export class StaffService {
 
     return members.map((m) => ({
       id: m.id,
-      clientId: m.clientId,
-      clientName: m.client?.name || 'Client Facility',
+      projectId: m.projectId,
+      projectName: m.project?.name || 'Project Facility',
       staffNumber: m.staffNumber,
       fullName: m.fullName,
       roleTitle: m.roleTitle,
@@ -93,7 +93,7 @@ export class StaffService {
   }
 
   async getStaffMember(id: string, user: AuthenticatedUser) {
-    const member = await this.prisma.clientStaffMember.findUnique({
+    const member = await this.prisma.projectStaffMember.findUnique({
       where: { id },
       include: {
         workLogs: {
@@ -107,21 +107,21 @@ export class StaffService {
       throw new NotFoundException(`Staff member with ID "${id}" not found`);
     }
 
-    if (user.role !== UserRole.SUPER_ADMIN && member.clientId !== user.clientId) {
-      throw new ForbiddenException('Cannot access staff member belonging to another client');
+    if (user.role !== UserRole.SUPER_ADMIN && member.projectId !== user.projectId) {
+      throw new ForbiddenException('Cannot access staff member belonging to another project');
     }
 
     return member;
   }
 
   async createStaffMember(dto: CreateStaffMemberDto, user: AuthenticatedUser) {
-    const clientId = (await this.resolveClientId(user, dto.clientId, true))!;
+    const projectId = (await this.resolveProjectId(user, dto.projectId, true))!;
 
-    // Check duplicate staffNumber within the same client
-    const existing = await this.prisma.clientStaffMember.findUnique({
+    // Check duplicate staffNumber within the same project
+    const existing = await this.prisma.projectStaffMember.findUnique({
       where: {
-        clientId_staffNumber: {
-          clientId,
+        projectId_staffNumber: {
+          projectId,
           staffNumber: dto.staffNumber.trim(),
         },
       },
@@ -129,13 +129,13 @@ export class StaffService {
 
     if (existing) {
       throw new ConflictException(
-        `Staff number "${dto.staffNumber.trim()}" is already assigned to another staff member in this client facility`,
+        `Staff number "${dto.staffNumber.trim()}" is already assigned to another staff member in this project facility`,
       );
     }
 
-    return this.prisma.clientStaffMember.create({
+    return this.prisma.projectStaffMember.create({
       data: {
-        clientId,
+        projectId,
         staffNumber: dto.staffNumber.trim(),
         fullName: dto.fullName.trim(),
         roleTitle: dto.roleTitle?.trim() || null,
@@ -148,10 +148,10 @@ export class StaffService {
     const member = await this.getStaffMember(id, user);
 
     if (dto.staffNumber && dto.staffNumber.trim() !== member.staffNumber) {
-      const duplicate = await this.prisma.clientStaffMember.findUnique({
+      const duplicate = await this.prisma.projectStaffMember.findUnique({
         where: {
-          clientId_staffNumber: {
-            clientId: member.clientId,
+          projectId_staffNumber: {
+            projectId: member.projectId,
             staffNumber: dto.staffNumber.trim(),
           },
         },
@@ -164,7 +164,7 @@ export class StaffService {
       }
     }
 
-    return this.prisma.clientStaffMember.update({
+    return this.prisma.projectStaffMember.update({
       where: { id },
       data: {
         ...(dto.staffNumber ? { staffNumber: dto.staffNumber.trim() } : {}),
@@ -179,7 +179,7 @@ export class StaffService {
   async deleteStaffMember(id: string, user: AuthenticatedUser) {
     await this.getStaffMember(id, user);
 
-    await this.prisma.clientStaffMember.delete({
+    await this.prisma.projectStaffMember.delete({
       where: { id },
     });
 
@@ -191,10 +191,10 @@ export class StaffService {
 
     const logDate = dto.logDate ? new Date(dto.logDate) : new Date();
 
-    return this.prisma.clientStaffWorkLog.create({
+    return this.prisma.projectStaffWorkLog.create({
       data: {
         staffMemberId: member.id,
-        clientId: member.clientId,
+        projectId: member.projectId,
         logDate,
         shiftType: dto.shiftType?.trim() || 'GENERAL',
         hoursWorked: dto.hoursWorked !== undefined ? new Decimal(dto.hoursWorked) : new Decimal(8),
@@ -207,25 +207,25 @@ export class StaffService {
   async listWorkLogsForStaff(staffId: string, user: AuthenticatedUser) {
     const member = await this.getStaffMember(staffId, user);
 
-    return this.prisma.clientStaffWorkLog.findMany({
+    return this.prisma.projectStaffWorkLog.findMany({
       where: { staffMemberId: member.id },
       orderBy: { logDate: 'desc' },
       take: 100,
     });
   }
 
-  async listAllClientWorkLogs(
+  async listAllProjectWorkLogs(
     user: AuthenticatedUser,
-    clientIdParam?: string,
+    projectIdParam?: string,
     pagination?: { page?: number; limit?: number },
   ) {
-    const clientId = await this.resolveClientId(user, clientIdParam, false);
-    const where = clientId ? { clientId } : {};
+    const projectId = await this.resolveProjectId(user, projectIdParam, false);
+    const where = projectId ? { projectId } : {};
 
     const take = pagination?.limit ? Math.min(Number(pagination.limit), 500) : 200;
     const skip = pagination?.page ? (Math.max(Number(pagination.page), 1) - 1) * take : undefined;
 
-    const logs = await this.prisma.clientStaffWorkLog.findMany({
+    const logs = await this.prisma.projectStaffWorkLog.findMany({
       where,
       include: {
         staffMember: {
@@ -234,7 +234,7 @@ export class StaffService {
             staffNumber: true,
             fullName: true,
             roleTitle: true,
-            client: {
+            project: {
               select: { id: true, name: true },
             },
           },
@@ -247,7 +247,7 @@ export class StaffService {
 
     return logs.map((log) => ({
       ...log,
-      clientName: log.staffMember?.client?.name || 'Client Facility',
+      projectName: log.staffMember?.project?.name || 'Project Facility',
     }));
   }
 }

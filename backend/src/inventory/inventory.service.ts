@@ -12,7 +12,7 @@ export class InventoryService {
   private lowStockCountCache = new Map<string, { count: number; expiresAt: number }>();
 
   async getAccessibleLocations(user: AuthenticatedUser) {
-    const cacheKey = `${user.role}_${user.id}_${user.warehouseId || ''}_${user.clientId || ''}`;
+    const cacheKey = `${user.role}_${user.id}_${user.warehouseId || ''}_${user.projectId || ''}`;
     const cached = this.locationsCache.get(cacheKey);
     const now = Date.now();
     if (cached && now < cached.expiresAt) {
@@ -24,7 +24,7 @@ export class InventoryService {
       const locations = await this.prisma.stockLocation.findMany({
         include: {
           warehouse: { select: { id: true, name: true } },
-          client: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'asc' },
       });
@@ -32,8 +32,8 @@ export class InventoryService {
         id: location.id,
         locationType: location.locationType,
         warehouseId: location.warehouseId,
-        clientId: location.clientId,
-        name: location.warehouse?.name || location.client?.name || 'Stock location',
+        projectId: location.projectId,
+        name: location.warehouse?.name || location.project?.name || 'Stock location',
       }));
     } else if (user.role === UserRole.STORE_ADMIN) {
       const warehouseId = user.warehouseId !== undefined
@@ -44,48 +44,48 @@ export class InventoryService {
           }))?.warehouseId;
       if (!warehouseId) return [];
 
-      const assignments = await this.prisma.clientWarehouseAssignment.findMany({
+      const assignments = await this.prisma.projectWarehouseAssignment.findMany({
         where: { warehouseId, isActive: true },
-        select: { clientId: true },
+        select: { projectId: true },
       });
-      const allowedClientIds = assignments.map((assignment) => assignment.clientId);
+      const allowedProjectIds = assignments.map((assignment) => assignment.projectId);
       const locations = await this.prisma.stockLocation.findMany({
         where: {
           OR: [
             { warehouseId },
-            ...(allowedClientIds.length ? [{ clientId: { in: allowedClientIds } }] : []),
+            ...(allowedProjectIds.length ? [{ projectId: { in: allowedProjectIds } }] : []),
           ],
         },
         include: {
           warehouse: { select: { id: true, name: true } },
-          client: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
         },
       });
       result = locations.map((location) => ({
         id: location.id,
         locationType: location.locationType,
         warehouseId: location.warehouseId,
-        clientId: location.clientId,
-        name: location.warehouse?.name || location.client?.name || 'Stock location',
+        projectId: location.projectId,
+        name: location.warehouse?.name || location.project?.name || 'Stock location',
       }));
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
         : (await this.prisma.user.findUnique({
             where: { id: user.id },
-            select: { clientId: true },
-          }))?.clientId;
-      if (!clientId) return [];
+            select: { projectId: true },
+          }))?.projectId;
+      if (!projectId) return [];
       const location = await this.prisma.stockLocation.findUnique({
-        where: { clientId },
-        include: { client: { select: { name: true } } },
+        where: { projectId },
+        include: { project: { select: { name: true } } },
       });
       if (!location) return [];
       result = [{
         id: location.id,
         locationType: location.locationType,
-        clientId: location.clientId,
-        name: location.client?.name || 'My location',
+        projectId: location.projectId,
+        name: location.project?.name || 'My location',
       }];
     }
 
@@ -94,7 +94,7 @@ export class InventoryService {
   }
 
   async getLowStockCount(user: AuthenticatedUser): Promise<{ count: number }> {
-    const cacheKey = `${user.role}_${user.warehouseId || ''}_${user.clientId || ''}_${user.id}`;
+    const cacheKey = `${user.role}_${user.warehouseId || ''}_${user.projectId || ''}_${user.id}`;
     const cached = this.lowStockCountCache.get(cacheKey);
     const now = Date.now();
     if (cached && now < cached.expiresAt) {
@@ -112,12 +112,12 @@ export class InventoryService {
         const loc = await this.prisma.stockLocation.findUnique({ where: { warehouseId } });
         if (!loc) return { count: 0 };
         locationId = loc.id;
-      } else if (user.role === UserRole.CLIENT_ADMIN) {
-        const clientId =
-          user.clientId ||
-          (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
-        if (!clientId) return { count: 0 };
-        const loc = await this.prisma.stockLocation.findUnique({ where: { clientId } });
+      } else if (user.role === UserRole.PROJECT_ADMIN) {
+        const projectId =
+          user.projectId ||
+          (await this.prisma.user.findUnique({ where: { id: user.id } }))?.projectId;
+        if (!projectId) return { count: 0 };
+        const loc = await this.prisma.stockLocation.findUnique({ where: { projectId } });
         if (!loc) return { count: 0 };
         locationId = loc.id;
       }
@@ -158,10 +158,10 @@ export class InventoryService {
     });
   }
 
-  async getOrCreateLocationForClient(clientId: string) {
+  async getOrCreateLocationForProject(projectId: string) {
     return this.prisma.stockLocation.upsert({
-      where: { clientId },
-      create: { locationType: LocationType.CLIENT, clientId },
+      where: { projectId },
+      create: { locationType: LocationType.PROJECT, projectId },
       update: {},
     });
   }
@@ -191,14 +191,14 @@ export class InventoryService {
       if (!loc) return [];
       where.locationId = loc.id;
       where.product = { kind: ProductKind.RAW_MATERIAL };
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
-      if (!clientId) {
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.projectId;
+      if (!projectId) {
         return [];
       }
-      const loc = await this.prisma.stockLocation.findUnique({ where: { clientId } });
+      const loc = await this.prisma.stockLocation.findUnique({ where: { projectId } });
       if (!loc) return [];
       where.locationId = loc.id;
     }
@@ -216,16 +216,14 @@ export class InventoryService {
             kind: true,
             brand: true,
             minQuantity: true,
-            trackingMode: true,
             category: { select: { id: true, name: true } },
             units: { where: { isBaseUnit: true }, select: { unitName: true } },
           },
         },
-        batch: { select: { id: true, batchNumber: true, expiryDate: true } },
         location: {
           include: {
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
       },
@@ -243,11 +241,11 @@ export class InventoryService {
         locationId: b.locationId,
         locationName:
           location?.warehouse?.name ||
-          location?.client?.name ||
+          location?.project?.name ||
           'Stock Location',
-        locationType: location?.locationType || (location?.warehouseId ? 'WAREHOUSE' : 'CLIENT'),
+        locationType: location?.locationType || (location?.warehouseId ? 'WAREHOUSE' : 'PROJECT'),
         warehouseId: location?.warehouseId || null,
-        clientId: location?.clientId || null,
+        projectId: location?.projectId || null,
         productId: b.productId,
         productName: product?.name || 'Product',
         brand: product?.brand || null,
@@ -255,12 +253,8 @@ export class InventoryService {
         categoryId: product?.category?.id || null,
         unit: product?.units?.[0]?.unitName || 'units',
         minThreshold: product?.minQuantity ? Number(product.minQuantity) : 0,
-        batchId: b.batchId,
-        batchNumber: (b as any).batch?.batchNumber,
         usableQty: b.usableQty,
         reservedQty: b.reservedQty,
-        damagedQty: b.damagedQty,
-        expiredQty: b.expiredQty,
         physicalQty,
         availableQty,
         updatedAt: b.updatedAt,
@@ -307,10 +301,10 @@ export class InventoryService {
       });
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.clientId) return [];
-      const loc = await this.getOrCreateLocationForClient(dbUser.clientId);
+      if (!dbUser?.projectId) return [];
+      const loc = await this.getOrCreateLocationForProject(dbUser.projectId);
 
       return this.prisma.ledgerTransaction.findMany({
         where: {

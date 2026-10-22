@@ -23,10 +23,10 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
     sessionId: 'sess-1',
   };
 
-  const clientAdminUser: any = {
+  const projectAdminUser: any = {
     id: 'ca-1',
-    username: 'clientadmin',
-    role: UserRole.CLIENT_ADMIN,
+    username: 'projectadmin',
+    role: UserRole.PROJECT_ADMIN,
     status: 'ACTIVE',
     sessionId: 'sess-2',
   };
@@ -51,9 +51,6 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         findMany: vi.fn(),
       },
       ledgerEntry: {
-        findMany: vi.fn(),
-      },
-      stockBatch: {
         findMany: vi.fn(),
       },
       departmentIssue: {
@@ -94,16 +91,13 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       }));
     });
 
-    it('calculates Available = Usable - Reserved and Physical = Usable + Damaged + Expired', async () => {
+    it('calculates Available = Usable - Reserved and Physical = Usable', async () => {
       mockPrisma.inventoryBalance.findMany.mockResolvedValue([
         {
           usableQty: new Prisma.Decimal(100),
           reservedQty: new Prisma.Decimal(30),
-          damagedQty: new Prisma.Decimal(5),
-          expiredQty: new Prisma.Decimal(15),
           product: { id: 'p1', name: 'Diagnostic Kit', minQuantity: new Prisma.Decimal(80) },
           location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Main Depot' } },
-          batch: { batchNumber: 'LOT-100', expiryDate: new Date('2027-01-01') },
         },
       ]);
 
@@ -117,9 +111,6 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(row.usableQuantity).toBe(100);
       expect(row.reservedQuantity).toBe(30);
       expect(row.availableQuantity).toBe(70); // 100 - 30
-      expect(row.damagedQuantity).toBe(5);
-      expect(row.expiredQuantity).toBe(15);
-      expect(row.physicalQuantity).toBe(120); // 100 + 5 + 15
       expect(row.lowStockAlert).toBe(true); // 70 < minThreshold 80
 
       // Audit trail logged
@@ -136,9 +127,9 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
   });
 
   describe('2. Inventory Ledger Report & Source Warehouse Privacy Invariant', () => {
-    it('redacts warehouse identity when Client Admin views inbound warehouse movements', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-1' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+    it('redacts warehouse identity when Project Admin views inbound warehouse movements', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
       mockPrisma.ledgerEntry.findMany.mockResolvedValue([
         {
@@ -158,48 +149,18 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
             locationType: 'WAREHOUSE',
             warehouse: { name: 'Confidential Central Depot' },
           },
-          batch: null,
         },
       ]);
 
       const result = await reportsService.generateReport(
         ReportType.INVENTORY_LEDGER,
         { format: ReportFormat.JSON },
-        clientAdminUser,
+        projectAdminUser,
       );
 
       const row = result.data![0];
       // Invariant check: Inbound privacy filter masks source warehouse identity
       expect(row.locationName).toBe('[REDACTED]');
-    });
-  });
-
-  describe('3. Batch Expiry & Days Remaining Calculation', () => {
-    it('calculates days remaining and flags expired batches', async () => {
-      const pastDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000); // 3 days ago
-      mockPrisma.stockBatch.findMany.mockResolvedValue([
-        {
-          id: 'b-exp',
-          batchNumber: 'LOT-EXPIRED',
-          expiryDate: pastDate,
-          status: 'ACTIVE',
-          product: { name: 'Enzyme Solution' },
-          balances: [
-            { usableQty: new Prisma.Decimal(0), expiredQty: new Prisma.Decimal(20), damagedQty: new Prisma.Decimal(0) },
-          ],
-        },
-      ]);
-
-      const result = await reportsService.generateReport(
-        ReportType.BATCH_EXPIRY,
-        { format: ReportFormat.JSON },
-        superAdminUser,
-      );
-
-      const row = result.data![0];
-      expect(row.isExpired).toBe(true);
-      expect(row.daysRemaining).toBeLessThanOrEqual(0);
-      expect(row.expiredQuantity).toBe(20);
     });
   });
 
@@ -217,15 +178,15 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('forbids Client Admin from accessing other client locations', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-1' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+    it('forbids Project Admin from accessing other project locations', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
       await expect(
         reportsService.generateReport(
           ReportType.STOCK_BALANCE,
-          { locationId: 'loc-client-2', format: ReportFormat.JSON },
-          clientAdminUser,
+          { locationId: 'loc-project-2', format: ReportFormat.JSON },
+          projectAdminUser,
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -237,11 +198,8 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         {
           usableQty: new Prisma.Decimal(10),
           reservedQty: new Prisma.Decimal(0),
-          damagedQty: new Prisma.Decimal(0),
-          expiredQty: new Prisma.Decimal(0),
           product: { id: 'p-inj', name: '=cmd|"/c calc"!A0', minQuantity: new Prisma.Decimal(0) },
           location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: '+MaliciousWarehouse' } },
-          batch: null,
         },
       ]);
 
@@ -269,7 +227,6 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
           },
           product: { id: 'p-1', name: 'Test Product' },
           location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Main Depot' } },
-          batch: null,
           condition: StockCondition.USABLE,
           originalQty: new Prisma.Decimal(20),
           unitNameSnapshot: 'Kit',
@@ -323,11 +280,8 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         {
           usableQty: new Prisma.Decimal(25),
           reservedQty: new Prisma.Decimal(5),
-          damagedQty: new Prisma.Decimal(1),
-          expiredQty: new Prisma.Decimal(0),
           product: { id: 'p-1', name: 'Reagent Kit', minQuantity: new Prisma.Decimal(10) },
           location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Main Depot' } },
-          batch: { batchNumber: 'LOT-XLSX', expiryDate: new Date('2027-06-01') },
         },
       ]);
 
@@ -359,7 +313,6 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
           },
           product: { id: 'p-1', name: 'ALT / SGPT' },
           location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Apollo Depot' } },
-          batch: null,
           condition: StockCondition.USABLE,
           originalQty: new Prisma.Decimal(10),
           unitNameSnapshot: 'Pack',
@@ -395,7 +348,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
     });
   });
 
-  describe('8. Super Admin Scope Filtering: Warehouse-wise, Client-wise, and All', () => {
+  describe('8. Super Admin Scope Filtering: Warehouse-wise, Project-wise, and All', () => {
     it('allows Super Admin to view unconstrained global stock across all locations', async () => {
       mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
 
@@ -405,7 +358,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         superAdminUser,
       );
 
-      // No locationId constraint in where clause means all company and client locations
+      // No locationId constraint in where clause means all company and project locations
       expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {},
@@ -435,23 +388,23 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       );
     });
 
-    it('allows Super Admin to scope report client-wise', async () => {
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-beta' });
+    it('allows Super Admin to scope report project-wise', async () => {
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-beta' });
       mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
 
       await reportsService.generateReport(
         ReportType.STOCK_BALANCE,
-        { clientId: 'client-beta-id', format: ReportFormat.JSON },
+        { projectId: 'project-beta-id', format: ReportFormat.JSON },
         superAdminUser,
       );
 
       expect(mockPrisma.stockLocation.findUnique).toHaveBeenCalledWith({
-        where: { clientId: 'client-beta-id' },
+        where: { projectId: 'project-beta-id' },
       });
       expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            locationId: { in: ['loc-client-beta'] },
+            locationId: { in: ['loc-project-beta'] },
           }),
         }),
       );
@@ -459,15 +412,15 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
   });
 
   describe('9. Shipments & Inbound Dispatches Report', () => {
-    it('generates shipment report with privacy redaction for Client Admin', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-1' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+    it('generates shipment report with privacy redaction for Project Admin', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
       mockPrisma.shipment = {
         findMany: vi.fn().mockResolvedValue([
           {
             id: 'ship-101',
-            shipmentType: 'DISPATCH_TO_CLIENT',
+            shipmentType: 'DISPATCH_TO_PROJECT',
             status: 'IN_TRANSIT',
             sourceLocation: {
               id: 'loc-wh-secret',
@@ -475,9 +428,9 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
               warehouse: { name: 'Secret Central Hub' },
             },
             destinationLocation: {
-              id: 'loc-client-1',
-              locationType: 'CLIENT',
-              client: { name: 'Hospital Beta' },
+              id: 'loc-project-1',
+              locationType: 'PROJECT',
+              project: { name: 'Hospital Beta' },
             },
             lines: [
               {
@@ -495,7 +448,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       const result = await reportsService.generateReport(
         ReportType.SHIPMENTS,
         { format: ReportFormat.JSON },
-        clientAdminUser,
+        projectAdminUser,
       );
 
       expect(result.data!.length).toBe(1);

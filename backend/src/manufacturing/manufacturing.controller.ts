@@ -35,7 +35,7 @@ import {
 import { ReRunCycleDto } from './dto/re-run-cycle.dto.js';
 import { QueryManufacturingAnalyticsDto } from './dto/query-manufacturing-analytics.dto.js';
 
-@ApiTags('Client Manufacturing')
+@ApiTags('Project Manufacturing')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('production-runs')
@@ -43,7 +43,7 @@ export class ManufacturingController {
   constructor(private readonly manufacturingService: ManufacturingService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new client manufacturing run draft' })
+  @ApiOperation({ summary: 'Create a new project manufacturing run draft' })
   async createProductionRun(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateProductionRunDto,
@@ -53,14 +53,14 @@ export class ManufacturingController {
 
   @Get()
   @ApiOperation({
-    summary: 'List client manufacturing runs within caller scope',
+    summary: 'List project manufacturing runs within caller scope',
   })
   async getProductionRuns(
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: ProductionStatus,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
   ) {
-    return this.manufacturingService.getProductionRuns(user, status, clientId);
+    return this.manufacturingService.getProductionRuns(user, status, projectId);
   }
 
   @Get('cycles')
@@ -84,7 +84,7 @@ export class ManufacturingController {
 
   @Post('check-low-stock-cycles')
   @ApiOperation({
-    summary: 'Scan for low-stock manufactured products and notify client admins to re-run cycles',
+    summary: 'Scan for low-stock manufactured products and notify project admins to re-run cycles',
   })
   async checkLowStockCycles(@CurrentUser() user: AuthenticatedUser) {
     return this.manufacturingService.checkLowStockCycles(user);
@@ -103,7 +103,7 @@ export class ManufacturingController {
   }
 
   @Post('batch-submit')
-  @Roles(UserRole.CLIENT_ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.PROJECT_ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary:
       'Submit multiple production runs as a Day-End batch for single approval',
@@ -165,7 +165,7 @@ export class ManufacturingController {
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update a client production run draft without changing stock',
+    summary: 'Update a project production run draft without changing stock',
   })
   async updateProductionRun(
     @CurrentUser() user: AuthenticatedUser,
@@ -176,7 +176,7 @@ export class ManufacturingController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({
     summary:
       'Delete the caller’s own production draft; drafts have no inventory effect',

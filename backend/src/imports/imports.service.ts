@@ -165,8 +165,8 @@ export class ImportsService {
         normalized.locationId = dto.defaultLocationId;
       }
 
-      // Duplicate row detection signature: (product, batch, location)
-      const sig = `${normalized.productId || normalized.productName || ''}|${normalized.batchNumber || ''}|${normalized.locationId || ''}`;
+      // Duplicate row detection signature: (product, location)
+      const sig = `${normalized.productId || normalized.productName || ''}|${normalized.locationId || ''}`;
       let hasDuplicateWarning = false;
       let duplicateWarningReason: string | null = null;
 
@@ -214,7 +214,7 @@ export class ImportsService {
     if (query.importType) where.importType = query.importType;
     if (query.status) where.status = query.status;
 
-    if (user.role === UserRole.CLIENT_ADMIN || user.role === UserRole.STORE_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN || user.role === UserRole.STORE_ADMIN) {
       where.uploadedById = user.id;
     }
 
@@ -247,7 +247,7 @@ export class ImportsService {
     }
 
     if (
-      (user.role === UserRole.CLIENT_ADMIN || user.role === UserRole.STORE_ADMIN) &&
+      (user.role === UserRole.PROJECT_ADMIN || user.role === UserRole.STORE_ADMIN) &&
       batch.uploadedById !== user.id
     ) {
       throw new ForbiddenException('Access denied to other user import batches');
@@ -302,7 +302,7 @@ export class ImportsService {
     let mixedWarehouseLocations = new Set<string>();
     const dbUser = user.role === UserRole.SUPER_ADMIN
       ? null
-      : await this.prisma.user.findUnique({ where: { id: user.id }, select: { warehouseId: true, clientId: true } });
+      : await this.prisma.user.findUnique({ where: { id: user.id }, select: { warehouseId: true, projectId: true } });
 
     for (const row of batch.rows) {
       const data = row.normalizedDataJson as Record<string, any>;
@@ -354,17 +354,6 @@ export class ImportsService {
             }
           }
 
-          // 3. Batch / Expiry tracking checks
-          if (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH') {
-            if (!data.batchNumber && !data.batchId) {
-              errors.push('Batch/lot number is required for lot-tracked product');
-            }
-          }
-          if (product.trackingMode === 'EXPIRY_ONLY' || product.trackingMode === 'BOTH') {
-            if (!data.expiryDate) {
-              errors.push('Expiry date is required for expiry-tracked product');
-            }
-          }
         }
 
         // 4. Resolve Location
@@ -389,7 +378,6 @@ export class ImportsService {
             where: {
               locationId: data.locationId,
               productId: product.id,
-              batchId: data.batchId || null,
             },
           });
           const available = balance ? balance.usableQty.minus(balance.reservedQty) : new Prisma.Decimal(0);
@@ -467,16 +455,16 @@ export class ImportsService {
   }
 
   private canUseLocation(
-    location: { locationType: string; warehouseId: string | null; clientId: string | null },
+    location: { locationType: string; warehouseId: string | null; projectId: string | null },
     user: AuthenticatedUser,
-    dbUser: { warehouseId: string | null; clientId: string | null } | null,
+    dbUser: { warehouseId: string | null; projectId: string | null } | null,
   ): boolean {
     if (user.role === UserRole.SUPER_ADMIN) return true;
     if (user.role === UserRole.STORE_ADMIN) {
       return location.locationType === 'WAREHOUSE' && location.warehouseId === dbUser?.warehouseId;
     }
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      return location.locationType === 'CLIENT' && location.clientId === dbUser?.clientId;
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      return location.locationType === 'PROJECT' && location.projectId === dbUser?.projectId;
     }
     return false;
   }
@@ -539,7 +527,6 @@ export class ImportsService {
     const lines: Array<{
       locationId: string;
       productId: string;
-      batchId?: string;
       quantity: number;
       unitName: string;
       condition: StockCondition;
@@ -567,7 +554,6 @@ export class ImportsService {
         lines.push({
           locationId: data.locationId,
           productId: product.id,
-          batchId: data.batchId || undefined,
           quantity: Number(data.quantity),
           unitName: unit?.unitName || 'PIECE',
           condition: (data.condition as StockCondition) || StockCondition.USABLE,

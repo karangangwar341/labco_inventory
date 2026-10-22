@@ -52,24 +52,22 @@ export class NotificationsController {
 
   @Post('check-alerts')
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Trigger low-stock crossing and expiry warning checks' })
+  @ApiOperation({ summary: 'Trigger low-stock crossing checks' })
   async checkAlerts() {
-    const expiryResult = await this.notificationsService.checkExpiryWarnings();
     return {
       success: true,
-      expiryResult,
     };
   }
 
   @Get('settings')
-  @ApiOperation({ summary: 'Get global notification and expiry interval settings' })
+  @ApiOperation({ summary: 'Get global notification settings' })
   async getSettings() {
     return this.notificationsService.getSettings();
   }
 
   @Patch('settings')
   @Roles(UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Update global notification and expiry warning settings' })
+  @ApiOperation({ summary: 'Update global notification settings' })
   async updateSettings(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateNotificationSettingsDto,

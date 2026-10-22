@@ -16,14 +16,14 @@ import {
   ConflictException,
 } from '@nestjs/common';
 
-describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate Workflows)', () => {
+describe('Manufacturing Service (T-010: Project Manufacturing Linked & Separate Workflows)', () => {
   let manufacturingService: ManufacturingService;
   let mockPrisma: any;
   let mockLedgerService: any;
   let mockNotificationsService: any;
 
   const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa-1' };
-  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca-1' };
+  const projectAdminUser = { id: 'ca-1', username: 'projectadmin', role: UserRole.PROJECT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca-1' };
   const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN, status: 'ACTIVE', sessionId: 'sess-sm-1' };
 
   const rawMaterialProduct = {
@@ -33,7 +33,6 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     ownerScope: CatalogScope.COMPANY,
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
-    trackingMode: 'NONE',
     units: [
       {
         id: 'unit-liters',
@@ -62,11 +61,10 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     id: 'prod-finished',
     name: 'Diagnostic Assay Kit',
     kind: ProductKind.MANUFACTURED_PRODUCT,
-    ownerScope: CatalogScope.CLIENT,
-    clientId: 'client-123',
+    ownerScope: CatalogScope.PROJECT,
+    projectId: 'project-123',
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
-    trackingMode: 'BATCH_ONLY',
     units: [
       {
         id: 'unit-kits',
@@ -102,10 +100,6 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
         findUnique: vi.fn(),
         findMany: vi.fn().mockResolvedValue([]),
       },
-      stockBatch: {
-        findUnique: vi.fn(),
-        create: vi.fn(),
-      },
       user: {
         findUnique: vi.fn(),
       },
@@ -116,7 +110,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
-      notifyClientAdmins: vi.fn(),
+      notifyProjectAdmins: vi.fn(),
       notifyUser: vi.fn(),
     };
 
@@ -125,8 +119,8 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
 
   describe('1. Production Run Draft Creation', () => {
     it('creates draft production run without affecting stock', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
       mockPrisma.inventoryBalance.findMany.mockResolvedValue([
         { productId: 'prod-raw' },
         { productId: 'prod-raw-2' },
@@ -139,12 +133,12 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
 
       const createdRun = {
         id: 'run-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         status: ProductionStatus.DRAFT,
       };
       mockPrisma.productionRun.create.mockResolvedValue(createdRun);
 
-      const result = await manufacturingService.createProductionRun(clientAdminUser, {
+      const result = await manufacturingService.createProductionRun(projectAdminUser, {
         mode: ProductionMode.LINKED,
         productionReference: 'BATCH-2026-001',
         plannedOutput: 10,
@@ -165,7 +159,6 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
             productId: 'prod-finished',
             quantity: 10,
             unitId: 'unit-kits',
-            batchNumber: 'LOT-KIT-01',
           },
         ],
       });
@@ -175,7 +168,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       expect(mockPrisma.productionRun.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            clientId: 'client-123',
+            projectId: 'project-123',
             status: ProductionStatus.DRAFT,
             inputs: expect.objectContaining({
               create: expect.arrayContaining([
@@ -188,7 +181,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       );
     });
 
-    it('blocks Store Admin from creating client production runs', async () => {
+    it('blocks Store Admin from creating project production runs', async () => {
       await expect(
         manufacturingService.createProductionRun(storeAdminUser, {
           inputs: [],
@@ -199,22 +192,21 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   });
 
   describe('2. Submission & Raw Material Validation', () => {
-    it('rejects submission if raw material available stock at client location is insufficient', async () => {
+    it('rejects submission if raw material available stock at project location is insufficient', async () => {
       const draftRun = {
         id: 'run-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         status: ProductionStatus.DRAFT,
-        submittedById: clientAdminUser.id,
+        submittedById: projectAdminUser.id,
         inputs: [
           {
             productId: 'prod-raw',
-            batchId: null,
             baseQuantity: new Prisma.Decimal(50),
           },
         ],
       };
       mockPrisma.productionRun.findUnique.mockResolvedValue(draftRun);
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
       // Only 30 available usable stock
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
@@ -223,27 +215,26 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       });
 
       await expect(
-        manufacturingService.submitProductionRun(clientAdminUser, 'run-1'),
+        manufacturingService.submitProductionRun(projectAdminUser, 'run-1'),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('transitions to PENDING_APPROVAL when raw material availability check passes', async () => {
       const draftRun = {
         id: 'run-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         status: ProductionStatus.DRAFT,
-        submittedById: clientAdminUser.id,
+        submittedById: projectAdminUser.id,
         actualOutput: new Prisma.Decimal(25),
         inputs: [
           {
             productId: 'prod-raw',
-            batchId: null,
             baseQuantity: new Prisma.Decimal(50),
           },
         ],
       };
       mockPrisma.productionRun.findUnique.mockResolvedValue(draftRun);
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
       // 100 available usable stock
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
@@ -256,46 +247,41 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
         status: ProductionStatus.PENDING_APPROVAL,
       });
 
-      const res = await manufacturingService.submitProductionRun(clientAdminUser, 'run-1');
+      const res = await manufacturingService.submitProductionRun(projectAdminUser, 'run-1');
       expect(res.status).toBe(ProductionStatus.PENDING_APPROVAL);
     });
 
-    it('validates stock across batched inventory balances when draft input has null batchId', async () => {
+    it('validates stock from the single product-location balance', async () => {
       const draftRun = {
         id: 'run-batched-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         status: ProductionStatus.DRAFT,
-        submittedById: clientAdminUser.id,
+        submittedById: projectAdminUser.id,
         actualOutput: new Prisma.Decimal(25),
         inputs: [
           {
             productId: 'prod-raw',
-            batchId: null,
             baseQuantity: new Prisma.Decimal(10),
           },
         ],
       };
       mockPrisma.productionRun.findUnique.mockResolvedValue(draftRun);
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
 
-      // Stock is stored under a lot/batch in inventory_balances
-      mockPrisma.inventoryBalance.findMany.mockResolvedValue([
-        {
-          id: 'bal-1',
-          locationId: 'loc-client-1',
-          productId: 'prod-raw',
-          batchId: 'batch-lot-1',
-          usableQty: new Prisma.Decimal(45),
-          reservedQty: new Prisma.Decimal(0),
-        },
-      ]);
+      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
+        id: 'bal-1',
+        locationId: 'loc-project-1',
+        productId: 'prod-raw',
+        usableQty: new Prisma.Decimal(45),
+        reservedQty: new Prisma.Decimal(0),
+      });
 
       mockPrisma.productionRun.update.mockResolvedValue({
         id: 'run-batched-1',
         status: ProductionStatus.PENDING_APPROVAL,
       });
 
-      const res = await manufacturingService.submitProductionRun(clientAdminUser, 'run-batched-1');
+      const res = await manufacturingService.submitProductionRun(projectAdminUser, 'run-batched-1');
       expect(res.status).toBe(ProductionStatus.PENDING_APPROVAL);
     });
   });
@@ -304,12 +290,11 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
     it('atomically posts input deductions and output additions with no partial posting', async () => {
       const pendingRun = {
         id: 'run-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         status: ProductionStatus.PENDING_APPROVAL,
         inputs: [
           {
             productId: 'prod-raw',
-            batchId: null,
             quantity: new Prisma.Decimal(20),
             unitNameSnapshot: 'LITER',
           },
@@ -317,15 +302,13 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
         outputs: [
           {
             productId: 'prod-finished',
-            batchNumber: 'LOT-KIT-99',
-            expiryDate: new Date('2027-12-31'),
             quantity: new Prisma.Decimal(40),
             unitNameSnapshot: 'KIT',
           },
         ],
       };
       mockPrisma.productionRun.findUnique.mockResolvedValue(pendingRun);
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
       mockPrisma.product.findMany.mockResolvedValue([
         {
           id: 'prod-raw',
@@ -333,20 +316,17 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           kind: ProductKind.RAW_MATERIAL,
           status: ProductStatus.APPROVED,
           ownerScope: CatalogScope.COMPANY,
-          clientId: null,
+          projectId: null,
         },
         {
           id: 'prod-finished',
           name: finishedGoodProduct.name,
           kind: ProductKind.MANUFACTURED_PRODUCT,
           status: ProductStatus.APPROVED,
-          ownerScope: CatalogScope.CLIENT,
-          clientId: 'client-123',
+          ownerScope: CatalogScope.PROJECT,
+          projectId: 'project-123',
         },
       ]);
-      mockPrisma.stockBatch.findUnique.mockResolvedValue(null);
-      mockPrisma.stockBatch.create.mockResolvedValue({ id: 'batch-kit-99' });
-
       mockPrisma.productionRun.update.mockResolvedValue({
         id: 'run-1',
         status: ProductionStatus.APPROVED,
@@ -364,7 +344,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           transactionType: TransactionType.MANUFACTURING_INPUT,
           lines: [
             expect.objectContaining({
-              locationId: 'loc-client-1',
+              locationId: 'loc-project-1',
               productId: 'prod-raw',
               quantity: 20,
               direction: 'OUT',
@@ -381,7 +361,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           transactionType: TransactionType.MANUFACTURING_OUTPUT,
           lines: [
             expect.objectContaining({
-              locationId: 'loc-client-1',
+              locationId: 'loc-project-1',
               productId: 'prod-finished',
               quantity: 40,
               direction: 'IN',
@@ -430,8 +410,8 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
 
   describe('4. Production Cycles & Analytics Reporting', () => {
     it('re-runs a cycle: preserves input/output formulation and creates a new DRAFT run', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-123' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', projectId: 'project-123' });
       mockPrisma.product.findUnique
         .mockResolvedValueOnce(rawMaterialProduct)
         .mockResolvedValueOnce(finishedGoodProduct);
@@ -441,7 +421,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
 
       const originalRun = {
         id: 'run-original',
-        clientId: 'client-123',
+        projectId: 'project-123',
         mode: ProductionMode.LINKED,
         status: ProductionStatus.APPROVED,
         productionReference: 'CYCLE-ASSAY-01',
@@ -461,7 +441,6 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
             productId: finishedGoodProduct.id,
             unitId: 'unit-kits',
             quantity: new Prisma.Decimal(25),
-            batchNumber: 'BATCH-PREV',
             unit: { id: 'unit-kits', unitName: 'KIT', conversionToBase: new Prisma.Decimal(1), status: 'ACTIVE' },
             product: finishedGoodProduct,
           },
@@ -474,7 +453,7 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
         ...data,
       }));
 
-      const newRun = await manufacturingService.reRunCycle(clientAdminUser, 'run-original', {
+      const newRun = await manufacturingService.reRunCycle(projectAdminUser, 'run-original', {
         plannedOutput: 50,
       });
 
@@ -484,26 +463,26 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
       expect(mockPrisma.productionRun.create).toHaveBeenCalled();
     });
 
-    it('enforces client isolation: prevents re-running cycles belonging to other clients', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-other' });
+    it('enforces project isolation: prevents re-running cycles belonging to other projects', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-other' });
       mockPrisma.productionRun.findUnique.mockResolvedValue({
         id: 'run-foreign',
-        clientId: 'client-123',
+        projectId: 'project-123',
         inputs: [{ productId: 'p1' }],
         outputs: [{ productId: 'p2' }],
       });
 
       await expect(
-        manufacturingService.reRunCycle(clientAdminUser, 'run-foreign'),
+        manufacturingService.reRunCycle(projectAdminUser, 'run-foreign'),
       ).rejects.toThrow(ForbiddenException);
     });
 
     it('computes complete manufacturing analytics and chronological execution ledger', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
       mockPrisma.productionRun.findMany.mockResolvedValue([
         {
           id: 'run-1',
-          clientId: 'client-123',
+          projectId: 'project-123',
           mode: ProductionMode.LINKED,
           status: ProductionStatus.APPROVED,
           productionReference: 'CYCLE-01',
@@ -513,9 +492,9 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
           createdAt: new Date('2026-10-10T10:00:00Z'),
           submittedAt: new Date('2026-10-10T10:00:00Z'),
           approvedAt: new Date('2026-10-10T11:00:00Z'),
-          submittedBy: { id: 'ca-1', username: 'clientadmin' },
+          submittedBy: { id: 'ca-1', username: 'projectadmin' },
           approvedBy: { id: 'sa-1', username: 'superadmin' },
-          client: { id: 'client-123', name: 'Labco Client' },
+          project: { id: 'project-123', name: 'Labco Project' },
           inputs: [
             {
               productId: 'prod-raw',
@@ -529,14 +508,13 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
             {
               productId: 'prod-finished',
               quantity: new Prisma.Decimal(19),
-              batchNumber: 'BATCH-100',
               product: { id: 'prod-finished', name: 'Diagnostic Assay Kit', sku: 'KIT-001', minQuantity: 5 },
             },
           ],
         },
       ]);
 
-      const analytics = await manufacturingService.getManufacturingAnalytics(clientAdminUser);
+      const analytics = await manufacturingService.getManufacturingAnalytics(projectAdminUser);
 
       expect(analytics).toBeDefined();
       expect(analytics.summary.totalRuns).toBe(1);

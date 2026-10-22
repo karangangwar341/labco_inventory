@@ -13,7 +13,7 @@
 
 ## 2. CI quality gate
 
-GitHub Actions runs on pushes and pull requests to `main`, `master`, and `develop`. It uses Node 24, an ephemeral PostgreSQL 16 service, and the committed lockfile. The gate checks secret-file hygiene, dependency advisories, Prisma Client generation, migration application, backend and frontend lint, frontend TypeScript, backend tests, and production builds.
+GitHub Actions runs on pushes and pull requests to `main`, `master`, and `develop`. It uses Node 24, an ephemeral PostgreSQL 16 service, and the committed lockfile. The gate checks secret-file hygiene, dependency advisories, Prisma Project generation, migration application, backend and frontend lint, frontend TypeScript, backend tests, and production builds.
 
 Run locally from the repository root:
 
@@ -25,7 +25,7 @@ npm test
 npm run build
 ```
 
-The frontend currently has no automated unit or browser test suite. Before launch, manually smoke test the critical workflows in staging: login by role, stock request and approval, dispatch and client receipt approval, manufacturing, department issue, and report visibility across clients.
+The frontend currently has no automated unit or browser test suite. Before launch, manually smoke test the critical workflows in staging: login by role, stock request and approval, dispatch and project receipt approval, manufacturing, department issue, and report visibility across projects.
 
 ## 3. Production environment
 
@@ -50,7 +50,7 @@ Required:
 Optional:
 
 - On Vercel, set `NODE_OPTIONS=--experimental-require-module` for the backend project. Vercel disables Node's `require(esm)` compatibility by default, and NestJS 12 packages are ESM-only.
-- `TRUST_PROXY_HOPS`: set to the exact number of trusted reverse-proxy hops. Leave unset when the API receives direct client connections. Do not accept arbitrary forwarded-IP headers as trusted.
+- `TRUST_PROXY_HOPS`: set to the exact number of trusted reverse-proxy hops. Leave unset when the API receives direct project connections. Do not accept arbitrary forwarded-IP headers as trusted.
 - `ENABLE_API_DOCS=true`: explicitly exposes Swagger documentation. Documentation is disabled by default in production.
 - `GEMINI_API_KEY`: enables Gemini document extraction; deterministic fallback remains available if it is omitted.
 
@@ -101,7 +101,7 @@ For an incident: detect → contain → preserve audit evidence → assess affec
 
 ## 7. Rollback and rollout
 
-- Deploy first to staging and then to production. Start with a controlled internal user group and monitor error rate, latency, failed transactions, and client data isolation before expanding access.
+- Deploy first to staging and then to production. Start with a controlled internal user group and monitor error rate, latency, failed transactions, and project data isolation before expanding access.
 - Roll back the application artifact if errors materially increase or inventory integrity is at risk. Preserve the database and append-only audit history.
 - For database incompatibilities, halt rollout and apply a forward-fix. Restore from a verified recovery point only with the recovery approver's authorization and a documented data-loss assessment.
 

@@ -13,7 +13,7 @@ import {
 export const manufacturingService = {
   getProductionRuns: async (params?: {
     status?: ProductionStatus;
-    clientId?: string;
+    projectId?: string;
   }): Promise<ProductionRun[]> => {
     return apiClient.get<ProductionRun[]>(
       endpoints.manufacturing.productionRuns(params),
@@ -35,7 +35,7 @@ export const manufacturingService = {
   },
 
   getAnalytics: async (params?: {
-    clientId?: string;
+    projectId?: string;
     startDate?: string;
     endDate?: string;
     status?: string;

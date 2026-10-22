@@ -14,7 +14,7 @@ import { requestsService } from '@/features/requests/requests.service';
 import { shipmentsService } from '@/features/shipments/shipments.service';
 import { inventoryService } from '@/features/inventory/inventory.service';
 
-export function ClientAdminDashboard() {
+export function ProjectAdminDashboard() {
   const { user } = useAuth();
 
   const {
@@ -23,7 +23,7 @@ export function ClientAdminDashboard() {
     error: reqError,
     refetch: refetchReq,
   } = useQuery({
-    queryKey: queryKeys.requests.list(user?.clientId || user?.id, { limit: 5 }),
+    queryKey: queryKeys.requests.list(user?.projectId || user?.id, { limit: 5 }),
     queryFn: () => requestsService.getRequests({ limit: 5 }),
     staleTime: 2 * 60 * 1000,
   });
@@ -34,7 +34,7 @@ export function ClientAdminDashboard() {
     error: shipError,
     refetch: refetchShip,
   } = useQuery({
-    queryKey: queryKeys.shipments.list(user?.clientId || user?.id, { limit: 5 }),
+    queryKey: queryKeys.shipments.list(user?.projectId || user?.id, { limit: 5 }),
     queryFn: () => shipmentsService.getShipments({ limit: 5 }),
     staleTime: 2 * 60 * 1000,
   });
@@ -64,13 +64,13 @@ export function ClientAdminDashboard() {
     void refetchShip();
   };
 
-  if (isLoading) return <LoadingState message="Loading client workspace…" />;
+  if (isLoading) return <LoadingState message="Loading project workspace…" />;
   if (error) return <ErrorState title="Stock activity could not be loaded" message={error} onRetry={fetchDashboard} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Client stock"
+        title="Project stock"
         description="Record incoming stock, send items to departments, or check deliveries."
         actions={
           <div className="flex flex-wrap gap-2.5">
@@ -134,7 +134,7 @@ export function ClientAdminDashboard() {
                 Low Stock Threshold Alert: {lowStockBalances.length} item{lowStockBalances.length > 1 ? 's' : ''} below safety minimum
               </h4>
               <p className="text-xs text-rose-700 mt-0.5">
-                Supplies or manufactured finished goods are running low at your client location.
+                Supplies or manufactured finished goods are running low at your project location.
               </p>
             </div>
           </div>
@@ -201,7 +201,7 @@ export function ClientAdminDashboard() {
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-sm font-semibold text-blue-600">Inspect Product Catalog →</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Real-time lot &amp; usable ledger</p>
+          <p className="mt-1 text-[11px] text-slate-400">Real-time usable stock ledger</p>
         </Link>
 
         <Link href="/staff" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
@@ -345,4 +345,4 @@ export function ClientAdminDashboard() {
   );
 }
 
-export default ClientAdminDashboard;
+export default ProjectAdminDashboard;

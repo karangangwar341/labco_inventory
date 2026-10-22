@@ -17,7 +17,6 @@ export interface NotificationsResponse {
 }
 
 export interface NotificationSettings {
-  expiryWarningIntervals: number[];
   soundEnabled: boolean;
   receiptConfirmationEnabled: boolean;
   approvalRequirements: {

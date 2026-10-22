@@ -26,20 +26,20 @@ import {
 type StatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DRAFT';
 type RequestTypeFilter = 'ALL' | 'STOCK_IN' | 'STOCK_OUT' | 'TRANSFER' | 'ADJUSTMENT';
 
-function requestMeta(request: StockRequest, isClientAdmin?: boolean): {
+function requestMeta(request: StockRequest, isProjectAdmin?: boolean): {
   label: string;
   sublabel: string;
   variant: 'primary' | 'success' | 'purple' | 'warning' | 'neutral';
 } {
   const type = (request.requestType || request.type || '').toUpperCase();
-  if (isClientAdmin) {
+  if (isProjectAdmin) {
     return { label: 'Inbound Restock', sublabel: 'Central Supply Order', variant: 'success' };
   }
   if (type.includes('STOCK_IN')) {
     return { label: 'Stock In', sublabel: 'Inbound Receipt', variant: 'success' };
   }
   if (type.includes('DISPATCH') || type.includes('STOCK_OUT')) {
-    return { label: 'Client Dispatch', sublabel: 'Consignment Out', variant: 'primary' };
+    return { label: 'Project Dispatch', sublabel: 'Consignment Out', variant: 'primary' };
   }
   if (type.includes('TRANSFER')) {
     return { label: 'Transfer', sublabel: 'Internal Move', variant: 'purple' };
@@ -69,7 +69,7 @@ export function RequestsList() {
       ? (value as RequestTypeFilter)
       : 'ALL';
   });
-  const [selectedClientId, setSelectedClientId] = useState(() => searchParams.get('clientId') || '');
+  const [selectedProjectId, setSelectedProjectId] = useState(() => searchParams.get('projectId') || '');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
 
@@ -78,10 +78,10 @@ export function RequestsList() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  // Query: Clients for dropdown filter
-  const { data: clients = [] } = useQuery({
-    queryKey: ['administration', 'clients'],
-    queryFn: () => administrationService.getClients(),
+  // Query: Projects for dropdown filter
+  const { data: projects = [] } = useQuery({
+    queryKey: ['administration', 'projects'],
+    queryFn: () => administrationService.getProjects(),
     enabled: isSuperAdmin || isStoreAdmin,
     staleTime: 5 * 60 * 1000,
   });
@@ -101,14 +101,14 @@ export function RequestsList() {
     refetch: fetchRequests,
   } = useQuery({
     queryKey: queryKeys.requests.list(user?.id, {
-      clientId: selectedClientId || undefined,
+      projectId: selectedProjectId || undefined,
       warehouseId: selectedWarehouseId || undefined,
       requestType: typeFilter === 'ALL' ? undefined : typeFilter,
       status: statusFilter === 'ALL' ? undefined : statusFilter,
     }),
     queryFn: () =>
       requestsService.getRequests({
-        clientId: selectedClientId || undefined,
+        projectId: selectedProjectId || undefined,
         warehouseId: selectedWarehouseId || undefined,
         requestType: typeFilter === 'ALL' ? undefined : typeFilter,
         status: statusFilter === 'ALL' ? undefined : (statusFilter as any),
@@ -158,13 +158,13 @@ export function RequestsList() {
         if (typeFilter === 'TRANSFER' && !t.includes('TRANSFER')) return false;
         if (typeFilter === 'ADJUSTMENT' && !t.includes('ADJUSTMENT')) return false;
       }
-      if (selectedClientId) {
-        const matchesClient =
-          r.clientId === selectedClientId ||
-          r.client?.id === selectedClientId ||
-          r.sourceLocation?.client?.id === selectedClientId ||
-          r.destinationLocation?.client?.id === selectedClientId;
-        if (!matchesClient) return false;
+      if (selectedProjectId) {
+        const matchesProject =
+          r.projectId === selectedProjectId ||
+          r.project?.id === selectedProjectId ||
+          r.sourceLocation?.project?.id === selectedProjectId ||
+          r.destinationLocation?.project?.id === selectedProjectId;
+        if (!matchesProject) return false;
       }
       if (selectedWarehouseId) {
         const matchesWarehouse =
@@ -174,9 +174,9 @@ export function RequestsList() {
       }
       return !isDateInRange(r.createdAt, 'TODAY');
     }).length;
-  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId]);
+  }, [requests, statusFilter, typeFilter, selectedProjectId, selectedWarehouseId]);
 
-  // Client-side filtering
+  // client-side filtering
   const filteredRequests = useMemo(() => {
     return requests.filter((request) => {
       // Status Filter
@@ -193,14 +193,14 @@ export function RequestsList() {
         if (typeFilter === 'ADJUSTMENT' && !t.includes('ADJUSTMENT')) return false;
       }
 
-      // Client Filter
-      if (selectedClientId) {
-        const matchesClient =
-          request.clientId === selectedClientId ||
-          request.client?.id === selectedClientId ||
-          request.sourceLocation?.client?.id === selectedClientId ||
-          request.destinationLocation?.client?.id === selectedClientId;
-        if (!matchesClient) return false;
+      // Project Filter
+      if (selectedProjectId) {
+        const matchesProject =
+          request.projectId === selectedProjectId ||
+          request.project?.id === selectedProjectId ||
+          request.sourceLocation?.project?.id === selectedProjectId ||
+          request.destinationLocation?.project?.id === selectedProjectId;
+        if (!matchesProject) return false;
       }
 
       // Warehouse Filter
@@ -221,7 +221,7 @@ export function RequestsList() {
         const query = searchQuery.toLowerCase();
         const ref = (request.requestNumber || request.id).toLowerCase();
         const type = (request.requestType || request.type || '').toLowerCase();
-        const clientName = (request.client?.name || request.destinationLocation?.client?.name || '').toLowerCase();
+        const projectName = (request.project?.name || request.destinationLocation?.project?.name || '').toLowerCase();
         const originName = (request.sourceLocation?.warehouse?.name || '').toLowerCase();
         const destName = (request.destinationLocation?.warehouse?.name || request.destinationName || '').toLowerCase();
         const requester = (request.requesterUsername || '').toLowerCase();
@@ -232,7 +232,7 @@ export function RequestsList() {
         if (
           !ref.includes(query) &&
           !type.includes(query) &&
-          !clientName.includes(query) &&
+          !projectName.includes(query) &&
           !originName.includes(query) &&
           !destName.includes(query) &&
           !requester.includes(query) &&
@@ -244,7 +244,7 @@ export function RequestsList() {
 
       return true;
     });
-  }, [requests, statusFilter, typeFilter, selectedClientId, selectedWarehouseId, dateFilter, customStart, customEnd, searchQuery]);
+  }, [requests, statusFilter, typeFilter, selectedProjectId, selectedWarehouseId, dateFilter, customStart, customEnd, searchQuery]);
 
   const dayGroups = useMemo(() => {
     return groupItemsByDay(
@@ -257,7 +257,7 @@ export function RequestsList() {
   const hasActiveFilters =
     statusFilter !== 'ALL' ||
     typeFilter !== 'ALL' ||
-    Boolean(selectedClientId) ||
+    Boolean(selectedProjectId) ||
     Boolean(selectedWarehouseId) ||
     dateFilter !== 'TODAY' ||
     Boolean(searchQuery.trim());
@@ -265,7 +265,7 @@ export function RequestsList() {
   const resetFilters = () => {
     setStatusFilter('ALL');
     setTypeFilter('ALL');
-    setSelectedClientId('');
+    setSelectedProjectId('');
     setSelectedWarehouseId('');
     setDateFilter('TODAY');
     setCustomStart('');
@@ -283,21 +283,21 @@ export function RequestsList() {
         valign: 'top',
         cell: (request) => {
           const refNumber = request.requestNumber || '—';
-          const clientName =
-            request.client?.name ||
-            request.destinationLocation?.client?.name ||
-            request.sourceLocation?.client?.name;
+          const projectName =
+            request.project?.name ||
+            request.destinationLocation?.project?.name ||
+            request.sourceLocation?.project?.name;
           const locationDisplay =
             request.destinationName ||
             request.destinationLocation?.warehouse?.name ||
-            request.destinationLocation?.client?.name ||
+            request.destinationLocation?.project?.name ||
             request.locationName ||
             'Destination';
           const originDisplay =
-            user?.role === 'CLIENT_ADMIN'
+            user?.role === 'PROJECT_ADMIN'
               ? 'Central Supply'
               : request.sourceLocation?.warehouse?.name ||
-                request.sourceLocation?.client?.name ||
+                request.sourceLocation?.project?.name ||
                 'Central Warehouse';
           const isUrgent = request.priority === 'URGENT' || request.priority === 'HIGH';
 
@@ -312,9 +312,9 @@ export function RequestsList() {
                     Urgent
                   </Badge>
                 )}
-                {clientName && (
+                {projectName && (
                   <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-                    🏢 {clientName}
+                    🏢 {projectName}
                   </span>
                 )}
               </div>
@@ -337,7 +337,7 @@ export function RequestsList() {
         minWidth: '130px',
         valign: 'top',
         cell: (request) => {
-          const meta = requestMeta(request, user?.role === 'CLIENT_ADMIN');
+          const meta = requestMeta(request, user?.role === 'PROJECT_ADMIN');
           return (
             <div className="space-y-0.5">
               <Badge variant={meta.variant} size="sm">
@@ -482,7 +482,7 @@ export function RequestsList() {
         title={isSuperAdmin ? 'Stock Requests & Movement Register' : 'My Stock Requests'}
         description={
           isSuperAdmin
-            ? 'Monitor, audit, and filter warehouse dispatches, inbound receipts, and stock transfer vouchers across all clients and warehouses.'
+            ? 'Monitor, audit, and filter warehouse dispatches, inbound receipts, and stock transfer vouchers across all projects and warehouses.'
             : 'Monitor, approve, and track warehouse dispatches, inbound receipts, and stock transfer vouchers.'
         }
         actions={
@@ -645,7 +645,7 @@ export function RequestsList() {
             )}
           </div>
 
-          {/* Granular Filters: Request Type, Client, Warehouse, and Search */}
+          {/* Granular Filters: Request Type, Project, Warehouse, and Search */}
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-1">
             {/* Request Type Pills */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs overflow-x-auto whitespace-nowrap scrollbar-none max-w-full">
@@ -678,17 +678,17 @@ export function RequestsList() {
 
             {/* Dropdown Filters and Search Bar */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
-              {/* Client Filter (for Super Admin & Store Admin) */}
-              {(isSuperAdmin || isStoreAdmin) && clients.length > 0 && (
+              {/* Project Filter (for Super Admin & Store Admin) */}
+              {(isSuperAdmin || isStoreAdmin) && projects.length > 0 && (
                 <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Client:</span>
+                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Project:</span>
                   <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
                     className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
                   >
-                    <option value="">All Clients</option>
-                    {clients.map((c) => (
+                    <option value="">All Projects</option>
+                    {projects.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -720,7 +720,7 @@ export function RequestsList() {
               <div className="w-full sm:w-60 relative">
                 <input
                   type="text"
-                  placeholder="Search ref, item, client..."
+                  placeholder="Search ref, item, project..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
@@ -794,7 +794,7 @@ export function RequestsList() {
               ) : (
                 <Link href="/requests/new">
                   <Button variant="primary" size="sm">
-                    {user?.role === 'CLIENT_ADMIN' ? 'Create Restock Request' : 'Create First Request'}
+                    {user?.role === 'PROJECT_ADMIN' ? 'Create Restock Request' : 'Create First Request'}
                   </Button>
                 </Link>
               ),

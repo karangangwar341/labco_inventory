@@ -21,7 +21,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
   let mockNotificationsService: any;
 
   const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa' };
-  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca' };
+  const projectAdminUser = { id: 'ca-1', username: 'projectadmin', role: UserRole.PROJECT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca' };
   const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN, status: 'ACTIVE', sessionId: 'sess-sm' };
 
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
-      notifyClientAdmins: vi.fn(),
+      notifyProjectAdmins: vi.fn(),
     };
 
     shipmentsService = new ShipmentsService(mockPrisma as any, mockLedgerService as any, mockNotificationsService as any);
@@ -63,7 +63,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       id: 'req-disp-1',
       requestType: 'DISPATCH',
       sourceLocationId: 'loc-wh-1',
-      destinationLocationId: 'loc-client-1',
+      destinationLocationId: 'loc-project-1',
       lines: [
         {
           productId: 'prod-1',
@@ -75,7 +75,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       ],
     };
 
-    it('D-001: when receipt confirmation is disabled, atomically credits client stock and completes shipment', async () => {
+    it('D-001: when receipt confirmation is disabled, atomically credits project stock and completes shipment', async () => {
       // Disabled receipt confirmation
       mockPrisma.systemSetting.findUnique.mockResolvedValue({
         key: 'RECEIPT_CONFIRMATION_ENABLED',
@@ -104,11 +104,11 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
         superAdminUser.id,
         expect.anything(),
       );
-      // Immediately credits client stock in same transaction
+      // Immediately credits project stock in same transaction
       expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           transactionType: TransactionType.TRANSFER_RECEIPT,
-          lines: [expect.objectContaining({ locationId: 'loc-client-1', direction: 'IN', quantity: 100 })],
+          lines: [expect.objectContaining({ locationId: 'loc-project-1', direction: 'IN', quantity: 100 })],
         }),
         superAdminUser.id,
         expect.anything(),
@@ -160,7 +160,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       mockPrisma.shipment.findUnique.mockResolvedValue({
         id: 'ship-1',
         status: ShipmentStatus.IN_TRANSIT,
-        destinationLocation: { clientId: 'client-123' },
+        destinationLocation: { projectId: 'project-123' },
         lines: [
           {
             id: 'line-1',
@@ -168,13 +168,13 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           },
         ],
       });
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
       mockPrisma.shipment.update.mockResolvedValue({
         id: 'ship-1',
         status: ShipmentStatus.AWAITING_RECEIPT_APPROVAL,
       });
 
-      const res = await shipmentsService.recordReceipt(clientAdminUser, 'ship-1', {
+      const res = await shipmentsService.recordReceipt(projectAdminUser, 'ship-1', {
         lines: [
           {
             shipmentLineId: 'line-1',
@@ -197,17 +197,17 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       );
     });
 
-    it('blocks Client Admin from receiving shipment destined for another client', async () => {
+    it('blocks Project Admin from receiving shipment destined for another project', async () => {
       mockPrisma.shipment.findUnique.mockResolvedValue({
         id: 'ship-1',
         status: ShipmentStatus.IN_TRANSIT,
-        destinationLocation: { clientId: 'other-client-456' },
+        destinationLocation: { projectId: 'other-project-456' },
         lines: [],
       });
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
 
       await expect(
-        shipmentsService.recordReceipt(clientAdminUser, 'ship-1', { lines: [] }),
+        shipmentsService.recordReceipt(projectAdminUser, 'ship-1', { lines: [] }),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -217,7 +217,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       mockPrisma.shipment.findUnique.mockResolvedValue({
         id: 'ship-1',
         status: ShipmentStatus.AWAITING_RECEIPT_APPROVAL,
-        destinationLocationId: 'loc-client-1',
+        destinationLocationId: 'loc-project-1',
         lines: [
           {
             id: 'line-1',
@@ -249,7 +249,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
           transactionType: TransactionType.TRANSFER_RECEIPT,
           lines: [
             expect.objectContaining({
-              locationId: 'loc-client-1',
+              locationId: 'loc-project-1',
               productId: 'prod-1',
               quantity: 95,
               direction: 'IN',
@@ -274,7 +274,7 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       mockPrisma.shipment.findUnique.mockResolvedValue({
         id: 'ship-2',
         status: ShipmentStatus.AWAITING_RECEIPT_APPROVAL,
-        destinationLocationId: 'loc-client-1',
+        destinationLocationId: 'loc-project-1',
         lines: [
           {
             id: 'line-2',
@@ -311,27 +311,27 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
     });
   });
 
-  describe('5. Client-to-Client Shipment Prevention', () => {
-    it('rejects creating shipment when source and destination are both client locations', async () => {
+  describe('5. Project-to-Project Shipment Prevention', () => {
+    it('rejects creating shipment when source and destination are both project locations', async () => {
       const c2cRequest = {
         id: 'req-c2c',
         requestType: 'DISPATCH',
-        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
-        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        sourceLocation: { id: 'loc-c1', locationType: 'PROJECT', projectId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'PROJECT', projectId: 'c2' },
         lines: [],
       };
 
       await expect(
         shipmentsService.createShipmentForApprovedDispatch(mockPrisma, c2cRequest, superAdminUser.id),
-      ).rejects.toThrow('Client-to-client shipment is strictly prohibited');
+      ).rejects.toThrow('Project-to-project shipment is strictly prohibited');
     });
 
-    it('rejects creating transfer shipment when destination is a client location', async () => {
+    it('rejects creating transfer shipment when destination is a project location', async () => {
       const transferRequest = {
         id: 'req-trans-c',
         requestType: 'TRANSFER',
         sourceLocation: { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' },
-        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        destinationLocation: { id: 'loc-c2', locationType: 'PROJECT', projectId: 'c2' },
         lines: [],
       };
 

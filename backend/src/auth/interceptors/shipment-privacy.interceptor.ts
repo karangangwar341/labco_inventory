@@ -77,7 +77,7 @@ export class ShipmentPrivacyInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data) => {
-        if (user && user.role === UserRole.CLIENT_ADMIN) {
+        if (user && user.role === UserRole.PROJECT_ADMIN) {
           return sanitizeShipmentPayload(data);
         }
         return data;

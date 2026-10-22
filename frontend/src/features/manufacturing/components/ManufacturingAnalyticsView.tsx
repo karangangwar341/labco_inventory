@@ -16,9 +16,9 @@ interface ManufacturingAnalyticsViewProps {
   analytics: ManufacturingAnalytics | undefined;
   isLoading: boolean;
   role?: string;
-  clients?: Array<{ id: string; name: string }>;
-  selectedClientId?: string;
-  onClientChange?: (clientId: string) => void;
+  projects?: Array<{ id: string; name: string }>;
+  selectedProjectId?: string;
+  onProjectChange?: (projectId: string) => void;
   onReRunCycleId?: (runId: string) => void;
   onRefresh?: () => void;
 }
@@ -27,9 +27,9 @@ export function ManufacturingAnalyticsView({
   analytics,
   isLoading,
   role,
-  clients = [],
-  selectedClientId,
-  onClientChange,
+  projects = [],
+  selectedProjectId,
+  onProjectChange,
   onReRunCycleId,
   onRefresh,
 }: ManufacturingAnalyticsViewProps) {
@@ -63,10 +63,9 @@ export function ManufacturingAnalyticsView({
         const matchRun = item.runNumber?.toLowerCase().includes(q);
         const matchRef = item.cycleReference?.toLowerCase().includes(q);
         const matchProd = item.outputProductName?.toLowerCase().includes(q);
-        const matchBatch = item.batchNumber?.toLowerCase().includes(q);
         const matchSubmitter = item.submittedBy?.toLowerCase().includes(q);
-        const matchClient = item.clientName?.toLowerCase().includes(q);
-        if (!matchRun && !matchRef && !matchProd && !matchBatch && !matchSubmitter && !matchClient) {
+        const matchProject = item.projectName?.toLowerCase().includes(q);
+        if (!matchRun && !matchRef && !matchProd && !matchSubmitter && !matchProject) {
           return false;
         }
       }
@@ -83,17 +82,17 @@ export function ManufacturingAnalyticsView({
       {/* Filters Bar */}
       <div className="rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
-          {/* Client Filter for Super Admin */}
-          {isSuperAdmin && clients.length > 0 && onClientChange && (
+          {/* Project Filter for Super Admin */}
+          {isSuperAdmin && projects.length > 0 && onProjectChange && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
-              <label className="text-xs font-semibold text-slate-700 shrink-0">Client Facility:</label>
+              <label className="text-xs font-semibold text-slate-700 shrink-0">Project Facility:</label>
               <select
-                value={selectedClientId || ""}
-                onChange={(e) => onClientChange(e.target.value)}
+                value={selectedProjectId || ""}
+                onChange={(e) => onProjectChange(e.target.value)}
                 className="w-full sm:w-auto rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none"
               >
-                <option value="">All Clients (Enterprise View)</option>
-                {clients.map((c) => (
+                <option value="">All Projects (Enterprise View)</option>
+                {projects.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -242,9 +241,9 @@ export function ManufacturingAnalyticsView({
                     <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-2.5 font-mono text-[11px] font-semibold text-indigo-700">
                         {cycle.cycleReference}
-                        {isSuperAdmin && cycle.clientName && (
+                        {isSuperAdmin && cycle.projectName && (
                           <span className="block text-[10px] text-slate-400 font-sans font-normal">
-                            {cycle.clientName}
+                            {cycle.projectName}
                           </span>
                         )}
                       </td>
@@ -413,9 +412,8 @@ export function ManufacturingAnalyticsView({
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
                   <th className="py-2.5 px-3">Date / Run</th>
                   <th className="py-2.5 px-3">Cycle Reference</th>
-                  {isSuperAdmin && <th className="py-2.5 px-3">Client Facility</th>}
+                  {isSuperAdmin && <th className="py-2.5 px-3">Project Facility</th>}
                   <th className="py-2.5 px-3">Output Product</th>
-                  <th className="py-2.5 px-3">Batch Number</th>
                   <th className="py-2.5 px-3 text-right">Planned</th>
                   <th className="py-2.5 px-3 text-right">Actual</th>
                   <th className="py-2.5 px-3 text-right">Yield %</th>
@@ -442,16 +440,12 @@ export function ManufacturingAnalyticsView({
 
                     {isSuperAdmin && (
                       <td className="py-3 px-3 text-slate-700 font-medium">
-                        {item.clientName}
+                        {item.projectName}
                       </td>
                     )}
 
                     <td className="py-3 px-3 font-medium text-slate-900">
                       {item.outputProductName}
-                    </td>
-
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-600">
-                      {item.batchNumber || "—"}
                     </td>
 
                     <td className="py-3 px-3 text-right text-slate-700 font-mono">

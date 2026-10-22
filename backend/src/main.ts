@@ -143,8 +143,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Warehouse, Client Manufacturing & Inventory Management API')
-    .setDescription('REST API for Warehouse, Client Manufacturing & Inventory Management System')
+    .setTitle('Warehouse, Project Manufacturing & Inventory Management API')
+    .setDescription('REST API for Warehouse, Project Manufacturing & Inventory Management System')
     .setVersion('1.0')
     .addBearerAuth(
       {

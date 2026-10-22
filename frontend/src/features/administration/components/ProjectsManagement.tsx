@@ -12,28 +12,28 @@ import { Select } from '../../../components/ui/Select';
 import { Modal } from '../../../components/ui/Modal';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
-import { administrationService, ManagedClient } from '../administration.service';
+import { administrationService, ManagedProject } from '../administration.service';
 import { queryKeys } from '../../../lib/query/query-keys';
 
-type ClientEdit = {
+type ProjectEdit = {
   id: string;
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
 };
 
-export function ClientsManagement() {
+export function ProjectsManagement() {
   const queryClient = useQueryClient();
-  const [clientName, setClientName] = useState('');
+  const [projectName, setProjectName] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [editing, setEditing] = useState<ClientEdit | null>(null);
-  const [assigningClientId, setAssigningClientId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<ProjectEdit | null>(null);
+  const [assigningProjectId, setAssigningProjectId] = useState<string | null>(null);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const clientsQuery = useQuery({
-    queryKey: queryKeys.administration.clients(),
-    queryFn: administrationService.getClients,
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.administration.projects(),
+    queryFn: administrationService.getProjects,
   });
 
   const warehousesQuery = useQuery({
@@ -43,71 +43,71 @@ export function ClientsManagement() {
 
   const refresh = async () =>
     Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.administration.clients() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.administration.projects() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.warehouses() }),
     ]);
 
   const mutationOptions = {
     onSuccess: async () => {
       await refresh();
-      setNotice('Client record updated.');
+      setNotice('Project record updated.');
       setActionError(null);
       setTimeout(() => setNotice(null), 4000);
     },
     onError: (error: unknown) => {
-      setActionError(error instanceof Error ? error.message : 'Could not complete client update.');
+      setActionError(error instanceof Error ? error.message : 'Could not complete project update.');
     },
   };
 
-  const createClient = useMutation({
-    mutationFn: administrationService.createClient,
+  const createProject = useMutation({
+    mutationFn: administrationService.createProject,
     ...mutationOptions,
   });
 
-  const updateClient = useMutation({
+  const updateProject = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { name: string; status: 'ACTIVE' | 'INACTIVE' } }) =>
-      administrationService.updateClient(id, payload),
+      administrationService.updateProject(id, payload),
     ...mutationOptions,
   });
 
   const assignWarehouse = useMutation({
-    mutationFn: ({ clientId, warehouseId }: { clientId: string; warehouseId: string }) =>
-      administrationService.assignWarehouse(clientId, warehouseId),
+    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
+      administrationService.assignWarehouse(projectId, warehouseId),
     ...mutationOptions,
   });
 
   const deactivateAssignment = useMutation({
-    mutationFn: ({ clientId, warehouseId }: { clientId: string; warehouseId: string }) =>
-      administrationService.deactivateAssignment(clientId, warehouseId),
+    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
+      administrationService.deactivateAssignment(projectId, warehouseId),
     ...mutationOptions,
   });
 
-  const clients = clientsQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
   const warehouses = warehousesQuery.data ?? [];
   const busy =
-    createClient.isPending ||
-    updateClient.isPending ||
+    createProject.isPending ||
+    updateProject.isPending ||
     assignWarehouse.isPending ||
     deactivateAssignment.isPending;
 
-  const filteredClients = useMemo(() => {
-    if (!searchTerm.trim()) return clients;
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm.trim()) return projects;
     const q = searchTerm.toLowerCase();
-    return clients.filter((c) => c.name.toLowerCase().includes(q));
-  }, [clients, searchTerm]);
+    return projects.filter((c) => c.name.toLowerCase().includes(q));
+  }, [projects, searchTerm]);
 
   const totalActiveAssignments = useMemo(() => {
-    return clients.reduce((acc, c) => acc + (c.warehouseAssignments?.length || 0), 0);
-  }, [clients]);
+    return projects.reduce((acc, c) => acc + (c.warehouseAssignments?.length || 0), 0);
+  }, [projects]);
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault();
-    if (!clientName.trim()) return;
+    if (!projectName.trim()) return;
     setActionError(null);
-    createClient.mutate(clientName.trim(), {
+    createProject.mutate(projectName.trim(), {
       onSuccess: () => {
-        setClientName('');
-        setNotice(`Client "${clientName.trim()}" created successfully.`);
+        setProjectName('');
+        setNotice(`Project "${projectName.trim()}" created successfully.`);
       },
     });
   };
@@ -116,12 +116,12 @@ export function ClientsManagement() {
     e.preventDefault();
     if (!editing) return;
     setActionError(null);
-    updateClient.mutate(
+    updateProject.mutate(
       { id: editing.id, payload: { name: editing.name.trim(), status: editing.status } },
       {
         onSuccess: () => {
           setEditing(null);
-          setNotice('Client details saved.');
+          setNotice('Project details saved.');
         },
       }
     );
@@ -129,13 +129,13 @@ export function ClientsManagement() {
 
   const handleAssignWarehouse = (e: FormEvent) => {
     e.preventDefault();
-    if (!assigningClientId || !selectedWarehouseId) return;
+    if (!assigningProjectId || !selectedWarehouseId) return;
     setActionError(null);
     assignWarehouse.mutate(
-      { clientId: assigningClientId, warehouseId: selectedWarehouseId },
+      { projectId: assigningProjectId, warehouseId: selectedWarehouseId },
       {
         onSuccess: () => {
-          setAssigningClientId(null);
+          setAssigningProjectId(null);
           setSelectedWarehouseId('');
           setNotice('Warehouse fulfillment consignment assigned.');
         },
@@ -143,13 +143,13 @@ export function ClientsManagement() {
     );
   };
 
-  const assigningClient = clients.find((c) => c.id === assigningClientId);
+  const assigningProject = projects.find((c) => c.id === assigningProjectId);
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Client Organizations"
+        title="Project Organizations"
         description="Manage healthcare lab accounts, diagnostics partners, and authorized fulfillment warehouse links."
         actions={
           <Link href="/admin/warehouses">
@@ -166,13 +166,13 @@ export function ClientsManagement() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Total Clients
+                Total Projects
               </span>
               <div className="text-xl font-bold font-mono text-slate-900">
-                {clientsQuery.isLoading ? '—' : clients.length}
+                {projectsQuery.isLoading ? '—' : projects.length}
               </div>
               <p className="text-[11px] text-slate-500">
-                {clients.filter((c) => c.status !== 'INACTIVE').length} active lab organizations
+                {projects.filter((c) => c.status !== 'INACTIVE').length} active lab organizations
               </p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -190,7 +190,7 @@ export function ClientsManagement() {
                 Consigned Routes
               </span>
               <div className="text-xl font-bold font-mono text-slate-900">
-                {clientsQuery.isLoading ? '—' : totalActiveAssignments}
+                {projectsQuery.isLoading ? '—' : totalActiveAssignments}
               </div>
               <p className="text-[11px] text-slate-500">Active fulfillment links</p>
             </div>
@@ -209,7 +209,7 @@ export function ClientsManagement() {
                 Inactive Accounts
               </span>
               <div className="text-xl font-bold font-mono text-slate-900">
-                {clientsQuery.isLoading ? '—' : clients.filter((c) => c.status === 'INACTIVE').length}
+                {projectsQuery.isLoading ? '—' : projects.filter((c) => c.status === 'INACTIVE').length}
               </div>
               <p className="text-[11px] text-slate-500">Disabled or archived</p>
             </div>
@@ -241,17 +241,17 @@ export function ClientsManagement() {
         </div>
       )}
 
-      {clientsQuery.error && (
+      {projectsQuery.error && (
         <ErrorState
-          message="Could not load client organizations."
-          onRetry={() => void clientsQuery.refetch()}
+          message="Could not load project organizations."
+          onRetry={() => void projectsQuery.refetch()}
         />
       )}
 
-      {/* Create Client Card */}
+      {/* Create Project Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Register New Client Organization</CardTitle>
+          <CardTitle>Register New Project Organization</CardTitle>
           <CardDescription>
             Onboard a new diagnostic lab or clinical partner account.
           </CardDescription>
@@ -260,33 +260,33 @@ export function ClientsManagement() {
           <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <Input
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
                 maxLength={120}
                 required
-                placeholder="Enter client lab name (e.g. Apex Diagnostics Clinic)..."
+                placeholder="Enter project lab name (e.g. Apex Diagnostics Clinic)..."
               />
             </div>
             <Button
               type="submit"
               variant="primary"
-              disabled={busy || !clientName.trim()}
+              disabled={busy || !projectName.trim()}
               className="shrink-0"
             >
-              + Create Client
+              + Create Project
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* Client Directory Card */}
+      {/* Project Directory Card */}
       <Card>
         <CardHeader
           action={
             <div className="w-full sm:w-64 relative">
               <input
                 type="text"
-                placeholder="Search clients..."
+                placeholder="Search projects..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
@@ -302,56 +302,56 @@ export function ClientsManagement() {
             </div>
           }
         >
-          <CardTitle>Client Directory</CardTitle>
+          <CardTitle>Project Directory</CardTitle>
           <CardDescription>
-            Registered client accounts and their assigned warehouse fulfillment routes.
+            Registered project accounts and their assigned warehouse fulfillment routes.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="p-0">
-          {clientsQuery.isLoading ? (
-            <div className="p-8"><LoadingState message="Loading client accounts..." /></div>
-          ) : filteredClients.length === 0 ? (
+          {projectsQuery.isLoading ? (
+            <div className="p-8"><LoadingState message="Loading project accounts..." /></div>
+          ) : filteredProjects.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400">
-              {clients.length === 0 ? 'No clients onboarded yet.' : 'No clients match your search term.'}
+              {projects.length === 0 ? 'No projects onboarded yet.' : 'No projects match your search term.'}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {filteredClients.map((client: ManagedClient) => {
-                const assignments = client.warehouseAssignments ?? [];
-                const isInactive = client.status === 'INACTIVE';
+              {filteredProjects.map((project: ManagedProject) => {
+                const assignments = project.warehouseAssignments ?? [];
+                const isInactive = project.status === 'INACTIVE';
 
                 return (
-                  <div key={client.id} className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3">
+                  <div key={project.id} className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-slate-900">{client.name}</h4>
+                          <h4 className="text-sm font-semibold text-slate-900">{project.name}</h4>
                           <Badge variant={isInactive ? 'neutral' : 'success'} size="sm">
-                            {client.status ?? 'ACTIVE'}
+                            {project.status ?? 'ACTIVE'}
                           </Badge>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <Link
-                          href={`/admin/clients/${client.id}`}
+                          href={`/admin/projects/${project.id}`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50/60 hover:bg-blue-50 rounded-lg border border-blue-200/80 transition-colors"
                         >
-                          <span>Client Overview</span>
+                          <span>Project Overview</span>
                           <span>→</span>
                         </Link>
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => setAssigningClientId(client.id)}
+                          onClick={() => setAssigningProjectId(project.id)}
                         >
                           + Assign Warehouse
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => setEditing({ id: client.id, name: client.name, status: client.status ?? 'ACTIVE' })}
+                          onClick={() => setEditing({ id: project.id, name: project.name, status: project.status ?? 'ACTIVE' })}
                         >
                           Edit
                         </Button>
@@ -377,7 +377,7 @@ export function ClientsManagement() {
                               disabled={busy}
                               onClick={() =>
                                 deactivateAssignment.mutate({
-                                  clientId: client.id,
+                                  projectId: project.id,
                                   warehouseId: assignment.warehouseId,
                                 })
                               }
@@ -400,17 +400,17 @@ export function ClientsManagement() {
         </CardContent>
       </Card>
 
-      {/* Edit Client Modal */}
+      {/* Edit Project Modal */}
       {editing && (
         <Modal
           isOpen={Boolean(editing)}
           onClose={() => setEditing(null)}
-          title="Edit Client Organization"
+          title="Edit Project Organization"
           description="Update lab organization name and active operational status."
         >
           <form onSubmit={handleSaveEdit} className="space-y-4">
             <Input
-              label="Client Name"
+              label="Project Name"
               autoFocus
               value={editing.name}
               onChange={(e) => setEditing({ ...editing, name: e.target.value })}
@@ -440,15 +440,15 @@ export function ClientsManagement() {
       )}
 
       {/* Assign Warehouse Modal */}
-      {assigningClientId && assigningClient && (
+      {assigningProjectId && assigningProject && (
         <Modal
-          isOpen={Boolean(assigningClientId)}
+          isOpen={Boolean(assigningProjectId)}
           onClose={() => {
-            setAssigningClientId(null);
+            setAssigningProjectId(null);
             setSelectedWarehouseId('');
           }}
           title="Assign Fulfillment Warehouse"
-          description={`Authorize a central warehouse to fulfill stock dispatches for ${assigningClient.name}.`}
+          description={`Authorize a central warehouse to fulfill stock dispatches for ${assigningProject.name}.`}
         >
           <form onSubmit={handleAssignWarehouse} className="space-y-4">
             <Select
@@ -472,7 +472,7 @@ export function ClientsManagement() {
                 type="button"
                 variant="secondary"
                 onClick={() => {
-                  setAssigningClientId(null);
+                  setAssigningProjectId(null);
                   setSelectedWarehouseId('');
                 }}
               >
@@ -489,4 +489,4 @@ export function ClientsManagement() {
   );
 }
 
-export default ClientsManagement;
+export default ProjectsManagement;

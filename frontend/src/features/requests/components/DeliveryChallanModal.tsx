@@ -61,27 +61,27 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
     minute: '2-digit',
   });
 
-  const isClientUser = role === 'CLIENT_ADMIN';
+  const isProjectUser = role === 'PROJECT_ADMIN';
 
   const originName =
-    isClientUser
+    isProjectUser
       ? 'Central Supply'
       : request.sourceLocation?.warehouse?.name ||
-        request.sourceLocation?.client?.name ||
+        request.sourceLocation?.project?.name ||
         request.locationName ||
         'Central Supply';
 
   const destinationName =
-    request.destinationLocation?.client?.name ||
+    request.destinationLocation?.project?.name ||
     request.destinationLocation?.warehouse?.name ||
     request.destinationName ||
-    request.client?.name ||
-    'Client Facility / Department';
+    request.project?.name ||
+    'Project Facility / Department';
 
-  const isWarehouseToClient = request.requestType === 'DISPATCH' || originName.toLowerCase().includes('warehouse');
-  const documentTitle = isClientUser
+  const isWarehouseToProject = request.requestType === 'DISPATCH' || originName.toLowerCase().includes('warehouse');
+  const documentTitle = isProjectUser
     ? 'STOCK RECEIPT & RESTOCK DELIVERY CHALLAN'
-    : isWarehouseToClient
+    : isWarehouseToProject
     ? 'DELIVERY CHALLAN & STOCK DISPATCH SLIP'
     : 'INTERNAL STOCK TRANSFER & ISSUE VOUCHER';
 
@@ -515,7 +515,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                       Dispatched by: <strong style={{ color: '#0f172a' }}>{request.requester?.username || request.requesterUsername || 'Store Staff'}</strong>
                     </div>
                     <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>
-                      Movement: {isClientUser ? 'Central Supply Restock' : isWarehouseToClient ? 'Warehouse to Client Dispatch' : 'Internal Department Transfer'}
+                      Movement: {isProjectUser ? 'Central Supply Restock' : isWarehouseToProject ? 'Warehouse to Project Dispatch' : 'Internal Department Transfer'}
                     </div>
                   </td>
                   <td style={{ width: '50%', padding: '10px 12px', verticalAlign: 'top' }}>
@@ -542,8 +542,6 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                 <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #0f172a', textTransform: 'uppercase', fontSize: '10px', fontWeight: 700, color: '#0f172a', letterSpacing: '0.03em' }}>
                   <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '36px', textAlign: 'center' }}>#</th>
                   <th style={{ padding: '7px 10px', borderRight: '1px solid #0f172a', textAlign: 'left' }}>Description of Goods / Reagents</th>
-                  <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '110px', textAlign: 'left' }}>Batch / Lot</th>
-                  <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '95px', textAlign: 'left' }}>Expiry Date</th>
                   <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '85px', textAlign: 'center' }}>Condition</th>
                   <th style={{ padding: '7px 10px', width: '100px', textAlign: 'right' }}>Dispatched Qty</th>
                 </tr>
@@ -554,9 +552,6 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                   const brand = line.product?.brand;
                   const unit = line.unit || line.unitNameSnapshot || 'Units';
                   const qty = Number(line.quantity || 0);
-                  const expiry = line.expiryDate
-                    ? new Date(line.expiryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                    : '—';
 
                   return (
                     <tr key={line.id || index} style={{ borderBottom: '1px solid #cbd5e1' }}>
@@ -565,13 +560,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
                       </td>
                       <td style={{ padding: '6px 10px', borderRight: '1px solid #0f172a' }}>
                         <div style={{ fontWeight: 700, color: '#0f172a' }}>{productName}</div>
-                        {brand && role !== 'CLIENT_ADMIN' && <div style={{ fontSize: '10px', color: '#64748b' }}>Brand: {brand}</div>}
-                      </td>
-                      <td style={{ padding: '6px 8px', borderRight: '1px solid #0f172a', fontFamily: 'monospace', fontSize: '10px', fontWeight: 600 }}>
-                        {line.batchNumber || '—'}
-                      </td>
-                      <td style={{ padding: '6px 8px', borderRight: '1px solid #0f172a', fontSize: '10px', color: '#475569' }}>
-                        {expiry}
+                        {brand && role !== 'PROJECT_ADMIN' && <div style={{ fontSize: '10px', color: '#64748b' }}>Brand: {brand}</div>}
                       </td>
                       <td style={{ padding: '6px 8px', textAlign: 'center', borderRight: '1px solid #0f172a', fontSize: '10px', fontWeight: 600 }}>
                         {line.condition || 'USABLE'}
@@ -605,7 +594,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
               </div>
               <div>
                 We hereby certify that the diagnostic instruments and reagents detailed above have been inspected and packed 
-                in compliance with approved quality standards. Consignee is requested to verify count and lot seals upon receipt.
+                in compliance with approved quality standards. Consignee is requested to verify the quantity and condition upon receipt.
               </div>
             </div>
 

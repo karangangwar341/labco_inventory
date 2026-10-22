@@ -15,9 +15,6 @@ export interface StockRequestLineDto {
   quantity: number | string;
   unit?: string;
   condition: StockCondition;
-  batchId?: string | null;
-  batchNumber?: string;
-  expiryDate?: string | null;
   reservations?: Array<{ id: string; quantityBase: number | string }>;
 }
 
@@ -37,17 +34,17 @@ export interface StockRequestDto {
   sourceLocation?: {
     id: string;
     warehouse?: { id: string; name: string } | null;
-    client?: { id: string; name: string } | null;
+    project?: { id: string; name: string } | null;
   } | null;
   destinationLocationId?: string;
   destinationName?: string;
   destinationLocation?: {
     id: string;
     warehouse?: { id: string; name: string } | null;
-    client?: { id: string; name: string } | null;
+    project?: { id: string; name: string } | null;
   } | null;
-  clientId?: string | null;
-  client?: { id: string; name: string } | null;
+  projectId?: string | null;
+  project?: { id: string; name: string } | null;
   priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
   notes?: string;
   reason?: string;
@@ -70,7 +67,7 @@ export interface CreateStockRequestDto {
   sourceType?: string;
   sourceLocationId?: string;
   destinationLocationId?: string;
-  clientId?: string;
+  projectId?: string;
   priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
   reason?: string;
   lines: Array<{
@@ -78,8 +75,6 @@ export interface CreateStockRequestDto {
     unitId: string;
     quantity: number;
     condition?: StockCondition;
-    batchNumber?: string;
-    expiryDate?: string;
   }>;
 }
 
@@ -91,8 +86,6 @@ export interface UpdateStockRequestDto {
     unitId: string;
     quantity: number;
     condition?: StockCondition;
-    batchNumber?: string;
-    expiryDate?: string;
   }>;
 }
 

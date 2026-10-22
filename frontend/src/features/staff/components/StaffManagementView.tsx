@@ -7,8 +7,8 @@ import { useAuth } from '@/features/auth/auth.store';
 import { staffService } from '../staff.service';
 import { administrationService } from '@/features/administration/administration.service';
 import {
-  ClientStaffMember,
-  ClientStaffWorkLog,
+  ProjectStaffMember,
+  ProjectStaffWorkLog,
   CreateStaffMemberPayload,
   UpdateStaffMemberPayload,
   CreateWorkLogPayload,
@@ -27,36 +27,36 @@ import { EmptyState } from '@/components/feedback/EmptyState';
 type ActiveTab = 'STAFF' | 'LOGS';
 
 export interface StaffManagementViewProps {
-  clientId?: string;
+  projectId?: string;
   hideHeader?: boolean;
 }
 
-export function StaffManagementView({ clientId: propClientId, hideHeader = false }: StaffManagementViewProps = {}) {
+export function StaffManagementView({ projectId: propProjectId, hideHeader = false }: StaffManagementViewProps = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-  const [selectedClientId, setSelectedClientId] = useState<string>(propClientId || 'ALL');
-  const [modalClientId, setModalClientId] = useState<string>(propClientId || '');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(propProjectId || 'ALL');
+  const [modalProjectId, setModalProjectId] = useState<string>(propProjectId || '');
 
   useEffect(() => {
-    if (propClientId) {
-      setSelectedClientId(propClientId);
-      setModalClientId(propClientId);
+    if (propProjectId) {
+      setSelectedProjectId(propProjectId);
+      setModalProjectId(propProjectId);
     }
-  }, [propClientId]);
+  }, [propProjectId]);
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['administration', 'clients'],
-    queryFn: administrationService.getClients,
-    enabled: isSuperAdmin && !propClientId,
+  const { data: projects = [] } = useQuery({
+    queryKey: ['administration', 'projects'],
+    queryFn: administrationService.getProjects,
+    enabled: isSuperAdmin && !propProjectId,
   });
 
-  const effectiveClientId = propClientId || (isSuperAdmin
-    ? selectedClientId !== 'ALL'
-      ? selectedClientId
+  const effectiveProjectId = propProjectId || (isSuperAdmin
+    ? selectedProjectId !== 'ALL'
+      ? selectedProjectId
       : undefined
-    : user?.clientId);
+    : user?.projectId);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('STAFF');
   const [searchQuery, setSearchQuery] = useState('');
@@ -72,10 +72,10 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
 
   // Modals state
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<ClientStaffMember | null>(null);
-  const [deletingStaff, setDeletingStaff] = useState<ClientStaffMember | null>(null);
-  const [loggingWorkStaff, setLoggingWorkStaff] = useState<ClientStaffMember | null>(null);
-  const [viewingHistoryStaff, setViewingHistoryStaff] = useState<ClientStaffMember | null>(null);
+  const [editingStaff, setEditingStaff] = useState<ProjectStaffMember | null>(null);
+  const [deletingStaff, setDeletingStaff] = useState<ProjectStaffMember | null>(null);
+  const [loggingWorkStaff, setLoggingWorkStaff] = useState<ProjectStaffMember | null>(null);
+  const [viewingHistoryStaff, setViewingHistoryStaff] = useState<ProjectStaffMember | null>(null);
 
   // Form states for Staff Member
   const [staffNumber, setStaffNumber] = useState('');
@@ -96,11 +96,11 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
   // Reset pagination on filter / search changes
   useEffect(() => {
     setStaffCurrentPage(1);
-  }, [searchQuery, statusFilter, selectedClientId]);
+  }, [searchQuery, statusFilter, selectedProjectId]);
 
   useEffect(() => {
     setLogsCurrentPage(1);
-  }, [searchQuery, selectedClientId]);
+  }, [searchQuery, selectedProjectId]);
 
   // Fetch Staff Members
   const {
@@ -109,20 +109,20 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
     error: staffError,
     refetch: refetchStaff,
   } = useQuery({
-    queryKey: queryKeys.staff.list(effectiveClientId || (isSuperAdmin ? 'all-clients' : user?.id)),
-    queryFn: () => staffService.listStaff(effectiveClientId ? { clientId: effectiveClientId } : undefined),
+    queryKey: queryKeys.staff.list(effectiveProjectId || (isSuperAdmin ? 'all-projects' : user?.id)),
+    queryFn: () => staffService.listStaff(effectiveProjectId ? { projectId: effectiveProjectId } : undefined),
     staleTime: 2 * 60 * 1000,
   });
 
-  // Fetch All Client Work Logs
+  // Fetch All Project Work Logs
   const {
     data: allWorkLogs = [],
     isLoading: isLogsLoading,
     error: logsError,
     refetch: refetchLogs,
   } = useQuery({
-    queryKey: queryKeys.staff.workLogs(effectiveClientId || (isSuperAdmin ? 'all-clients' : user?.id)),
-    queryFn: () => staffService.listClientWorkLogs(effectiveClientId ? { clientId: effectiveClientId } : undefined),
+    queryKey: queryKeys.staff.workLogs(effectiveProjectId || (isSuperAdmin ? 'all-projects' : user?.id)),
+    queryFn: () => staffService.listProjectWorkLogs(effectiveProjectId ? { projectId: effectiveProjectId } : undefined),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -186,7 +186,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
     setRoleTitle('');
     setContact('');
     setEditStatus('ACTIVE');
-    setModalClientId(propClientId || '');
+    setModalProjectId(propProjectId || '');
     setFormError(null);
   };
 
@@ -199,7 +199,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
     setLogFormError(null);
   };
 
-  const openEditModal = (staff: ClientStaffMember) => {
+  const openEditModal = (staff: ProjectStaffMember) => {
     setEditingStaff(staff);
     setStaffNumber(staff.staffNumber);
     setFullName(staff.fullName);
@@ -209,7 +209,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
     setFormError(null);
   };
 
-  const openLogWorkModal = (staff: ClientStaffMember) => {
+  const openLogWorkModal = (staff: ProjectStaffMember) => {
     setLoggingWorkStaff(staff);
     resetLogForm();
   };
@@ -226,8 +226,8 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
       setFormError('Full name is required');
       return;
     }
-    if (!editingStaff && isSuperAdmin && !propClientId && !modalClientId) {
-      setFormError('Please select a client organization to assign this staff member');
+    if (!editingStaff && isSuperAdmin && !propProjectId && !modalProjectId) {
+      setFormError('Please select a project organization to assign this staff member');
       return;
     }
 
@@ -243,13 +243,13 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
         },
       });
     } else {
-      const targetClientId = propClientId || (isSuperAdmin && modalClientId ? modalClientId : undefined);
+      const targetProjectId = propProjectId || (isSuperAdmin && modalProjectId ? modalProjectId : undefined);
       createStaffMutation.mutate({
         staffNumber: staffNumber.trim(),
         fullName: fullName.trim(),
         roleTitle: roleTitle.trim() || undefined,
         contact: contact.trim() || undefined,
-        ...(targetClientId ? { clientId: targetClientId } : {}),
+        ...(targetProjectId ? { projectId: targetProjectId } : {}),
       });
     }
   };
@@ -291,7 +291,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
         m.staffNumber.toLowerCase().includes(q) ||
         (m.roleTitle || '').toLowerCase().includes(q) ||
         (m.contact || '').toLowerCase().includes(q) ||
-        (m.clientName || '').toLowerCase().includes(q);
+        (m.projectName || '').toLowerCase().includes(q);
 
       const matchesStatus =
         statusFilter === 'ALL' ||
@@ -309,13 +309,13 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
     return allWorkLogs.filter((l) => {
       const memberName = l.staffMember?.fullName?.toLowerCase() || '';
       const memberNumber = l.staffMember?.staffNumber?.toLowerCase() || '';
-      const clientName = (l.clientName || '').toLowerCase();
+      const projectName = (l.projectName || '').toLowerCase();
       const tasks = l.tasksCompleted.toLowerCase();
       const notes = (l.notes || '').toLowerCase();
       return (
         memberName.includes(q) ||
         memberNumber.includes(q) ||
-        clientName.includes(q) ||
+        projectName.includes(q) ||
         tasks.includes(q) ||
         notes.includes(q)
       );
@@ -349,7 +349,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
   const totalHoursLogged = allWorkLogs.reduce((acc, curr) => acc + Number(curr.hoursWorked || 0), 0);
 
   if (isStaffLoading && staffList.length === 0) {
-    return <LoadingState message="Loading client staff directory and operations..." />;
+    return <LoadingState message="Loading project staff directory and operations..." />;
   }
 
   if (staffError) {
@@ -395,7 +395,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
         <div className="flex items-center justify-between pb-1">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Personnel &amp; Workforce</h2>
-            <p className="text-xs text-slate-500">Facility personnel, active shifts, and daily shift work logs for this client.</p>
+            <p className="text-xs text-slate-500">Facility personnel, active shifts, and daily shift work logs for this project.</p>
           </div>
           <Button
             variant="primary"
@@ -485,14 +485,14 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {isSuperAdmin && !propClientId && (
+          {isSuperAdmin && !propProjectId && (
             <select
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
               className="text-xs px-2.5 py-1.5 rounded-lg border border-purple-200 bg-purple-50/60 text-purple-900 font-medium focus:outline-hidden focus:ring-2 focus:ring-purple-500/20"
             >
-              <option value="ALL">🏢 All Client Organizations</option>
-              {clients.map((c) => (
+              <option value="ALL">🏢 All Project Organizations</option>
+              {projects.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -575,9 +575,9 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
                           <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
                             {staff.staffNumber}
                           </span>
-                          {isSuperAdmin && staff.clientName && (
+                          {isSuperAdmin && staff.projectName && (
                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                              🏢 {staff.clientName}
+                              🏢 {staff.projectName}
                             </span>
                           )}
                           <Badge variant={staff.status === 'ACTIVE' ? 'success' : 'neutral'}>
@@ -792,9 +792,9 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
                             <span className="text-[11px] font-mono text-slate-400">
                               {log.staffMember?.staffNumber}
                             </span>
-                            {isSuperAdmin && log.clientName && (
+                            {isSuperAdmin && log.projectName && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                                🏢 {log.clientName}
+                                🏢 {log.projectName}
                               </span>
                             )}
                           </div>
@@ -910,26 +910,26 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
             </div>
           )}
 
-          {isSuperAdmin && !editingStaff && !propClientId && (
+          {isSuperAdmin && !editingStaff && !propProjectId && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Client Organization <span className="text-rose-500">*</span>
+                Project Organization <span className="text-rose-500">*</span>
               </label>
               <select
-                value={modalClientId}
-                onChange={(e) => setModalClientId(e.target.value)}
+                value={modalProjectId}
+                onChange={(e) => setModalProjectId(e.target.value)}
                 required
                 className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="">-- Select Client Organization --</option>
-                {clients.map((c) => (
+                <option value="">-- Select Project Organization --</option>
+                {projects.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
               </select>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Assign this workforce profile to a client facility
+                Assign this workforce profile to a project facility
               </span>
             </div>
           )}
@@ -946,7 +946,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
                 onChange={(e) => setStaffNumber(e.target.value)}
                 required
               />
-              <span className="text-[10px] text-slate-400 mt-1 block">Unique within your client organization</span>
+              <span className="text-[10px] text-slate-400 mt-1 block">Unique within your project organization</span>
             </div>
 
             <div>
@@ -1091,7 +1091,7 @@ export function StaffManagementView({ clientId: propClientId, hideHeader = false
             </label>
             <Textarea
               rows={4}
-              placeholder="e.g. Calibrated and cleaned reagent batching station #2; assembled 15 units of Rapid Antigen Diagnostic Kits; performed quality check on lot #AS-201..."
+              placeholder="e.g. Calibrated and cleaned reagent station #2; assembled 15 units of Rapid Antigen Diagnostic Kits; completed the quality check..."
               value={tasksCompleted}
               onChange={(e) => setTasksCompleted(e.target.value)}
               required

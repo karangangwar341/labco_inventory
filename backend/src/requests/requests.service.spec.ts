@@ -11,7 +11,6 @@ import {
   CatalogScope,
   ReservationStatus,
   ApprovalDecision,
-  TrackingMode,
   TransactionType,
   Prisma,
 } from '@prisma/client';
@@ -83,14 +82,10 @@ describe('Requests & Reservations Service (T-007)', () => {
       approval: {
         create: vi.fn(),
       },
-      stockBatch: {
-        findUnique: vi.fn(),
-        create: vi.fn(),
-      },
     };
 
     mockAuthService = {
-      assertClientAccess: vi.fn(),
+      assertProjectAccess: vi.fn(),
       assertWarehouseAccess: vi.fn(),
     };
 
@@ -100,7 +95,7 @@ describe('Requests & Reservations Service (T-007)', () => {
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
       notifyUser: vi.fn(),
-      notifyClientAdmins: vi.fn(),
+      notifyProjectAdmins: vi.fn(),
       getSettings: vi.fn().mockResolvedValue({ approvalRequirements: { stockRequests: { STOCK_IN: true, STOCK_OUT: true, DISPATCH: true, TRANSFER: true, ADJUSTMENT: true } } }),
     };
 
@@ -152,7 +147,7 @@ describe('Requests & Reservations Service (T-007)', () => {
       const manufacturedProduct = {
         ...approvedProduct,
         kind: ProductKind.MANUFACTURED_PRODUCT,
-        ownerScope: CatalogScope.CLIENT,
+        ownerScope: CatalogScope.PROJECT,
       };
       mockPrisma.product.findUnique.mockResolvedValue(manufacturedProduct);
       mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
@@ -277,7 +272,6 @@ describe('Requests & Reservations Service (T-007)', () => {
           id: 'res-1',
           locationId: 'loc-1',
           productId: 'prod-1',
-          batchId: null,
           quantityBase: new Prisma.Decimal(15),
           status: ReservationStatus.ACTIVE,
         },
@@ -331,7 +325,6 @@ describe('Requests & Reservations Service (T-007)', () => {
           id: 'res-1',
           locationId: 'loc-1',
           productId: 'prod-1',
-          batchId: null,
           quantityBase: new Prisma.Decimal(10),
           status: ReservationStatus.ACTIVE,
         },
@@ -390,7 +383,6 @@ describe('Requests & Reservations Service (T-007)', () => {
           {
             id: 'line-1',
             productId: 'prod-1',
-            batchId: null,
             quantity: new Prisma.Decimal(10),
             unitNameSnapshot: 'EACH',
             condition: StockCondition.USABLE,
@@ -404,7 +396,6 @@ describe('Requests & Reservations Service (T-007)', () => {
           id: 'res-1',
           locationId: 'loc-1',
           productId: 'prod-1',
-          batchId: null,
           quantityBase: new Prisma.Decimal(10),
           status: ReservationStatus.ACTIVE,
         },
@@ -480,12 +471,10 @@ describe('Requests & Reservations Service (T-007)', () => {
   });
 
   describe('5. Stock-In Tracking & Physical Count Adjustments (T-008)', () => {
-    it('allows stock-in without a lot number even when product trackingMode is BATCH_ONLY', async () => {
+    it('allows stock-in without product lot metadata', async () => {
       const batchProduct = {
         ...approvedProduct,
-        id: 'prod-batch',
-        trackingMode: TrackingMode.BATCH_ONLY,
-      };
+        id: 'prod-batch',      };
       mockPrisma.product.findUnique.mockResolvedValue(batchProduct);
       mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
       mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
@@ -504,50 +493,7 @@ describe('Requests & Reservations Service (T-007)', () => {
         ],
       });
 
-      expect(draft.id).toBe('req-batch-optional');
-      expect(mockPrisma.stockBatch.create).not.toHaveBeenCalled();
-    });
-
-    it('creates stockBatch automatically when batchNumber is specified on stock-in', async () => {
-      const batchProduct = {
-        ...approvedProduct,
-        id: 'prod-batch',
-        trackingMode: TrackingMode.BATCH_ONLY,
-      };
-      mockPrisma.product.findUnique.mockResolvedValue(batchProduct);
-      mockPrisma.stockBatch.findUnique.mockResolvedValue(null);
-      mockPrisma.stockBatch.create.mockResolvedValue({
-        id: 'batch-created-1',
-        productId: 'prod-batch',
-        batchNumber: 'LOT-999',
-      });
-      mockPrisma.stockRequest.create.mockResolvedValue({ id: 'req-batch' });
-      mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'wh-1' });
-      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-1', warehouseId: 'wh-1' });
-
-      await requestsService.createDraft(storeAdminUser, {
-        requestType: RequestType.STOCK_IN,
-        sourceType: 'DIRECT_PURCHASE',
-        sourceLocationId: 'loc-1',
-        lines: [
-          {
-            productId: 'prod-batch',
-            quantity: 10,
-            unitId: 'unit-ea',
-            batchNumber: 'LOT-999',
-          },
-        ],
-      });
-
-      expect(mockPrisma.stockBatch.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            productId: 'prod-batch',
-            batchNumber: 'LOT-999',
-          }),
-        }),
-      );
-    });
+      expect(draft.id).toBe('req-batch-optional');    });
 
     it('records system snapshot and variance for physical count adjustments', async () => {
       mockPrisma.product.findUnique.mockResolvedValue(approvedProduct);
@@ -556,10 +502,7 @@ describe('Requests & Reservations Service (T-007)', () => {
 
       // Current system stock is 50
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
-        usableQty: new Prisma.Decimal(50),
-        damagedQty: new Prisma.Decimal(0),
-        expiredQty: new Prisma.Decimal(0),
-      });
+        usableQty: new Prisma.Decimal(50),      });
 
       mockPrisma.stockRequest.create.mockImplementation(async (args: any) => args.data);
 
@@ -606,7 +549,6 @@ describe('Requests & Reservations Service (T-007)', () => {
           {
             id: 'line-adj-1',
             productId: 'prod-1',
-            batchId: null,
             quantity: new Prisma.Decimal(55),
             unitNameSnapshot: 'EACH',
             condition: StockCondition.USABLE,
@@ -642,27 +584,27 @@ describe('Requests & Reservations Service (T-007)', () => {
     });
   });
 
-  describe('6. Client-to-Client Transfer Prevention & Location Invariants', () => {
-    it('rejects Super Admin creating draft with client source and client destination', async () => {
+  describe('6. Project-to-Project Transfer Prevention & Location Invariants', () => {
+    it('rejects Super Admin creating draft with project source and project destination', async () => {
       mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
-        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
-        if (where.id === 'loc-client-b') return { id: 'loc-client-b', locationType: 'CLIENT', clientId: 'client-b' };
+        if (where.id === 'loc-project-a') return { id: 'loc-project-a', locationType: 'PROJECT', projectId: 'project-a' };
+        if (where.id === 'loc-project-b') return { id: 'loc-project-b', locationType: 'PROJECT', projectId: 'project-b' };
         return null;
       });
 
       await expect(
         requestsService.createDraft(superAdminUser, {
           requestType: RequestType.DISPATCH,
-          sourceLocationId: 'loc-client-a',
-          destinationLocationId: 'loc-client-b',
+          sourceLocationId: 'loc-project-a',
+          destinationLocationId: 'loc-project-b',
           lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
         }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('rejects Super Admin creating dispatch request originating from a client location', async () => {
+    it('rejects Super Admin creating dispatch request originating from a project location', async () => {
       mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
-        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        if (where.id === 'loc-project-a') return { id: 'loc-project-a', locationType: 'PROJECT', projectId: 'project-a' };
         if (where.id === 'loc-wh-1') return { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' };
         return null;
       });
@@ -670,17 +612,17 @@ describe('Requests & Reservations Service (T-007)', () => {
       await expect(
         requestsService.createDraft(superAdminUser, {
           requestType: RequestType.DISPATCH,
-          sourceLocationId: 'loc-client-a',
+          sourceLocationId: 'loc-project-a',
           destinationLocationId: 'loc-wh-1',
           lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
         }),
       ).rejects.toThrow('Dispatch requests must originate from a warehouse stock location');
     });
 
-    it('rejects Super Admin creating transfer request targeting a client location', async () => {
+    it('rejects Super Admin creating transfer request targeting a project location', async () => {
       mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
         if (where.id === 'loc-wh-1') return { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' };
-        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        if (where.id === 'loc-project-a') return { id: 'loc-project-a', locationType: 'PROJECT', projectId: 'project-a' };
         return null;
       });
 
@@ -688,60 +630,60 @@ describe('Requests & Reservations Service (T-007)', () => {
         requestsService.createDraft(superAdminUser, {
           requestType: RequestType.TRANSFER,
           sourceLocationId: 'loc-wh-1',
-          destinationLocationId: 'loc-client-a',
+          destinationLocationId: 'loc-project-a',
           lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
         }),
       ).rejects.toThrow('Transfer requests must target a warehouse stock location');
     });
 
-    it('rejects Super Admin client stock-out specifying another destination location', async () => {
+    it('rejects Super Admin project stock-out specifying another destination location', async () => {
       mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
-        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
-        if (where.id === 'loc-client-b') return { id: 'loc-client-b', locationType: 'CLIENT', clientId: 'client-b' };
+        if (where.id === 'loc-project-a') return { id: 'loc-project-a', locationType: 'PROJECT', projectId: 'project-a' };
+        if (where.id === 'loc-project-b') return { id: 'loc-project-b', locationType: 'PROJECT', projectId: 'project-b' };
         return null;
       });
 
       await expect(
         requestsService.createDraft(superAdminUser, {
           requestType: RequestType.STOCK_OUT,
-          sourceLocationId: 'loc-client-a',
-          destinationLocationId: 'loc-client-b',
+          sourceLocationId: 'loc-project-a',
+          destinationLocationId: 'loc-project-b',
           lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
         }),
-      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+      ).rejects.toThrow('Project-to-project transfer is strictly prohibited');
     });
 
-    it('rejects submitRequest if both source and destination are client locations', async () => {
-      const clientToClientRequest = {
+    it('rejects submitRequest if both source and destination are project locations', async () => {
+      const projectToProjectRequest = {
         id: 'req-c2c-1',
         status: RequestStatus.DRAFT,
         requesterId: superAdminUser.id,
         requestType: RequestType.DISPATCH,
-        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
-        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        sourceLocation: { id: 'loc-c1', locationType: 'PROJECT', projectId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'PROJECT', projectId: 'c2' },
         lines: [{ id: 'l1', productId: 'p1', quantity: new Prisma.Decimal(10), condition: StockCondition.USABLE }],
       };
-      mockPrisma.stockRequest.findUnique.mockResolvedValue(clientToClientRequest);
+      mockPrisma.stockRequest.findUnique.mockResolvedValue(projectToProjectRequest);
 
       await expect(
         requestsService.submitRequest(superAdminUser, 'req-c2c-1'),
-      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+      ).rejects.toThrow('Project-to-project transfer is strictly prohibited');
     });
 
-    it('rejects approveRequest if both source and destination are client locations', async () => {
-      const clientToClientRequest = {
+    it('rejects approveRequest if both source and destination are project locations', async () => {
+      const projectToProjectRequest = {
         id: 'req-c2c-2',
         status: RequestStatus.PENDING_APPROVAL,
         requestType: RequestType.DISPATCH,
-        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
-        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        sourceLocation: { id: 'loc-c1', locationType: 'PROJECT', projectId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'PROJECT', projectId: 'c2' },
         lines: [{ id: 'l1', productId: 'p1', quantity: new Prisma.Decimal(10), condition: StockCondition.USABLE }],
       };
-      mockPrisma.stockRequest.findUnique.mockResolvedValue(clientToClientRequest);
+      mockPrisma.stockRequest.findUnique.mockResolvedValue(projectToProjectRequest);
 
       await expect(
         requestsService.approveRequest(superAdminUser, 'req-c2c-2', {}),
-      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+      ).rejects.toThrow('Project-to-project transfer is strictly prohibited');
     });
   });
 });

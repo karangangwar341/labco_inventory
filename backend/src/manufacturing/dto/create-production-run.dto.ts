@@ -20,11 +20,6 @@ export class ProductionInputDto {
   @IsNotEmpty()
   productId!: string;
 
-  @ApiPropertyOptional({ description: 'Batch UUID if lot-tracked' })
-  @IsOptional()
-  @IsUUID('4')
-  batchId?: string;
-
   @ApiProperty({ example: 5, description: 'Consumed quantity' })
   @IsNumber()
   @IsPositive()
@@ -42,16 +37,6 @@ export class ProductionOutputDto {
   @IsNotEmpty()
   productId!: string;
 
-  @ApiPropertyOptional({ example: 'BATCH-OUT-2026', description: 'Batch/Lot number' })
-  @IsOptional()
-  @IsString()
-  batchNumber?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31T00:00:00.000Z', description: 'Expiry date' })
-  @IsOptional()
-  @IsString()
-  expiryDate?: string;
-
   @ApiProperty({ example: 10, description: 'Produced quantity' })
   @IsNumber()
   @IsPositive()
@@ -64,10 +49,10 @@ export class ProductionOutputDto {
 }
 
 export class CreateProductionRunDto {
-  @ApiPropertyOptional({ description: 'Client UUID (required if caller is Super Admin)' })
+  @ApiPropertyOptional({ description: 'Project UUID (required if caller is Super Admin)' })
   @IsOptional()
   @IsUUID('4')
-  clientId?: string;
+  projectId?: string;
 
   @ApiPropertyOptional({ enum: ProductionMode, default: ProductionMode.LINKED })
   @IsOptional()

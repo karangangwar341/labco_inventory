@@ -13,7 +13,7 @@ export default function GlobalErrorPage({
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    // Log unexpected client error to monitoring telemetry
+    // Log unexpected project error to monitoring telemetry
     console.error('Unhandled application exception:', error);
   }, [error]);
 

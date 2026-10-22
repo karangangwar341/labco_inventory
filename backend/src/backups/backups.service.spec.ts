@@ -211,10 +211,7 @@ describe('BackupsService', () => {
       const validBalances = [
         {
           id: 'balance-1',
-          physicalQty: 100,
           usableQty: 80,
-          damagedQty: 15,
-          expiredQty: 5,
           reservedQty: 20, // Available = 80 - 20 = 60 >= 0
         },
       ];
@@ -314,8 +311,6 @@ describe('BackupsService', () => {
         {
           id: 'balance-corrupt',
           usableQty: -10, // Negative bucket violates invariant!
-          damagedQty: 10,
-          expiredQty: 10,
           reservedQty: 0,
         },
       ];
@@ -360,10 +355,7 @@ describe('BackupsService', () => {
       const corruptedBalances = [
         {
           id: 'balance-neg',
-          physicalQty: 10,
           usableQty: 10,
-          damagedQty: 0,
-          expiredQty: 0,
           reservedQty: 15, // Available = 10 - 15 = -5 < 0 !
         },
       ];

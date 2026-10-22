@@ -19,6 +19,7 @@ import { UserRole, ShipmentStatus } from '@prisma/client';
 import { ShipmentsService } from './shipments.service.js';
 import { ReceiveShipmentDto } from './dto/receive-shipment.dto.js';
 import { ApproveReceiptDto } from './dto/approve-receipt.dto.js';
+import { ResolveDiscrepancyDto } from './dto/resolve-discrepancy.dto.js';
 import { ShipmentPrivacyInterceptor } from '../auth/interceptors/shipment-privacy.interceptor.js';
 
 @ApiTags('Shipments & Dispatch')
@@ -31,7 +32,7 @@ export class ShipmentsController {
 
   @Get()
   @ApiOperation({
-    summary: 'List shipments within caller scope; redacts source warehouse identity for Client Admins',
+    summary: 'List shipments within caller scope; redacts source warehouse identity for Project Admins',
   })
   @ApiQuery({ name: 'status', required: false, enum: ShipmentStatus })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -50,7 +51,7 @@ export class ShipmentsController {
 
   @Get(':id')
   @ApiOperation({
-    summary: 'Get shipment details; redacts source warehouse identity for Client Admins',
+    summary: 'Get shipment details; redacts source warehouse identity for Project Admins',
   })
   async getShipmentById(
     @CurrentUser() user: AuthenticatedUser,
@@ -85,5 +86,16 @@ export class ShipmentsController {
       ...dto,
       idempotencyKey: idempotencyKey || dto?.idempotencyKey,
     });
+  }
+
+  @Post(':id/resolve-discrepancy')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Super Admin marks discrepancy missing or returns it to source warehouse as a calculation mistake' })
+  async resolveDiscrepancy(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ResolveDiscrepancyDto,
+  ) {
+    return this.shipmentsService.resolveDiscrepancy(user, id, dto);
   }
 }

@@ -32,8 +32,7 @@ type RequestLineDraft = {
   productId: string;
   unitId: string;
   quantity: string;
-  batchNumber: string;
-  expiryDate: string;
+  condition: 'USABLE' | 'DAMAGED';
 };
 
 const blankLine = (): RequestLineDraft => ({
@@ -42,8 +41,7 @@ const blankLine = (): RequestLineDraft => ({
   productId: '',
   unitId: '',
   quantity: '',
-  batchNumber: '',
-  expiryDate: '',
+  condition: 'USABLE',
 });
 
 function isStockInType(value: string | null): value is Direction {
@@ -56,8 +54,8 @@ export function CreateRequestForm() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const userId = user?.id;
-  const clientId = user?.clientId;
-  const [direction, setDirection] = useState<Direction>(() => (user?.role === 'CLIENT_ADMIN' ? 'STOCK_IN' : 'STOCK_OUT'));
+  const projectId = user?.projectId;
+  const [direction, setDirection] = useState<Direction>(() => (user?.role === 'PROJECT_ADMIN' ? 'STOCK_IN' : 'STOCK_OUT'));
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [stockedProductIds, setStockedProductIds] = useState<Set<string>>(new Set());
@@ -101,24 +99,24 @@ export function CreateRequestForm() {
   );
 
   const isSourceWarehouse = selectedSourceLocation?.locationType === 'WAREHOUSE';
-  const isSourceClient = selectedSourceLocation?.locationType === 'CLIENT';
+  const isSourceProject = selectedSourceLocation?.locationType === 'PROJECT';
 
   const isDispatch = direction === 'STOCK_OUT' && isWarehouseUser && isSourceWarehouse;
 
   const targetLocations = useMemo(() => {
-    if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
+    if (user?.role === 'PROJECT_ADMIN') return locations.filter((location) => location.locationType === 'PROJECT');
     if (user?.role === 'STORE_ADMIN') return locations.filter((location) => location.locationType === 'WAREHOUSE');
     return locations;
   }, [locations, user?.role]);
 
   const sourceLocations = useMemo(() => {
-    if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
+    if (user?.role === 'PROJECT_ADMIN') return locations.filter((location) => location.locationType === 'PROJECT');
     if (user?.role === 'STORE_ADMIN') return locations.filter((location) => location.locationType === 'WAREHOUSE');
     return locations;
   }, [locations, user?.role]);
 
   const dispatchTargets = useMemo(
-    () => locations.filter((location) => location.locationType === 'CLIENT'),
+    () => locations.filter((location) => location.locationType === 'PROJECT'),
     [locations],
   );
 
@@ -146,7 +144,7 @@ export function CreateRequestForm() {
     setIsLoading(true);
     setFormError(null);
     try {
-      const scope = clientId ? `client-${clientId}` : 'company';
+      const scope = projectId ? `project-${projectId}` : 'company';
       const bootstrap = userId
         ? await queryClient.fetchQuery({
             queryKey: queryKeys.session.bootstrap(userId),
@@ -159,7 +157,6 @@ export function CreateRequestForm() {
             bootstrap.products.map((product) => ({
               ...product,
               kind: product.kind as CatalogProduct['kind'],
-              trackingMode: product.trackingMode as CatalogProduct['trackingMode'],
               baseUnit: product.units.find((unit) => unit.isBaseUnit)?.unitName ?? '',
               minThreshold: Number(product.minQuantity),
               isActive: true,
@@ -213,8 +210,7 @@ export function CreateRequestForm() {
             productId: line.productId,
             unitId: line.unitId || '',
             quantity: String(line.quantity),
-            batchNumber: line.batchNumber || '',
-            expiryDate: line.expiryDate ? new Date(line.expiryDate).toISOString().slice(0, 10) : '',
+            condition: line.condition === 'DAMAGED' ? 'DAMAGED' : 'USABLE',
           };
         }));
       }
@@ -223,11 +219,11 @@ export function CreateRequestForm() {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, queryClient, userId]);
+  }, [projectId, queryClient, userId]);
 
   useEffect(() => {
     const requestedDirection = searchParams.get('type');
-    if (user?.role === 'CLIENT_ADMIN') {
+    if (user?.role === 'PROJECT_ADMIN') {
       setDirection('STOCK_IN');
       void loadFormOptions();
       return;
@@ -255,7 +251,7 @@ export function CreateRequestForm() {
     const isSuperAdmin = user?.role === 'SUPER_ADMIN';
     const balanceFilters = isSuperAdmin ? { locationId, limit: 500 } : undefined;
     void queryClient.fetchQuery({
-      // Store and client APIs are scoped to the signed-in user's assigned location,
+      // Store and project APIs are scoped to the signed-in user's assigned location,
       // so share the exact cache entry used by Stock & Inventory. Super Admins
       // choose a source warehouse and therefore need a separate location cache.
       queryKey: queryKeys.inventory.balances(userId, balanceFilters),
@@ -291,25 +287,11 @@ export function CreateRequestForm() {
 
   useEffect(() => {
     if (direction !== 'STOCK_OUT' || isLoadingStock || stockLoadedForLocation !== locationId) return;
-    setLines((current) => current.map((line) => (
-      !line.productId
-        ? line
-        : !stockedProductIds.has(line.productId)
-          ? { ...line, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' }
-          : (() => {
-              const product = products.find((option) => option.id === line.productId);
-              if (!product || (product.trackingMode !== 'BATCH_ONLY' && product.trackingMode !== 'BOTH')) return line;
-              const availableLots = (balancesByProduct[product.id] || []).filter(
-                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-              );
-              if (line.batchNumber && availableLots.some((balance) => balance.batchNumber === line.batchNumber)) return line;
-              return availableLots.length === 1
-                ? { ...line, batchNumber: availableLots[0].batchNumber! }
-                : line.batchNumber
-                  ? { ...line, batchNumber: '' }
-                  : line;
-            })()
-    )));
+    setLines((current) => current.map((line) =>
+      line.productId && !stockedProductIds.has(line.productId)
+        ? { ...line, productId: '', unitId: '', quantity: '' }
+        : line,
+    ));
   }, [balancesByProduct, direction, isLoadingStock, locationId, products, stockLoadedForLocation, stockedProductIds]);
 
   useEffect(() => {
@@ -330,20 +312,11 @@ export function CreateRequestForm() {
     const product = products.find((option) => option.id === productId);
     const category = categories.find((option) => option.id === product?.categoryId) ?? product?.category;
     const baseUnit = product?.units?.find((unit) => unit.isBaseUnit && unit.status !== 'SUPERSEDED');
-    const availableLots = product && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')
-      ? (balancesByProduct[product.id] || []).filter(
-          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-        )
-      : [];
     updateLine(index, {
       categoryId: category?.parentId || category?.id || '',
       subcategoryId: category?.parentId ? category.id : '',
       productId,
       unitId: baseUnit?.id || '',
-      batchNumber: direction === 'STOCK_OUT' && availableLots.length === 1
-        ? availableLots[0].batchNumber!
-        : '',
-      expiryDate: '',
     });
   };
 
@@ -361,15 +334,19 @@ export function CreateRequestForm() {
       return;
     }
     if (isDispatch && !destinationLocationId) {
-      setFormError('Choose the client receiving this stock.');
+      setFormError('Choose the project receiving this stock.');
       return;
     }
-    if (direction === 'STOCK_OUT' && isSourceClient && destinationLocationId) {
-      setFormError('Client-to-client transfer is strictly prohibited. Client inventory can only be consumed locally or dispatched from a warehouse.');
+    if (direction === 'STOCK_OUT' && isSourceProject && destinationLocationId) {
+      setFormError('Project-to-project transfer is strictly prohibited. Project inventory can only be consumed locally or dispatched from a warehouse.');
       return;
     }
     if (direction === 'STOCK_IN' && !sourceType) {
       setFormError('Choose where the stock came from.');
+      return;
+    }
+    if (direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED') && !reason.trim()) {
+      setFormError('Add a reason when reporting damaged stock.');
       return;
     }
 
@@ -386,16 +363,6 @@ export function CreateRequestForm() {
       if (!Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0) {
         setFormError(`Enter a quantity greater than zero for ${product.name}.`);
         return;
-      }
-
-      if (direction === 'STOCK_OUT' && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')) {
-        const availableLots = (balancesByProduct[product.id] || []).filter(
-          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-        );
-        if (availableLots.length > 1 && !availableLots.some((balance) => balance.batchNumber === line.batchNumber)) {
-          setFormError(`Choose the lot to dispatch for ${product.name}.`);
-          return;
-        }
       }
 
       // MOQ enforcement on dispatch/stock-out
@@ -420,32 +387,17 @@ export function CreateRequestForm() {
         sourceType: direction === 'STOCK_IN' ? sourceType : undefined,
         sourceLocationId: direction === 'STOCK_OUT' ? locationId : undefined,
         destinationLocationId: direction === 'STOCK_IN' ? locationId : isDispatch ? destinationLocationId : undefined,
-        clientId: user.role === 'CLIENT_ADMIN'
-          ? (user.clientId || undefined)
-          : (selectedDestination?.clientId || selectedLocation?.clientId || undefined),
+        projectId: user.role === 'PROJECT_ADMIN'
+          ? (user.projectId || undefined)
+          : (selectedDestination?.projectId || selectedLocation?.projectId || undefined),
         priority: 'NORMAL',
         reason: reason.trim() || undefined,
-        lines: lines.map((line) => {
-          const product = selectedProductForLine(line);
-          const availableLots = product && (product.trackingMode === 'BATCH_ONLY' || product.trackingMode === 'BOTH')
-            ? (balancesByProduct[product.id] || []).filter(
-                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-              )
-            : [];
-          const batchNumber = line.batchNumber || (
-            direction === 'STOCK_OUT' && availableLots.length === 1
-              ? availableLots[0].batchNumber
-              : undefined
-          );
-          return {
+        lines: lines.map((line) => ({
             productId: line.productId,
             unitId: line.unitId,
             quantity: Number(line.quantity),
-            condition: 'USABLE' as const,
-            batchNumber: batchNumber?.trim() || undefined,
-            expiryDate: line.expiryDate ? new Date(`${line.expiryDate}T00:00:00.000Z`).toISOString() : undefined,
-          };
-        }),
+            condition: line.condition,
+          })),
       };
       const request = editingDraftId
         ? await requestsService.updateRequest(editingDraftId, {
@@ -479,8 +431,8 @@ export function CreateRequestForm() {
     ? 'Destination Stock Location'
     : isDispatch
       ? 'Source Warehouse'
-      : isSourceClient
-        ? 'Client Facility (Internal Stock-Out)'
+      : isSourceProject
+        ? 'Project Facility (Internal Stock-Out)'
         : 'Source Warehouse / Origin';
 
   return (
@@ -488,7 +440,7 @@ export function CreateRequestForm() {
       <PageHeader
         title={editingDraftId
           ? 'Edit Stock Movement'
-          : user?.role === 'CLIENT_ADMIN'
+          : user?.role === 'PROJECT_ADMIN'
             ? 'New Restock Request'
             : direction === 'STOCK_IN'
               ? 'Receive New Stock (Stock In)'
@@ -496,14 +448,14 @@ export function CreateRequestForm() {
                 ? 'Send / Dispatch Stock (Stock Out)'
                 : 'Internal Stock Deduction (Stock Out)'}
         description={
-          user?.role === 'CLIENT_ADMIN'
+          user?.role === 'PROJECT_ADMIN'
             ? 'Request diagnostic products and reagents from Central Supply to restock your clinic or lab inventory.'
             : isDispatch
-              ? 'Send items from your warehouse to a client clinic or hospital.'
+              ? 'Send items from your warehouse to a project clinic or hospital.'
               : direction === 'STOCK_IN'
                 ? 'Record new items arriving at your location from a supplier or delivery truck.'
-                : isSourceClient
-                  ? 'Record internal consumption, department usage, or write-off at this client facility. Direct client-to-client transfers are prohibited.'
+                : isSourceProject
+                  ? 'Record internal consumption, department usage, or damaged stock-out at this project facility. Direct project-to-project transfers are prohibited.'
                   : 'Record items being dispatched, used, or transferred out of your store.'
         }
         actions={
@@ -514,7 +466,7 @@ export function CreateRequestForm() {
       />
 
       {/* Direction Switcher Segmented Control - Only shown for Warehouse / Store Admins */}
-      {user?.role !== 'CLIENT_ADMIN' && (
+      {user?.role !== 'PROJECT_ADMIN' && (
         <div className="p-1 bg-slate-100 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row gap-1.5" aria-label="Stock direction">
           {(['STOCK_OUT', 'STOCK_IN'] as const).map((value) => {
             const isSelected = direction === value;
@@ -577,7 +529,7 @@ export function CreateRequestForm() {
             <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto font-bold text-sm">!</div>
             <h4 className="text-sm font-semibold text-slate-800">No stock location assigned</h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Your account has no active warehouse or client facility assignment. Contact Super Admin to configure your location permissions.
+              Your account has no active warehouse or project facility assignment. Contact Super Admin to configure your location permissions.
             </p>
           </CardContent>
         </Card>
@@ -604,26 +556,26 @@ export function CreateRequestForm() {
                 helperText={
                   direction === 'STOCK_IN'
                     ? 'Destination facility where new stock will be received.'
-                    : isSourceClient
-                      ? 'Client facility where stock is being consumed or written off.'
+                    : isSourceProject
+                      ? 'Project facility where stock is being consumed or written off.'
                       : 'Operating warehouse originating this stock dispatch.'
                 }
               >
                 {availableLocations.map((location) => (
                   <option key={location.id} value={location.id}>
-                    {location.name} ({location.locationType === 'WAREHOUSE' ? 'Warehouse' : 'Client Store'})
+                    {location.name} ({location.locationType === 'WAREHOUSE' ? 'Warehouse' : 'Project Store'})
                   </option>
                 ))}
               </Select>
 
               {isDispatch && (
                 <Select
-                  label="Which Client or Clinic is receiving this?"
+                  label="Which Project or Clinic is receiving this?"
                   value={destinationLocationId}
                   onChange={(e) => setDestinationLocationId(e.target.value)}
                   required
                   disabled={Boolean(editingDraftId)}
-                  helperText="Choose the client hospital or facility receiving these items from the warehouse."
+                  helperText="Choose the project hospital or facility receiving these items from the warehouse."
                 >
                   {dispatchTargets.map((location) => (
                     <option key={location.id} value={location.id}>
@@ -633,13 +585,13 @@ export function CreateRequestForm() {
                 </Select>
               )}
 
-              {direction === 'STOCK_OUT' && isSourceClient && (
+              {direction === 'STOCK_OUT' && isSourceProject && (
                 <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
                   <span className="text-base leading-none">🏢</span>
                   <div className="space-y-0.5">
-                    <span className="font-semibold block text-amber-950">Internal Client Facility Stock-Out</span>
+                    <span className="font-semibold block text-amber-950">Internal Project Facility Stock-Out</span>
                     <span className="text-amber-800 leading-relaxed block">
-                      Stock will be deducted directly from this client facility for local consumption, department issue, or write-off. Direct client-to-client transfer is strictly prohibited.
+                      Stock will be deducted directly from this project facility for local consumption, department issue, or damaged stock-out. Direct project-to-project transfer is strictly prohibited.
                     </span>
                   </div>
                 </div>
@@ -706,7 +658,7 @@ export function CreateRequestForm() {
               <CardDescription>
                 {viewMode === 'GRID'
                   ? 'High-speed spreadsheet grid with live stock availability and instant keyboard navigation.'
-                  : 'Select products, base units, and batch or expiration lot data.'}
+                  : 'Select products, units, and quantities. Flag damaged items when reporting them as stock-out.'}
               </CardDescription>
             </CardHeader>
 
@@ -770,10 +722,9 @@ export function CreateRequestForm() {
                           <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">#</th>
                           <th className="py-2.5 px-3 min-w-[240px] whitespace-nowrap">Product &amp; Brand</th>
                           <th className="py-2.5 px-3 w-32 text-center whitespace-nowrap">Stock Available</th>
+                          <th className="py-2.5 px-3 w-32 whitespace-nowrap">Condition</th>
                           <th className="py-2.5 px-3 w-28 whitespace-nowrap">Quantity</th>
                           <th className="py-2.5 px-3 w-32 whitespace-nowrap">Packaging Unit</th>
-                          <th className="py-2.5 px-3 w-44 whitespace-nowrap">Batch / Lot</th>
-                          <th className="py-2.5 px-3 w-36 whitespace-nowrap">Expiry Date</th>
                           <th className="py-2.5 px-2 w-10 text-center whitespace-nowrap"></th>
                         </tr>
                       </thead>
@@ -782,21 +733,10 @@ export function CreateRequestForm() {
                           const product = selectedProductForLine(line);
                           const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
                           const precision = product?.quantityPrecision ?? 0;
-                          const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
-                          const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
                           const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
                           const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
-                          const availableLots = product
-                            ? (balancesByProduct[product.id] || []).filter(
-                                (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-                              )
-                            : [];
-                          const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
-                          const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
                           const availableBase = product && hasCurrentAvailability
-                            ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
-                              ? Number(selectedLot.availableQty)
-                              : availableByProduct[product.id]
+                            ? availableByProduct[product.id]
                             : undefined;
                           const availableInSelectedUnit = availableBase === undefined
                             ? undefined
@@ -841,6 +781,14 @@ export function CreateRequestForm() {
                                   <span className="text-slate-300 font-mono text-[11px]">—</span>
                                 )}
                               </td>
+                              <td className="py-2 px-3 w-32 whitespace-nowrap">
+                                {direction === 'STOCK_OUT' ? (
+                                  <select value={line.condition} onChange={(e) => updateLine(index, { condition: e.target.value as RequestLineDraft['condition'] })} className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs">
+                                    <option value="USABLE">Usable</option>
+                                    <option value="DAMAGED">Damaged</option>
+                                  </select>
+                                ) : <span className="text-xs text-slate-400">Usable</span>}
+                              </td>
                               <td className="py-2 px-3 w-28 whitespace-nowrap">
                                 <input
                                   type="number"
@@ -878,49 +826,6 @@ export function CreateRequestForm() {
                                   ))}
                                 </select>
                               </td>
-                              <td className="py-2 px-3 w-44 whitespace-nowrap">
-                                {tracksBatch && direction === 'STOCK_OUT' && product ? (
-                                  availableLots.length > 0 ? (
-                                    <select
-                                      value={effectiveBatchNumber}
-                                      onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                                      required={availableLots.length > 1}
-                                      className="w-full min-w-[130px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
-                                    >
-                                      {availableLots.length > 1 && <option value="">Choose lot...</option>}
-                                      {availableLots.map((lot) => (
-                                        <option key={lot.batchNumber} value={lot.batchNumber || ''}>
-                                          {lot.batchNumber} ({Number(lot.availableQty)} {product.baseUnit})
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <span className="text-[11px] text-amber-600 italic">No lots in stock</span>
-                                  )
-                                ) : tracksBatch ? (
-                                  <input
-                                    type="text"
-                                    value={line.batchNumber}
-                                    onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                                    placeholder="Batch / Lot #"
-                                    className="w-full min-w-[120px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
-                                  />
-                                ) : (
-                                  <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
-                                )}
-                              </td>
-                              <td className="py-2 px-3 w-36 whitespace-nowrap">
-                                {tracksExpiry || tracksBatch || direction === 'STOCK_IN' ? (
-                                  <input
-                                    type="date"
-                                    value={line.expiryDate}
-                                    onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
-                                    className="w-full min-w-[125px] px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
-                                  />
-                                ) : (
-                                  <span className="text-slate-300 font-mono text-[11px] px-2">—</span>
-                                )}
-                              </td>
                               <td className="py-2 px-2 text-center whitespace-nowrap">
                                 {lines.length > 1 && (
                                   <button
@@ -955,21 +860,10 @@ export function CreateRequestForm() {
                     const product = selectedProductForLine(line);
                     const activeUnits = product?.units?.filter((unit) => unit.status !== 'SUPERSEDED') || [];
                     const precision = product?.quantityPrecision ?? 0;
-                    const tracksBatch = product?.trackingMode === 'BATCH_ONLY' || product?.trackingMode === 'BOTH';
-                    const tracksExpiry = product?.trackingMode === 'EXPIRY_ONLY' || product?.trackingMode === 'BOTH';
                     const selectedUnit = activeUnits.find((unit) => unit.id === line.unitId);
                     const hasCurrentAvailability = !isLoadingStock && stockLoadedForLocation === locationId;
-                    const availableLots = product
-                      ? (balancesByProduct[product.id] || []).filter(
-                          (balance) => balance.batchNumber && Number(balance.availableQty) > 0,
-                        )
-                      : [];
-                    const effectiveBatchNumber = line.batchNumber || (availableLots.length === 1 ? availableLots[0].batchNumber : '');
-                    const selectedLot = availableLots.find((balance) => balance.batchNumber === effectiveBatchNumber);
                     const availableBase = product && hasCurrentAvailability
-                      ? direction === 'STOCK_OUT' && product.trackingMode === 'BATCH_ONLY' && selectedLot
-                        ? Number(selectedLot.availableQty)
-                        : availableByProduct[product.id]
+                      ? availableByProduct[product.id]
                       : undefined;
                     const availableInSelectedUnit = availableBase === undefined
                       ? undefined
@@ -977,7 +871,7 @@ export function CreateRequestForm() {
                     const quantityHelper = [
                       precision > 0 ? `Up to ${precision} decimal places` : '',
                       direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
-                        ? `${selectedLot ? 'Available in this lot' : 'Available here'}: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
+                        ? `Available here: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
                         : '',
                     ].filter(Boolean).join(' · ') || undefined;
 
@@ -994,11 +888,6 @@ export function CreateRequestForm() {
                             <span className="text-xs font-semibold text-slate-800">
                               {product ? product.name : `Line Item #${index + 1}`}
                             </span>
-                            {product?.trackingMode && product.trackingMode !== 'NONE' && (
-                              <Badge variant="neutral" size="sm">
-                                {product.trackingMode.replaceAll('_', ' ')}
-                              </Badge>
-                            )}
                             {product?.minOrderQuantity && Number(product.minOrderQuantity) > 1 && (
                               <Badge variant="purple" size="sm">
                                 MOQ: {product.minOrderQuantity} {product.baseUnit}
@@ -1025,7 +914,7 @@ export function CreateRequestForm() {
                           <Select
                             label="Category"
                             value={line.categoryId}
-                            onChange={(e) => updateLine(index, { categoryId: e.target.value, subcategoryId: '', productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                            onChange={(e) => updateLine(index, { categoryId: e.target.value, subcategoryId: '', productId: '', unitId: '', quantity: '' })}
                           >
                             <option value="">All categories</option>
                             {topLevelCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
@@ -1033,7 +922,7 @@ export function CreateRequestForm() {
                           <Select
                             label="Subcategory / brand"
                             value={line.subcategoryId}
-                            onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '', batchNumber: '', expiryDate: '' })}
+                            onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '' })}
                             disabled={!line.categoryId || categoriesForLine(line.categoryId).length === 0}
                           >
                             <option value="">All subcategories</option>
@@ -1098,56 +987,13 @@ export function CreateRequestForm() {
                             ))}
                           </Select>
                         </div>
-
-                        {/* Batch / Expiry Tracking Row */}
-                        {(tracksBatch || tracksExpiry || Boolean(line.expiryDate) || Boolean(line.batchNumber)) && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
-                            {tracksBatch && direction === 'STOCK_OUT' && product && (
-                              availableLots.length > 0 ? (
-                                <Select
-                                  label="Batch / Lot to dispatch"
-                                  value={effectiveBatchNumber}
-                                  onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                                  required={availableLots.length > 1}
-                                >
-                                  {availableLots.length > 1 && <option value="">Choose a lot...</option>}
-                                  {availableLots.map((balance) => (
-                                    <option key={balance.id} value={balance.batchNumber}>
-                                      {balance.batchNumber} · {Number(balance.availableQty).toLocaleString()} {balance.unit || product.baseUnit} available
-                                    </option>
-                                  ))}
-                                </Select>
-                              ) : (
-                                <p className="text-xs text-slate-500">No lot number is recorded for the available stock.</p>
-                              )
-                            )}
-
-                            {tracksBatch && direction !== 'STOCK_OUT' && (
-                              <Input
-                                label="Batch / Lot Number"
-                                value={line.batchNumber}
-                                onChange={(e) => updateLine(index, { batchNumber: e.target.value })}
-                                placeholder="e.g. LOT-2026-X"
-                                helperText="Lot trace identifier for quarantine and recall"
-                              />
-                            )}
-
-                            {(tracksExpiry || Boolean(line.expiryDate)) && (
-                              <div className="space-y-1.5 w-full">
-                                <label className="text-xs font-medium text-slate-700 block">
-                                  Expiration Date
-                                </label>
-                                <input
-                                  type="date"
-                                  value={line.expiryDate}
-                                  onChange={(e) => updateLine(index, { expiryDate: e.target.value })}
-                                  className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-                                />
-                                <p className="text-[11px] text-slate-500">Scheduled expiry shelf date</p>
-                              </div>
-                            )}
-                          </div>
+                        {direction === 'STOCK_OUT' && (
+                          <Select label="Condition" value={line.condition} onChange={(e) => updateLine(index, { condition: e.target.value as RequestLineDraft['condition'] })}>
+                            <option value="USABLE">Usable</option>
+                            <option value="DAMAGED">Damaged — remove from usable stock</option>
+                          </Select>
                         )}
+
                       </div>
                     );
                   })}
@@ -1174,10 +1020,12 @@ export function CreateRequestForm() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">3</span>
-                <CardTitle>Step 3: Add a Note (Optional)</CardTitle>
+              <CardTitle>Step 3: Add a Note {direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED') ? '(Required for damaged stock)' : '(Optional)'}</CardTitle>
               </div>
               <CardDescription>
-                Add any helpful note, invoice number, or order details for your administrator.
+                {direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED')
+                  ? 'Explain why the selected items are damaged. Approval deducts them from usable stock and records the reason.'
+                  : 'Add any helpful note, invoice number, or order details for your administrator.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1199,14 +1047,14 @@ export function CreateRequestForm() {
             </div>
             <div className="text-xs text-slate-700 space-y-1">
               <span className="font-semibold text-slate-900 block">
-                {direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
+                {direction === 'STOCK_IN' && user?.role === 'PROJECT_ADMIN'
                   ? 'Record stock that has arrived'
                   : 'What happens when you send this for approval?'}
               </span>
               <p className="leading-relaxed text-slate-600">
                 {direction === 'STOCK_OUT'
                   ? 'Available stock is reserved while Super Admin reviews it. After approval, the items are dispatched.'
-                  : user?.role === 'CLIENT_ADMIN'
+                  : user?.role === 'PROJECT_ADMIN'
                     ? 'This records stock already received; it does not request a warehouse delivery. Super Admin approval is required before the quantity appears in your stock.'
                     : 'This records items arriving at your warehouse. Super Admin approval is required before they are added to available stock.'}
               </p>
@@ -1229,7 +1077,7 @@ export function CreateRequestForm() {
             >
               {editingDraftId
                 ? 'Save Changes & Send for Approval'
-                : direction === 'STOCK_IN' && user?.role === 'CLIENT_ADMIN'
+                : direction === 'STOCK_IN' && user?.role === 'PROJECT_ADMIN'
                   ? 'Submit Received Stock for Approval →'
                   : 'Send for Approval →'}
             </Button>

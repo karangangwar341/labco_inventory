@@ -11,7 +11,7 @@ datasource db {
 enum UserRole {
   SUPER_ADMIN
   STORE_ADMIN
-  CLIENT_ADMIN
+  PROJECT_ADMIN
 }
 
 enum UserStatus {
@@ -34,7 +34,7 @@ enum LoginOutcome {
 
 enum CatalogScope {
   COMPANY
-  CLIENT
+  PROJECT
 }
 
 enum ProductStatus {
@@ -55,13 +55,6 @@ enum ProductVersionStatus {
   REJECTED
 }
 
-enum TrackingMode {
-  NONE
-  BATCH_ONLY
-  EXPIRY_ONLY
-  BOTH
-}
-
 enum UnitStatus {
   ACTIVE
   SUPERSEDED
@@ -69,19 +62,12 @@ enum UnitStatus {
 
 enum LocationType {
   WAREHOUSE
-  CLIENT
+  PROJECT
 }
 
 enum StockCondition {
   USABLE
   DAMAGED
-  EXPIRED
-}
-
-enum BatchStatus {
-  ACTIVE
-  EXPIRED
-  DEPLETED
 }
 
 enum TransactionType {
@@ -131,7 +117,7 @@ enum ApprovalDecision {
 }
 
 enum ShipmentType {
-  DISPATCH_TO_CLIENT
+  DISPATCH_TO_PROJECT
   WAREHOUSE_TRANSFER
 }
 
@@ -140,6 +126,11 @@ enum ShipmentStatus {
   AWAITING_RECEIPT_APPROVAL
   COMPLETED
   DISCREPANCY_HOLD
+}
+
+enum ShipmentDiscrepancyResolution {
+  MISSING
+  CALCULATION_MISTAKE
 }
 
 enum ProductionMode {
@@ -225,8 +216,6 @@ enum FileScanStatus {
 enum NotificationEventType {
   LOW_STOCK_DOWNWARD_CROSSING
   LOW_STOCK_RECOVERED
-  EXPIRY_WARNING
-  BATCH_EXPIRED
   REQUEST_STATUS_CHANGED
   SHIPMENT_DISPATCHED
   SHIPMENT_RECEIVED
@@ -249,48 +238,48 @@ enum DrillStatus {
   FAILED
 }
 
-model Client {
-  id                   String                      @id @default(uuid())
-  name                 String                      @unique
-  status               OrganizationStatus          @default(ACTIVE)
-  createdAt            DateTime                    @default(now()) @map("created_at")
-  updatedAt            DateTime                    @updatedAt @map("updated_at")
+model Project {
+  id        String             @id @default(uuid())
+  name      String             @unique
+  status    OrganizationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
 
-  users                User[]
-  warehouseAssignments ClientWarehouseAssignment[]
-  categories           Category[]
-  products             Product[]
-  stockLocation        StockLocation?
-  stockRequests        StockRequest[]
-  productionRuns       ProductionRun[]
-  departments          Department[]
-  departmentIssues     DepartmentIssue[]
+  users                  User[]
+  warehouseAssignments   ProjectWarehouseAssignment[]
+  categories             Category[]
+  products               Product[]
+  stockLocation          StockLocation?
+  stockRequests          StockRequest[]
+  productionRuns         ProductionRun[]
+  departments            Department[]
+  departmentIssues       DepartmentIssue[]
   departmentIssueBatches DepartmentIssueBatch[]
-  departmentReturns    DepartmentReturn[]
-  staffMembers         ClientStaffMember[]
-  staffWorkLogs        ClientStaffWorkLog[]
+  departmentReturns      DepartmentReturn[]
+  staffMembers           ProjectStaffMember[]
+  staffWorkLogs          ProjectStaffWorkLog[]
 
-  @@map("clients")
+  @@map("projects")
 }
 
 model Warehouse {
-  id                  String                      @id @default(uuid())
-  name                String                      @unique
-  locationDescription String?                     @map("location_description")
-  status              OrganizationStatus          @default(ACTIVE)
-  createdAt           DateTime                    @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  id                  String             @id @default(uuid())
+  name                String             @unique
+  locationDescription String?            @map("location_description")
+  status              OrganizationStatus @default(ACTIVE)
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
 
-  users               User[]
-  clientAssignments   ClientWarehouseAssignment[]
-  stockLocation       StockLocation?
+  users              User[]
+  projectAssignments ProjectWarehouseAssignment[]
+  stockLocation      StockLocation?
 
   @@map("warehouses")
 }
 
-model ClientWarehouseAssignment {
+model ProjectWarehouseAssignment {
   id           String    @id @default(uuid())
-  clientId     String    @map("client_id")
+  projectId    String    @map("project_id")
   warehouseId  String    @map("warehouse_id")
   isActive     Boolean   @default(true) @map("is_active")
   activeFrom   DateTime  @default(now()) @map("active_from")
@@ -299,63 +288,61 @@ model ClientWarehouseAssignment {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  changedBy    User?     @relation(name: "AssignmentChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  changedBy User?     @relation(name: "AssignmentChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([warehouseId])
   @@index([isActive])
-  @@map("client_warehouse_assignments")
+  @@map("project_warehouse_assignments")
 }
 
 model Category {
-  id          String       @id @default(uuid())
-  parentId    String?      @map("parent_id")
-  name        String
-  ownerScope  CatalogScope @default(COMPANY) @map("owner_scope")
-  clientId    String?      @map("client_id")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id         String       @id @default(uuid())
+  parentId   String?      @map("parent_id")
+  name       String
+  ownerScope CatalogScope @default(COMPANY) @map("owner_scope")
+  projectId  String?      @map("project_id")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
 
-  parent      Category?    @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Category[]   @relation("CategoryHierarchy")
-  products    Product[]
-  client      Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+  project  Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([name, ownerScope, clientId])
+  @@unique([name, ownerScope, projectId])
   @@map("categories")
 }
 
 model Product {
-  id                String             @id @default(uuid())
-  ownerScope        CatalogScope       @map("owner_scope")
-  clientId          String?            @map("client_id")
-  categoryId        String             @map("category_id")
-  kind              ProductKind        @default(RAW_MATERIAL)
+  id                String        @id @default(uuid())
+  ownerScope        CatalogScope  @map("owner_scope")
+  projectId         String?       @map("project_id")
+  categoryId        String        @map("category_id")
+  kind              ProductKind   @default(RAW_MATERIAL)
   name              String
   brand             String?
   description       String?
-  imageRef          String?            @map("image_ref")
-  status            ProductStatus      @default(PENDING_APPROVAL)
-  quantityPrecision Int                @default(0) @map("quantity_precision") // 0 to 2
-  allowFractional   Boolean            @default(false) @map("allow_fractional")
-  trackingMode      TrackingMode       @default(NONE) @map("tracking_mode")
-  minQuantity       Decimal            @default(0) @map("min_quantity") @db.Decimal(18, 2)
-  minOrderQuantity  Decimal            @default(1) @map("min_order_quantity") @db.Decimal(18, 2)
-  duplicateKey      String             @unique @map("duplicate_key")
-  rejectionReason   String?            @map("rejection_reason")
-  approvedById      String?            @map("approved_by_id")
-  approvedAt        DateTime?          @map("approved_at")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  imageRef          String?       @map("image_ref")
+  status            ProductStatus @default(PENDING_APPROVAL)
+  quantityPrecision Int           @default(0) @map("quantity_precision") // 0 to 2
+  allowFractional   Boolean       @default(false) @map("allow_fractional")
+  minQuantity       Decimal       @default(0) @map("min_quantity") @db.Decimal(18, 2)
+  minOrderQuantity  Decimal       @default(1) @map("min_order_quantity") @db.Decimal(18, 2)
+  duplicateKey      String        @unique @map("duplicate_key")
+  rejectionReason   String?       @map("rejection_reason")
+  approvedById      String?       @map("approved_by_id")
+  approvedAt        DateTime?     @map("approved_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  client            Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   category          Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   approvedBy        User?              @relation("ProductApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   attributes        ProductAttribute[]
   units             ProductUnit[]
-  batches           StockBatch[]
   balances          InventoryBalance[]
   ledgerEntries     LedgerEntry[]
   requestLines      StockRequestLine[]
@@ -369,7 +356,7 @@ model Product {
   versions          ProductVersion[]
 
   @@index([ownerScope])
-  @@index([clientId])
+  @@index([projectId])
   @@index([categoryId])
   @@index([status])
   @@map("products")
@@ -407,7 +394,7 @@ model ProductAttribute {
   sortOrder     Int      @default(0) @map("sort_order")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@map("product_attributes")
@@ -425,9 +412,9 @@ model ProductUnit {
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
 
-  product          Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-  requestLines     StockRequestLine[]
-  productionInputs ProductionInput[]
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  requestLines      StockRequestLine[]
+  productionInputs  ProductionInput[]
   productionOutputs ProductionOutput[]
   departmentIssues  DepartmentIssue[]
   departmentReturns DepartmentReturn[]
@@ -438,14 +425,14 @@ model ProductUnit {
 }
 
 model StockLocation {
-  id           String             @id @default(uuid())
-  locationType LocationType       @map("location_type")
-  warehouseId  String?            @unique @map("warehouse_id")
-  clientId     String?            @unique @map("client_id")
-  createdAt    DateTime           @default(now()) @map("created_at")
+  id           String       @id @default(uuid())
+  locationType LocationType @map("location_type")
+  warehouseId  String?      @unique @map("warehouse_id")
+  projectId    String?      @unique @map("project_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   warehouse            Warehouse?         @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  client               Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project              Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   balances             InventoryBalance[]
   ledgerEntries        LedgerEntry[]
   sourceRequests       StockRequest[]     @relation("SourceRequestLocation")
@@ -457,63 +444,37 @@ model StockLocation {
   @@map("stock_locations")
 }
 
-model StockBatch {
-  id            String             @id @default(uuid())
-  productId     String             @map("product_id")
-  batchNumber   String?            @map("batch_number")
-  expiryDate    DateTime?          @map("expiry_date")
-  status        BatchStatus        @default(ACTIVE)
-  createdAt     DateTime           @default(now()) @map("created_at")
-
-  product       Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
-  balances      InventoryBalance[]
-  ledgerEntries LedgerEntry[]
-  requestLines  StockRequestLine[]
-  reservations  Reservation[]
-  shipmentLines ShipmentLine[]
-  productionInputs ProductionInput[]
-  departmentIssues DepartmentIssue[]
-  departmentReturns DepartmentReturn[]
-
-  @@unique([productId, batchNumber])
-  @@index([expiryDate])
-  @@map("stock_batches")
-}
-
 model InventoryBalance {
-  id          String        @id @default(uuid())
-  locationId  String        @map("location_id")
-  productId   String        @map("product_id")
-  batchId     String?       @map("batch_id")
-  usableQty   Decimal       @default(0) @map("usable_qty") @db.Decimal(18, 4)
-  reservedQty Decimal       @default(0) @map("reserved_qty") @db.Decimal(18, 4)
-  damagedQty  Decimal       @default(0) @map("damaged_qty") @db.Decimal(18, 4)
-  expiredQty  Decimal       @default(0) @map("expired_qty") @db.Decimal(18, 4)
-  version     Int           @default(0)
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  locationId  String   @map("location_id")
+  productId   String   @map("product_id")
+  usableQty   Decimal  @default(0) @map("usable_qty") @db.Decimal(18, 4)
+  reservedQty Decimal  @default(0) @map("reserved_qty") @db.Decimal(18, 4)
+  version     Int      @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  location    StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  batch       StockBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  location StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([locationId, productId, batchId])
+  @@unique([locationId, productId])
   @@index([locationId])
   @@index([productId])
   @@map("inventory_balances")
 }
 
 model LedgerTransaction {
-  id             String          @id @default(uuid())
+  id              String          @id @default(uuid())
   transactionType TransactionType @map("transaction_type")
-  sourceRefType  String?         @map("source_ref_type")
-  sourceRefId    String?         @map("source_ref_id")
-  idempotencyKey String?         @unique @map("idempotency_key")
-  reversalOfTxId String?         @map("reversal_of_tx_id")
-  postedById     String          @map("posted_by_id")
-  postedAt       DateTime        @default(now()) @map("posted_at")
+  sourceRefType   String?         @map("source_ref_type")
+  sourceRefId     String?         @map("source_ref_id")
+  reason          String?
+  idempotencyKey  String?         @unique @map("idempotency_key")
+  reversalOfTxId  String?         @map("reversal_of_tx_id")
+  postedById      String          @map("posted_by_id")
+  postedAt        DateTime        @default(now()) @map("posted_at")
 
-  postedBy       User            @relation(fields: [postedById], references: [id], onDelete: Restrict)
-  entries        LedgerEntry[]
+  postedBy User          @relation(fields: [postedById], references: [id], onDelete: Restrict)
+  entries  LedgerEntry[]
 
   @@index([postedAt])
   @@index([transactionType])
@@ -521,23 +482,23 @@ model LedgerTransaction {
 }
 
 model LedgerEntry {
-  id                       String         @id @default(uuid())
-  transactionId            String         @map("transaction_id")
-  locationId               String         @map("location_id")
-  productId                String         @map("product_id")
-  batchId                  String?        @map("batch_id")
-  condition                StockCondition @default(USABLE)
-  qtyDeltaBase             Decimal        @map("qty_delta_base") @db.Decimal(18, 4)
-  originalQty              Decimal        @map("original_qty") @db.Decimal(18, 4)
-  unitNameSnapshot         String         @map("unit_name_snapshot")
-  conversionToBaseSnapshot Decimal        @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
-  reversalOfEntryId        String?        @map("reversal_of_entry_id")
-  createdAt                DateTime       @default(now()) @map("created_at")
+  id                       String   @id @default(uuid())
+  transactionId            String   @map("transaction_id")
+  locationId               String   @map("location_id")
+  productId                String   @map("product_id")
+  // Free-form historical snapshot: preserves legacy values such as EXPIRED without
+  // exposing them as an active stock condition or allowing them in new requests.
+  condition                String   @default("USABLE")
+  qtyDeltaBase             Decimal  @map("qty_delta_base") @db.Decimal(18, 4)
+  originalQty              Decimal  @map("original_qty") @db.Decimal(18, 4)
+  unitNameSnapshot         String   @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal  @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  reversalOfEntryId        String?  @map("reversal_of_entry_id")
+  createdAt                DateTime @default(now()) @map("created_at")
 
-  transaction              LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  location                 StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  product                  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch                    StockBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  transaction LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  location    StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([locationId])
   @@index([productId])
@@ -546,49 +507,49 @@ model LedgerEntry {
 }
 
 model User {
-  id                  String                      @id @default(uuid())
-  username            String                      @unique
-  passwordHash        String                      @map("password_hash")
+  id                  String     @id @default(uuid())
+  username            String     @unique
+  passwordHash        String     @map("password_hash")
   role                UserRole
-  status              UserStatus                  @default(ACTIVE)
-  clientId            String?                     @map("client_id")
-  warehouseId         String?                     @map("warehouse_id")
-  failedLoginAttempts Int                         @default(0) @map("failed_login_attempts")
-  lockoutUntil        DateTime?                   @map("lockout_until")
-  lockoutCount        Int                         @default(0) @map("lockout_count")
-  disabledAt          DateTime?                   @map("disabled_at")
-  createdAt           DateTime                    @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  status              UserStatus @default(ACTIVE)
+  projectId           String?    @map("project_id")
+  warehouseId         String?    @map("warehouse_id")
+  failedLoginAttempts Int        @default(0) @map("failed_login_attempts")
+  lockoutUntil        DateTime?  @map("lockout_until")
+  lockoutCount        Int        @default(0) @map("lockout_count")
+  disabledAt          DateTime?  @map("disabled_at")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
 
-  client              Client?                     @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  warehouse           Warehouse?                  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  sessions            Session[]
-  loginEvents         LoginEvent[]
-  assignmentChanges   ClientWarehouseAssignment[] @relation("AssignmentChangedBy")
-  approvedProducts    Product[]                   @relation("ProductApprovedBy")
-  submittedProductVersions ProductVersion[]       @relation("ProductVersionSubmittedBy")
-  reviewedProductVersions  ProductVersion[]       @relation("ProductVersionReviewedBy")
-  postedTransactions  LedgerTransaction[]
-  requests            StockRequest[]              @relation("RequestRequester")
-  approvals           Approval[]                  @relation("ApprovalApprover")
-  updatedSettings     SystemSetting[]
-  submittedProductionRuns ProductionRun[]         @relation("ProductionSubmittedBy")
-  approvedProductionRuns  ProductionRun[]         @relation("ProductionApprovedBy")
-  createdDepartments      Department[]            @relation("DepartmentCreatedBy")
-  approvedDepartments     Department[]            @relation("DepartmentApprovedBy")
-  issuedDepartmentIssues  DepartmentIssue[]       @relation("DepartmentIssueIssuedBy")
-  approvedDepartmentIssues DepartmentIssue[]      @relation("DepartmentIssueApprovedBy")
-  createdDepartmentIssueBatches DepartmentIssueBatch[] @relation("DepartmentIssueBatchCreatedBy")
-  approvedDepartmentIssueBatches DepartmentIssueBatch[] @relation("DepartmentIssueBatchApprovedBy")
-  returnedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnReturnedBy")
-  approvedDepartmentReturns DepartmentReturn[]    @relation("DepartmentReturnApprovedBy")
-  uploadedAttachments     Attachment[]            @relation("UploadedAttachments")
-  importBatches           ImportBatch[]           @relation("UserImportBatches")
-  approvedImportBatches   ImportBatch[]           @relation("ApprovedImportBatches")
-  notifications           Notification[]
-  auditEvents             AuditEvent[]                @relation("UserAuditEvents")
+  project                        Project?                     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  warehouse                      Warehouse?                   @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  sessions                       Session[]
+  loginEvents                    LoginEvent[]
+  assignmentChanges              ProjectWarehouseAssignment[] @relation("AssignmentChangedBy")
+  approvedProducts               Product[]                    @relation("ProductApprovedBy")
+  submittedProductVersions       ProductVersion[]             @relation("ProductVersionSubmittedBy")
+  reviewedProductVersions        ProductVersion[]             @relation("ProductVersionReviewedBy")
+  postedTransactions             LedgerTransaction[]
+  requests                       StockRequest[]               @relation("RequestRequester")
+  approvals                      Approval[]                   @relation("ApprovalApprover")
+  updatedSettings                SystemSetting[]
+  submittedProductionRuns        ProductionRun[]              @relation("ProductionSubmittedBy")
+  approvedProductionRuns         ProductionRun[]              @relation("ProductionApprovedBy")
+  createdDepartments             Department[]                 @relation("DepartmentCreatedBy")
+  approvedDepartments            Department[]                 @relation("DepartmentApprovedBy")
+  issuedDepartmentIssues         DepartmentIssue[]            @relation("DepartmentIssueIssuedBy")
+  approvedDepartmentIssues       DepartmentIssue[]            @relation("DepartmentIssueApprovedBy")
+  createdDepartmentIssueBatches  DepartmentIssueBatch[]       @relation("DepartmentIssueBatchCreatedBy")
+  approvedDepartmentIssueBatches DepartmentIssueBatch[]       @relation("DepartmentIssueBatchApprovedBy")
+  returnedDepartmentReturns      DepartmentReturn[]           @relation("DepartmentReturnReturnedBy")
+  approvedDepartmentReturns      DepartmentReturn[]           @relation("DepartmentReturnApprovedBy")
+  uploadedAttachments            Attachment[]                 @relation("UploadedAttachments")
+  importBatches                  ImportBatch[]                @relation("UserImportBatches")
+  approvedImportBatches          ImportBatch[]                @relation("ApprovedImportBatches")
+  notifications                  Notification[]
+  auditEvents                    AuditEvent[]                 @relation("UserAuditEvents")
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([warehouseId])
   @@map("users")
 }
@@ -606,7 +567,7 @@ model Session {
   expiresAt      DateTime  @map("expires_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([deviceId])
@@ -622,7 +583,7 @@ model LoginEvent {
   userAgent         String?      @map("user_agent")
   occurredAt        DateTime     @default(now()) @map("occurred_at")
 
-  user              User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([usernameAttempted])
   @@index([occurredAt])
@@ -630,32 +591,32 @@ model LoginEvent {
 }
 
 model StockRequest {
-  id                    String            @id @default(uuid())
-  requestType           RequestType       @map("request_type")
-  sourceType            String?           @map("source_type")
-  status                RequestStatus     @default(DRAFT)
-  priority              RequestPriority   @default(NORMAL)
-  requesterId           String            @map("requester_id")
-  sourceLocationId      String?           @map("source_location_id")
-  destinationLocationId String?           @map("destination_location_id")
-  clientId              String?           @map("client_id")
+  id                    String          @id @default(uuid())
+  requestType           RequestType     @map("request_type")
+  sourceType            String?         @map("source_type")
+  status                RequestStatus   @default(DRAFT)
+  priority              RequestPriority @default(NORMAL)
+  requesterId           String          @map("requester_id")
+  sourceLocationId      String?         @map("source_location_id")
+  destinationLocationId String?         @map("destination_location_id")
+  projectId             String?         @map("project_id")
   reason                String?
-  idempotencyKey        String?           @unique @map("idempotency_key")
-  submittedAt           DateTime?         @map("submitted_at")
-  createdAt             DateTime          @default(now()) @map("created_at")
-  updatedAt             DateTime          @updatedAt @map("updated_at")
+  idempotencyKey        String?         @unique @map("idempotency_key")
+  submittedAt           DateTime?       @map("submitted_at")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
 
-  requester             User              @relation("RequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
-  sourceLocation        StockLocation?    @relation("SourceRequestLocation", fields: [sourceLocationId], references: [id], onDelete: SetNull)
-  destinationLocation   StockLocation?    @relation("DestinationRequestLocation", fields: [destinationLocationId], references: [id], onDelete: SetNull)
-  client                Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  lines                 StockRequestLine[]
-  approvals             Approval[]
-  shipment              Shipment?
+  requester           User               @relation("RequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  sourceLocation      StockLocation?     @relation("SourceRequestLocation", fields: [sourceLocationId], references: [id], onDelete: SetNull)
+  destinationLocation StockLocation?     @relation("DestinationRequestLocation", fields: [destinationLocationId], references: [id], onDelete: SetNull)
+  project             Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lines               StockRequestLine[]
+  approvals           Approval[]
+  shipment            Shipment?
 
   @@index([status])
   @@index([requesterId])
-  @@index([clientId])
+  @@index([projectId])
   @@map("stock_requests")
 }
 
@@ -663,9 +624,6 @@ model StockRequestLine {
   id                       String         @id @default(uuid())
   requestId                String         @map("request_id")
   productId                String         @map("product_id")
-  batchId                  String?        @map("batch_id")
-  batchNumber              String?        @map("batch_number")
-  expiryDate               DateTime?      @map("expiry_date")
   quantity                 Decimal        @db.Decimal(18, 4)
   unitId                   String         @map("unit_id")
   unitNameSnapshot         String         @map("unit_name_snapshot")
@@ -676,11 +634,10 @@ model StockRequestLine {
   countedQuantity          Decimal?       @map("counted_quantity") @db.Decimal(18, 4)
   varianceQuantity         Decimal?       @map("variance_quantity") @db.Decimal(18, 4)
 
-  request                  StockRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  product                  Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch                    StockBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  unit                     ProductUnit    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  reservations             Reservation[]
+  request      StockRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit         ProductUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  reservations Reservation[]
 
   @@index([requestId])
   @@index([productId])
@@ -688,22 +645,20 @@ model StockRequestLine {
 }
 
 model Reservation {
-  id            String            @id @default(uuid())
-  requestLineId String?           @map("request_line_id")
-  departmentIssueId String?        @map("department_issue_id")
-  locationId    String            @map("location_id")
-  productId     String            @map("product_id")
-  batchId       String?           @map("batch_id")
-  quantityBase  Decimal           @map("quantity_base") @db.Decimal(18, 4)
-  status        ReservationStatus @default(ACTIVE)
-  createdAt     DateTime          @default(now()) @map("created_at")
-  releasedAt    DateTime?         @map("released_at")
+  id                String            @id @default(uuid())
+  requestLineId     String?           @map("request_line_id")
+  departmentIssueId String?           @map("department_issue_id")
+  locationId        String            @map("location_id")
+  productId         String            @map("product_id")
+  quantityBase      Decimal           @map("quantity_base") @db.Decimal(18, 4)
+  status            ReservationStatus @default(ACTIVE)
+  createdAt         DateTime          @default(now()) @map("created_at")
+  releasedAt        DateTime?         @map("released_at")
 
-  requestLine   StockRequestLine? @relation(fields: [requestLineId], references: [id], onDelete: Cascade)
-  departmentIssue DepartmentIssue? @relation(fields: [departmentIssueId], references: [id], onDelete: Cascade)
-  location      StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  product       Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch         StockBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  requestLine     StockRequestLine? @relation(fields: [requestLineId], references: [id], onDelete: Cascade)
+  departmentIssue DepartmentIssue?  @relation(fields: [departmentIssueId], references: [id], onDelete: Cascade)
+  location        StockLocation     @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  product         Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([locationId, productId, status])
   @@index([requestLineId])
@@ -719,8 +674,8 @@ model Approval {
   reason     String?
   decidedAt  DateTime         @default(now()) @map("decided_at")
 
-  request    StockRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  approver   User             @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
+  request  StockRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver User         @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
 
   @@index([requestId])
   @@index([approverId])
@@ -728,43 +683,47 @@ model Approval {
 }
 
 model Shipment {
-  id                    String         @id @default(uuid())
-  requestId             String         @unique @map("request_id")
-  shipmentType          ShipmentType   @map("shipment_type")
-  sourceLocationId      String         @map("source_location_id")
-  destinationLocationId String         @map("destination_location_id")
-  status                ShipmentStatus @default(IN_TRANSIT)
-  notes                 String?
-  dispatchedAt          DateTime       @default(now()) @map("dispatched_at")
-  receivedAt            DateTime?      @map("received_at")
-  createdAt             DateTime       @default(now()) @map("created_at")
-  updatedAt             DateTime       @updatedAt @map("updated_at")
+  id                        String                         @id @default(uuid())
+  requestId                 String                         @unique @map("request_id")
+  shipmentType              ShipmentType                   @map("shipment_type")
+  sourceLocationId          String                         @map("source_location_id")
+  destinationLocationId     String                         @map("destination_location_id")
+  status                    ShipmentStatus                 @default(IN_TRANSIT)
+  notes                     String?
+  dispatchedAt              DateTime                       @default(now()) @map("dispatched_at")
+  receivedAt                DateTime?                      @map("received_at")
+  discrepancyResolution     ShipmentDiscrepancyResolution? @map("discrepancy_resolution")
+  discrepancyResolvedAt     DateTime?                      @map("discrepancy_resolved_at")
+  discrepancyResolvedById   String?                        @map("discrepancy_resolved_by_id")
+  discrepancyResolutionNote String?                        @map("discrepancy_resolution_note")
+  createdAt                 DateTime                       @default(now()) @map("created_at")
+  updatedAt                 DateTime                       @updatedAt @map("updated_at")
 
-  request               StockRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  sourceLocation        StockLocation  @relation("SourceShipments", fields: [sourceLocationId], references: [id], onDelete: Restrict)
-  destinationLocation   StockLocation  @relation("DestinationShipments", fields: [destinationLocationId], references: [id], onDelete: Restrict)
-  lines                 ShipmentLine[]
+  request             StockRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  sourceLocation      StockLocation  @relation("SourceShipments", fields: [sourceLocationId], references: [id], onDelete: Restrict)
+  destinationLocation StockLocation  @relation("DestinationShipments", fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  lines               ShipmentLine[]
 
   @@index([status])
   @@index([sourceLocationId])
   @@index([destinationLocationId])
+  @@index([discrepancyResolution, discrepancyResolvedAt])
   @@map("shipments")
 }
 
 model ShipmentLine {
-  id             String         @id @default(uuid())
-  shipmentId     String         @map("shipment_id")
-  productId      String         @map("product_id")
-  batchId        String?        @map("batch_id")
-  unitName       String         @map("unit_name")
-  dispatchedQty  Decimal        @map("dispatched_qty") @db.Decimal(18, 4)
-  receivedQty    Decimal?       @map("received_qty") @db.Decimal(18, 4)
-  discrepancyQty Decimal?       @map("discrepancy_qty") @db.Decimal(18, 4)
-  condition      StockCondition @default(USABLE)
+  id                       String         @id @default(uuid())
+  shipmentId               String         @map("shipment_id")
+  productId                String         @map("product_id")
+  unitName                 String         @map("unit_name")
+  conversionToBaseSnapshot Decimal        @default(1) @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  dispatchedQty            Decimal        @map("dispatched_qty") @db.Decimal(18, 4)
+  receivedQty              Decimal?       @map("received_qty") @db.Decimal(18, 4)
+  discrepancyQty           Decimal?       @map("discrepancy_qty") @db.Decimal(18, 4)
+  condition                StockCondition @default(USABLE)
 
-  shipment       Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch          StockBatch?    @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([shipmentId])
   @@index([productId])
@@ -778,14 +737,14 @@ model SystemSetting {
   updatedById String?  @map("updated_by_id")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("system_settings")
 }
 
 model ProductionRun {
   id                  String           @id @default(uuid())
-  clientId            String           @map("client_id")
+  projectId           String           @map("project_id")
   mode                ProductionMode   @default(LINKED)
   status              ProductionStatus @default(DRAFT)
   productionReference String?          @map("production_reference")
@@ -800,33 +759,31 @@ model ProductionRun {
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  client              Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  submittedBy         User             @relation("ProductionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
-  approvedBy          User?            @relation("ProductionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  inputs              ProductionInput[]
-  outputs             ProductionOutput[]
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  submittedBy User               @relation("ProductionSubmittedBy", fields: [submittedById], references: [id], onDelete: Restrict)
+  approvedBy  User?              @relation("ProductionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  inputs      ProductionInput[]
+  outputs     ProductionOutput[]
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([status])
   @@index([productionReference])
   @@map("production_runs")
 }
 
 model ProductionInput {
-  id                       String       @id @default(uuid())
-  productionRunId          String       @map("production_run_id")
-  productId                String       @map("product_id")
-  batchId                  String?      @map("batch_id")
-  quantity                 Decimal      @db.Decimal(18, 4)
-  unitId                   String       @map("unit_id")
-  unitNameSnapshot         String       @map("unit_name_snapshot")
-  conversionToBaseSnapshot Decimal      @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
-  baseQuantity             Decimal      @map("base_quantity") @db.Decimal(18, 4)
+  id                       String  @id @default(uuid())
+  productionRunId          String  @map("production_run_id")
+  productId                String  @map("product_id")
+  quantity                 Decimal @db.Decimal(18, 4)
+  unitId                   String  @map("unit_id")
+  unitNameSnapshot         String  @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal @map("base_quantity") @db.Decimal(18, 4)
 
-  productionRun            ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
-  product                  Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch                    StockBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  unit                     ProductUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  productionRun ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit          ProductUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   @@index([productionRunId])
   @@index([productId])
@@ -834,20 +791,18 @@ model ProductionInput {
 }
 
 model ProductionOutput {
-  id                       String       @id @default(uuid())
-  productionRunId          String       @map("production_run_id")
-  productId                String       @map("product_id")
-  batchNumber              String?      @map("batch_number")
-  expiryDate               DateTime?    @map("expiry_date")
-  quantity                 Decimal      @db.Decimal(18, 4)
-  unitId                   String       @map("unit_id")
-  unitNameSnapshot         String       @map("unit_name_snapshot")
-  conversionToBaseSnapshot Decimal      @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
-  baseQuantity             Decimal      @map("base_quantity") @db.Decimal(18, 4)
+  id                       String  @id @default(uuid())
+  productionRunId          String  @map("production_run_id")
+  productId                String  @map("product_id")
+  quantity                 Decimal @db.Decimal(18, 4)
+  unitId                   String  @map("unit_id")
+  unitNameSnapshot         String  @map("unit_name_snapshot")
+  conversionToBaseSnapshot Decimal @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
+  baseQuantity             Decimal @map("base_quantity") @db.Decimal(18, 4)
 
-  productionRun            ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
-  product                  Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  unit                     ProductUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  productionRun ProductionRun @relation(fields: [productionRunId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit          ProductUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   @@index([productionRunId])
   @@index([productId])
@@ -855,37 +810,36 @@ model ProductionOutput {
 }
 
 model Department {
-  id              String           @id @default(uuid())
-  clientId        String           @map("client_id")
-  name            String
-  status          DepartmentStatus @default(PENDING_APPROVAL)
-  proposedName    String?          @map("proposed_name")
-  proposedStatus  DepartmentStatus? @map("proposed_status")
-  createdById     String?          @map("created_by_id")
-  approvedById    String?          @map("approved_by_id")
-  approvedAt      DateTime?        @map("approved_at")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id             String            @id @default(uuid())
+  projectId      String            @map("project_id")
+  name           String
+  status         DepartmentStatus  @default(PENDING_APPROVAL)
+  proposedName   String?           @map("proposed_name")
+  proposedStatus DepartmentStatus? @map("proposed_status")
+  createdById    String?           @map("created_by_id")
+  approvedById   String?           @map("approved_by_id")
+  approvedAt     DateTime?         @map("approved_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
 
-  client          Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy       User?            @relation("DepartmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  approvedBy      User?            @relation("DepartmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  issues          DepartmentIssue[]
-  returns         DepartmentReturn[]
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy  User?              @relation("DepartmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User?              @relation("DepartmentApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  issues     DepartmentIssue[]
+  returns    DepartmentReturn[]
 
-  @@unique([clientId, name])
-  @@index([clientId])
+  @@unique([projectId, name])
+  @@index([projectId])
   @@index([status])
   @@map("departments")
 }
 
 model DepartmentIssue {
   id                       String                @id @default(uuid())
-  clientId                 String                @map("client_id")
+  projectId                String                @map("project_id")
   issueBatchId             String?               @map("issue_batch_id")
   departmentId             String                @map("department_id")
   productId                String                @map("product_id")
-  batchId                  String?               @map("batch_id")
   quantity                 Decimal               @db.Decimal(18, 4)
   unitId                   String                @map("unit_id")
   unitNameSnapshot         String                @map("unit_name_snapshot")
@@ -900,18 +854,17 @@ model DepartmentIssue {
   createdAt                DateTime              @default(now()) @map("created_at")
   updatedAt                DateTime              @updatedAt @map("updated_at")
 
-  client                   Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  issueBatch               DepartmentIssueBatch? @relation(fields: [issueBatchId], references: [id], onDelete: Restrict)
-  department               Department            @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  product                  Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch                    StockBatch?           @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  unit                     ProductUnit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  issuedBy                 User                  @relation("DepartmentIssueIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
-  approvedBy               User?                 @relation("DepartmentIssueApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  returns                  DepartmentReturn[]
-  reservations             Reservation[]
+  project      Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  issueBatch   DepartmentIssueBatch? @relation(fields: [issueBatchId], references: [id], onDelete: Restrict)
+  department   Department            @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  product      Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit         ProductUnit           @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  issuedBy     User                  @relation("DepartmentIssueIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict)
+  approvedBy   User?                 @relation("DepartmentIssueApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  returns      DepartmentReturn[]
+  reservations Reservation[]
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([departmentId])
   @@index([productId])
   @@index([status])
@@ -921,7 +874,7 @@ model DepartmentIssue {
 
 model DepartmentIssueBatch {
   id              String                     @id @default(uuid())
-  clientId        String                     @map("client_id")
+  projectId       String                     @map("project_id")
   createdById     String                     @map("created_by_id")
   status          DepartmentIssueBatchStatus @default(DRAFT)
   rejectionReason String?                    @map("rejection_reason")
@@ -931,29 +884,27 @@ model DepartmentIssueBatch {
   createdAt       DateTime                   @default(now()) @map("created_at")
   updatedAt       DateTime                   @updatedAt @map("updated_at")
 
-  client      Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  createdBy  User             @relation("DepartmentIssueBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  approvedBy User?            @relation("DepartmentIssueBatchApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  project    Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy  User              @relation("DepartmentIssueBatchCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy User?             @relation("DepartmentIssueBatchApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   issues     DepartmentIssue[]
 
-  @@index([clientId, status])
+  @@index([projectId, status])
   @@index([createdById, status])
   @@map("department_issue_batches")
 }
 
 model DepartmentReturn {
   id                       String                 @id @default(uuid())
-  clientId                 String                 @map("client_id")
+  projectId                String                 @map("project_id")
   departmentId             String?                @map("department_id")
   departmentIssueId        String?                @map("department_issue_id")
   productId                String                 @map("product_id")
-  batchId                  String?                @map("batch_id")
   quantity                 Decimal                @db.Decimal(18, 4)
   unitId                   String                 @map("unit_id")
   unitNameSnapshot         String                 @map("unit_name_snapshot")
   conversionToBaseSnapshot Decimal                @map("conversion_to_base_snapshot") @db.Decimal(18, 4)
   baseQuantity             Decimal                @map("base_quantity") @db.Decimal(18, 4)
-  condition                StockCondition         @default(USABLE)
   reason                   String
   status                   DepartmentReturnStatus @default(PENDING_APPROVAL)
   notes                    String?
@@ -964,16 +915,15 @@ model DepartmentReturn {
   createdAt                DateTime               @default(now()) @map("created_at")
   updatedAt                DateTime               @updatedAt @map("updated_at")
 
-  client                   Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  department               Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  departmentIssue          DepartmentIssue?       @relation(fields: [departmentIssueId], references: [id], onDelete: SetNull)
-  product                  Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
-  batch                    StockBatch?            @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  unit                     ProductUnit            @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  returnedBy               User                   @relation("DepartmentReturnReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
-  approvedBy               User?                  @relation("DepartmentReturnApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  department      Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  departmentIssue DepartmentIssue? @relation(fields: [departmentIssueId], references: [id], onDelete: SetNull)
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  unit            ProductUnit      @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  returnedBy      User             @relation("DepartmentReturnReturnedBy", fields: [returnedById], references: [id], onDelete: Restrict)
+  approvedBy      User?            @relation("DepartmentReturnApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
-  @@index([clientId])
+  @@index([projectId])
   @@index([departmentId])
   @@index([departmentIssueId])
   @@index([productId])
@@ -992,7 +942,7 @@ model Attachment {
   uploadedById String         @map("uploaded_by_id")
   createdAt    DateTime       @default(now()) @map("created_at")
 
-  uploadedBy   User           @relation("UploadedAttachments", fields: [uploadedById], references: [id], onDelete: Restrict)
+  uploadedBy    User          @relation("UploadedAttachments", fields: [uploadedById], references: [id], onDelete: Restrict)
   importBatches ImportBatch[]
 
   @@map("attachments")
@@ -1013,10 +963,10 @@ model ImportBatch {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  uploadedBy        User               @relation("UserImportBatches", fields: [uploadedById], references: [id], onDelete: Restrict)
-  approvedBy        User?              @relation("ApprovedImportBatches", fields: [approvedById], references: [id], onDelete: SetNull)
-  attachment        Attachment?        @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
-  rows              ImportRow[]
+  uploadedBy User        @relation("UserImportBatches", fields: [uploadedById], references: [id], onDelete: Restrict)
+  approvedBy User?       @relation("ApprovedImportBatches", fields: [approvedById], references: [id], onDelete: SetNull)
+  attachment Attachment? @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
+  rows       ImportRow[]
 
   @@index([uploadedById])
   @@index([status])
@@ -1041,7 +991,7 @@ model ImportRow {
   createdAt              DateTime        @default(now()) @map("created_at")
   updatedAt              DateTime        @updatedAt @map("updated_at")
 
-  batch                  ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   @@index([batchId])
   @@index([validationStatus])
@@ -1059,7 +1009,7 @@ model Notification {
   readAt          DateTime?             @map("read_at")
   createdAt       DateTime              @default(now()) @map("created_at")
 
-  recipient       User                  @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  recipient User @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
 
   @@index([recipientUserId])
   @@index([eventType])
@@ -1077,7 +1027,7 @@ model StockAlertState {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, locationId])
   @@index([isLowStock])
@@ -1096,7 +1046,7 @@ model AuditEvent {
   occurredAt    DateTime @default(now()) @map("occurred_at")
   correlationId String?  @map("correlation_id")
 
-  actorUser     User?    @relation("UserAuditEvents", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorUser User? @relation("UserAuditEvents", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([actorUserId])
   @@index([action])
@@ -1128,38 +1078,38 @@ model BackupRecord {
   @@map("backups")
 }
 
-model ClientStaffMember {
-  id          String               @id @default(uuid())
-  clientId    String               @map("client_id")
-  staffNumber String               @map("staff_number")
-  fullName    String               @map("full_name")
-  roleTitle   String?              @map("role_title")
+model ProjectStaffMember {
+  id          String     @id @default(uuid())
+  projectId   String     @map("project_id")
+  staffNumber String     @map("staff_number")
+  fullName    String     @map("full_name")
+  roleTitle   String?    @map("role_title")
   contact     String?
-  status      UserStatus           @default(ACTIVE)
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
 
-  client      Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  workLogs    ClientStaffWorkLog[]
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workLogs ProjectStaffWorkLog[]
 
-  @@unique([clientId, staffNumber])
-  @@map("client_staff_members")
+  @@unique([projectId, staffNumber])
+  @@map("project_staff_members")
 }
 
-model ClientStaffWorkLog {
-  id             String            @id @default(uuid())
-  staffMemberId  String            @map("staff_member_id")
-  clientId       String            @map("client_id")
-  logDate        DateTime          @default(now()) @map("log_date")
-  shiftType      String?           @map("shift_type")
-  hoursWorked    Decimal?          @map("hours_worked") @db.Decimal(5, 2)
-  tasksCompleted String            @map("tasks_completed")
+model ProjectStaffWorkLog {
+  id             String   @id @default(uuid())
+  staffMemberId  String   @map("staff_member_id")
+  projectId      String   @map("project_id")
+  logDate        DateTime @default(now()) @map("log_date")
+  shiftType      String?  @map("shift_type")
+  hoursWorked    Decimal? @map("hours_worked") @db.Decimal(5, 2)
+  tasksCompleted String   @map("tasks_completed")
   notes          String?
-  createdAt      DateTime          @default(now()) @map("created_at")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  staffMember    ClientStaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
-  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  staffMember ProjectStaffMember @relation(fields: [staffMemberId], references: [id], onDelete: Cascade)
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@index([clientId, logDate])
-  @@map("client_staff_work_logs")
+  @@index([projectId, logDate])
+  @@map("project_staff_work_logs")
 }

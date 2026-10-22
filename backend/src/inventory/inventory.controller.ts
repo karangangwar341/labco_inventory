@@ -33,7 +33,7 @@ export class InventoryController {
   @ApiOperation({
     summary: 'View current inventory balances',
     description:
-      'Returns balances enriched with D-004 formulas: Physical = Usable + Damaged + Expired, Available = Usable - Reserved.',
+      'Returns usable and reserved balances. Available = Usable - Reserved.',
   })
   @ApiQuery({ name: 'locationId', required: false })
   @ApiQuery({ name: 'productId', required: false })
@@ -66,7 +66,7 @@ export class InventoryController {
   @ApiOperation({
     summary: 'List stock locations available to the signed-in user',
     description:
-      'Returns only locations within the caller role scope. Client Admin responses include only their own client location.',
+      'Returns only locations within the caller role scope. Project Admin responses include only their own project location.',
   })
   getAccessibleLocations(@CurrentUser() user: AuthenticatedUser) {
     return this.inventoryService.getAccessibleLocations(user);

@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function ManufacturingPage() {
   return (
-    <RoleGuard allowedRoles={['CLIENT_ADMIN', 'SUPER_ADMIN']}>
+    <RoleGuard allowedRoles={['PROJECT_ADMIN', 'SUPER_ADMIN']}>
       <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading manufacturing jobs...</div>}>
         <ManufacturingView />
       </Suspense>

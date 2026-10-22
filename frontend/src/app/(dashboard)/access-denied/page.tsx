@@ -51,8 +51,8 @@ export default function AccessDeniedPage() {
               </Badge>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-500 font-medium">Client Scope:</span>
-              <span className="font-medium text-slate-700">{user?.clientId ? `Client ID: ${user.clientId}` : 'Global Labco Organization'}</span>
+              <span className="text-slate-500 font-medium">Project Scope:</span>
+              <span className="font-medium text-slate-700">{user?.projectId ? `Project ID: ${user.projectId}` : 'Global Labco Organization'}</span>
             </div>
           </div>
 

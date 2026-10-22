@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateStaffMemberDto {
-  @ApiProperty({ description: 'Unique staff identification number / badge ID within the client store', example: 'EMP-101' })
+  @ApiProperty({ description: 'Unique staff identification number / badge ID within the project store', example: 'EMP-101' })
   @IsString()
   @IsNotEmpty()
   staffNumber!: string;
@@ -22,8 +22,8 @@ export class CreateStaffMemberDto {
   @IsString()
   contact?: string;
 
-  @ApiPropertyOptional({ description: 'Client ID (Super Admin override only)' })
+  @ApiPropertyOptional({ description: 'Project ID (Super Admin override only)' })
   @IsOptional()
   @IsString()
-  clientId?: string;
+  projectId?: string;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ShipmentLine } from '../shipments.types';
 import { shipmentsService } from '../shipments.service';
@@ -37,6 +37,19 @@ function formatQty(qty: unknown): number {
 
 export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [resolutionNote, setResolutionNote] = React.useState('');
+  const resolutionMutation = useMutation({
+    mutationFn: (resolution: 'MISSING' | 'CALCULATION_MISTAKE') =>
+      shipmentsService.resolveDiscrepancy(shipmentId, { resolution, note: resolutionNote.trim() || undefined }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.shipments.detail(shipmentId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.shipments.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.reports.all }),
+      ]);
+    },
+  });
   const { data: shipment, isLoading: loading, error } = useQuery({
     queryKey: queryKeys.shipments.detail(shipmentId),
     queryFn: () => shipmentsService.getShipmentById(shipmentId),
@@ -64,7 +77,8 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
   }
 
   const canSeeSource = canViewWarehouseIdentity(user?.role);
-  const isHold = shipment.status === 'DISCREPANCY_HOLD';
+  const isHold = shipment.status === 'DISCREPANCY_HOLD' && !shipment.discrepancyResolution;
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <div className="space-y-5">
@@ -96,7 +110,7 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
         </div>
         <div>
           <span className="text-[#5b6678] block">Destination</span>
-          <span className="font-semibold text-[#172033]">{shipment.destinationName || shipment.destinationLocation?.client?.name || shipment.destinationLocation?.warehouse?.name || 'Destination Facility'}</span>
+          <span className="font-semibold text-[#172033]">{shipment.destinationName || shipment.destinationLocation?.project?.name || shipment.destinationLocation?.warehouse?.name || 'Destination Facility'}</span>
         </div>
         <div>
           <span className="text-[#5b6678] block">Dispatched Date</span>
@@ -114,8 +128,51 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
             <span>Discrepancy Hold Enforced</span>
           </div>
           <p>
-            Received quantity differs from the dispatched manifest. Received units have been credited to destination usable balance; missing units are held in quarantine for Super Admin audit.
+            The confirmed received quantities are credited to the destination. The remaining quantities are awaiting one of two Super Admin decisions.
           </p>
+          {isSuperAdmin && (
+            <div className="pt-3 mt-3 border-t border-[#fecdca] space-y-3 text-[#344054]">
+              <p className="font-semibold">Choose how to resolve every discrepancy on this shipment:</p>
+              <label className="block space-y-1">
+                <span className="text-xs font-medium">Audit note (optional)</span>
+                <textarea
+                  value={resolutionNote}
+                  onChange={(event) => setResolutionNote(event.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm text-slate-900"
+                  placeholder="Add context for the audit record"
+                />
+              </label>
+              {resolutionMutation.error && (
+                <p role="alert" className="text-rose-700">{resolutionMutation.error instanceof Error ? resolutionMutation.error.message : 'Could not resolve this discrepancy.'}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="danger"
+                  disabled={resolutionMutation.isPending}
+                  onClick={() => resolutionMutation.mutate('MISSING')}
+                >
+                  {resolutionMutation.isPending && resolutionMutation.variables === 'MISSING' ? 'Saving…' : 'Mark as missing'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={resolutionMutation.isPending}
+                  onClick={() => resolutionMutation.mutate('CALCULATION_MISTAKE')}
+                >
+                  {resolutionMutation.isPending && resolutionMutation.variables === 'CALCULATION_MISTAKE' ? 'Saving…' : 'Calculation mistake — return to warehouse'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {shipment.discrepancyResolution && (
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 space-y-1">
+          <p className="font-semibold">Discrepancy resolved: {shipment.discrepancyResolution === 'MISSING' ? 'Marked as missing' : 'Calculation mistake; quantity returned to source warehouse'}</p>
+          {shipment.discrepancyResolvedAt && <p>Resolved {new Date(shipment.discrepancyResolvedAt).toLocaleString()}</p>}
+          {shipment.discrepancyResolutionNote && <p>Note: {shipment.discrepancyResolutionNote}</p>}
         </div>
       )}
 
@@ -142,16 +199,16 @@ export function ShipmentDetailView({ shipmentId }: { shipmentId: string }) {
                   <TableCell className="font-medium text-[#172033]">
                     {line.productName || line.product?.name || 'Product'}
                   </TableCell>
-                  <TableCell className="font-bold text-[#172033]">{dispatched}</TableCell>
+                  <TableCell className="font-bold text-[#172033]">{dispatched} {line.unitName || ''}</TableCell>
                   <TableCell className="font-mono text-[#5b6678]">
-                    {received !== undefined ? received : '—'}
+                    {received !== undefined ? `${received} ${line.unitName || ''}` : '—'}
                   </TableCell>
                   <TableCell className="font-mono text-[#b42318]">
-                    {hasDiff ? `-${dispatched - (received ?? 0)}` : '0'}
+                    {hasDiff ? `-${dispatched - (received ?? 0)} ${line.unitName || ''}` : `0 ${line.unitName || ''}`}
                   </TableCell>
                   <TableCell>
                     <Badge variant={hasDiff ? 'danger' : 'success'}>
-                      {hasDiff ? 'DISCREPANCY QUARANTINE' : 'VERIFIED IN FULL'}
+                      {hasDiff ? (shipment.discrepancyResolution === 'MISSING' ? 'MARKED MISSING' : shipment.discrepancyResolution === 'CALCULATION_MISTAKE' ? 'RETURNED TO WAREHOUSE' : 'DISCREPANCY HOLD') : 'VERIFIED IN FULL'}
                     </Badge>
                   </TableCell>
                 </TableRow>

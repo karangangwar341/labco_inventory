@@ -13,7 +13,7 @@ export const reportsService = {
     if (params?.endDate) stringParams.endDate = params.endDate;
     if (params?.locationId) stringParams.locationId = params.locationId;
     if (params?.productId) stringParams.productId = params.productId;
-    if (params?.clientId) stringParams.clientId = params.clientId;
+    if (params?.projectId) stringParams.projectId = params.projectId;
     if (params?.warehouseId) stringParams.warehouseId = params.warehouseId;
 
     return apiClient.get<T>(endpoints.reports.byType(reportType, stringParams));

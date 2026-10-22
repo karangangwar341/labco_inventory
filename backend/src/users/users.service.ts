@@ -39,15 +39,15 @@ export class UsersService {
       if (!warehouse) {
         throw new NotFoundException(`Assigned warehouse not found`);
       }
-    } else if (dto.role === UserRole.CLIENT_ADMIN) {
-      if (!dto.clientId) {
-        throw new BadRequestException('clientId is required for CLIENT_ADMIN accounts');
+    } else if (dto.role === UserRole.PROJECT_ADMIN) {
+      if (!dto.projectId) {
+        throw new BadRequestException('projectId is required for PROJECT_ADMIN accounts');
       }
-      const client = await this.prisma.client.findUnique({
-        where: { id: dto.clientId },
+      const project = await this.prisma.project.findUnique({
+        where: { id: dto.projectId },
       });
-      if (!client) {
-        throw new NotFoundException(`Assigned client organization not found`);
+      if (!project) {
+        throw new NotFoundException(`Assigned project organization not found`);
       }
     }
 
@@ -60,7 +60,7 @@ export class UsersService {
         role: dto.role,
         status: UserStatus.ACTIVE,
         warehouseId: dto.role === UserRole.STORE_ADMIN ? dto.warehouseId : null,
-        clientId: dto.role === UserRole.CLIENT_ADMIN ? dto.clientId : null,
+        projectId: dto.role === UserRole.PROJECT_ADMIN ? dto.projectId : null,
       },
       select: {
         id: true,
@@ -68,7 +68,7 @@ export class UsersService {
         role: true,
         status: true,
         warehouseId: true,
-        clientId: true,
+        projectId: true,
         createdAt: true,
       },
     });
@@ -84,13 +84,13 @@ export class UsersService {
         role: true,
         status: true,
         warehouseId: true,
-        clientId: true,
+        projectId: true,
         lockoutUntil: true,
         lockoutCount: true,
         createdAt: true,
         disabledAt: true,
         warehouse: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -105,13 +105,13 @@ export class UsersService {
         role: true,
         status: true,
         warehouseId: true,
-        clientId: true,
+        projectId: true,
         lockoutUntil: true,
         lockoutCount: true,
         createdAt: true,
         disabledAt: true,
         warehouse: { select: { id: true, name: true } },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 

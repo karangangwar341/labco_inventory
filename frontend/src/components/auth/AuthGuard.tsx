@@ -32,7 +32,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isHydrated, isLoading, isAuthenticated, user, router, pathname, searchParams]);
 
-  // While checking auth token against backend or hydrating client, render consistent placeholder
+  // While checking auth token against backend or hydrating project, render consistent placeholder
   if (!isHydrated || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">

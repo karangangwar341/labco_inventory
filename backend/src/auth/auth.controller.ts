@@ -55,7 +55,7 @@ export class AuthController {
     );
 
     // Keep login latency focused on credential validation and session creation.
-    // Startup reference data is fetched separately after the client establishes the session.
+    // Startup reference data is fetched separately after the project establishes the session.
     return this.authService.login(user, { deviceId, userAgent, ipAddress });
   }
 

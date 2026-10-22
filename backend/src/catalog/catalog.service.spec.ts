@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { CategoriesService } from './categories.service.js';
 import { ProductsService, computeDuplicateKey } from './products.service.js';
 import { ApprovalDecision } from './dto/approve-product.dto.js';
-import { UserRole, CatalogScope, ProductKind, ProductStatus, TrackingMode } from '@prisma/client';
+import { UserRole, CatalogScope, ProductKind, ProductStatus } from '@prisma/client';
 import {
   ForbiddenException,
   ConflictException,
@@ -40,7 +40,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
-      notifyClientAdmins: vi.fn(),
+      notifyProjectAdmins: vi.fn(),
     };
 
     categoriesService = new CategoriesService(mockPrisma as any);
@@ -71,31 +71,31 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         expect.objectContaining({
           data: expect.objectContaining({
             ownerScope: CatalogScope.COMPANY,
-            clientId: null,
+            projectId: null,
           }),
         }),
       );
     });
 
-    it('creates client category for Client Admin', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-apex' });
+    it('creates project category for Project Admin', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-apex' });
       mockPrisma.category.findFirst.mockResolvedValue(null);
       mockPrisma.category.create.mockResolvedValue({
         id: 'cat-c1',
         name: 'Custom Reagents',
-        ownerScope: CatalogScope.CLIENT,
-        clientId: 'client-apex',
+        ownerScope: CatalogScope.PROJECT,
+        projectId: 'project-apex',
       });
 
-      const res = await categoriesService.create({ name: 'Custom Reagents' }, clientAdmin);
+      const res = await categoriesService.create({ name: 'Custom Reagents' }, projectAdmin);
 
       expect(res.name).toBe('Custom Reagents');
       expect(mockPrisma.category.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            ownerScope: CatalogScope.CLIENT,
-            clientId: 'client-apex',
+            ownerScope: CatalogScope.PROJECT,
+            projectId: 'project-apex',
           }),
         }),
       );
@@ -110,7 +110,6 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       categoryId: 'cat-glass',
       quantityPrecision: 0,
       allowFractional: false,
-      trackingMode: TrackingMode.NONE,
       attributes: [
         { attributeName: 'Volume', value: '250', unit: 'ml' },
         { attributeName: 'Material', value: 'Borosilicate Glass' },
@@ -205,28 +204,28 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       ).rejects.toThrow(ConflictException);
     });
 
-    it('creates client product in PENDING_APPROVAL status', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      const clientProductDto = { ...validProductDto, kind: ProductKind.MANUFACTURED_PRODUCT };
-      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass', ownerScope: CatalogScope.CLIENT, clientId: 'client-1' });
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-1' });
+    it('creates project product in PENDING_APPROVAL status', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      const projectProductDto = { ...validProductDto, kind: ProductKind.MANUFACTURED_PRODUCT };
+      mockPrisma.category.findUnique.mockResolvedValue({ id: 'cat-glass', ownerScope: CatalogScope.PROJECT, projectId: 'project-1' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-1' });
       mockPrisma.product.findUnique.mockResolvedValue(null);
       mockPrisma.product.create.mockResolvedValue({
         id: 'new-prod-1',
         name: 'Beaker 250ml',
-        ownerScope: CatalogScope.CLIENT,
-        clientId: 'client-1',
+        ownerScope: CatalogScope.PROJECT,
+        projectId: 'project-1',
         status: ProductStatus.PENDING_APPROVAL,
       });
 
-      const res = await productsService.create(clientProductDto as any, clientAdmin);
+      const res = await productsService.create(projectProductDto as any, projectAdmin);
 
       expect(res.status).toBe(ProductStatus.PENDING_APPROVAL);
       expect(mockPrisma.product.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             status: ProductStatus.PENDING_APPROVAL,
-            ownerScope: CatalogScope.CLIENT,
+            ownerScope: CatalogScope.PROJECT,
           }),
         }),
       );

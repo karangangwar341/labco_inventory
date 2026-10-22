@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username: res.user.username,
         role: res.user.role,
         status: res.user.status,
-        clientId: res.user.clientId,
+        projectId: res.user.projectId,
         assignedWarehouseIds: res.user.assignedWarehouseIds,
       };
       setUser(profile);

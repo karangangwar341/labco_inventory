@@ -120,9 +120,9 @@ export function DepartmentsView() {
   }, [filteredHistory]);
 
   const issueDraftQuery = useQuery({
-    queryKey: queryKeys.departments.issueDraft(user?.clientId || user?.id),
+    queryKey: queryKeys.departments.issueDraft(user?.projectId || user?.id),
     queryFn: () => departmentsService.getOpenIssueBatch(),
-    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
+    enabled: role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 0,
   });
 
@@ -132,9 +132,9 @@ export function DepartmentsView() {
     error: catalogProductsError,
     refetch: refetchCatalogProducts,
   } = useQuery({
-    queryKey: queryKeys.catalog.products(`client-${user?.clientId || user?.id || 'current'}`),
+    queryKey: queryKeys.catalog.products(`project-${user?.projectId || user?.id || 'current'}`),
     queryFn: () => catalogService.getProducts(),
-    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
+    enabled: role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 2 * 60 * 1000,
   });
 
@@ -146,7 +146,7 @@ export function DepartmentsView() {
   } = useQuery({
     queryKey: queryKeys.inventory.balances(user?.id || user?.role),
     queryFn: () => inventoryService.getBalances(),
-    enabled: role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN',
+    enabled: role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 60 * 1000,
   });
 
@@ -204,7 +204,6 @@ export function DepartmentsView() {
         productId: line.productId,
         quantity: Number(line.quantity),
         unitId: line.unit?.id || (line as DepartmentIssue & { unitId?: string }).unitId,
-        batchId: line.batchId || undefined,
         notes: line.notes || undefined,
       }));
       const nextLine = {
@@ -212,7 +211,6 @@ export function DepartmentsView() {
         productId: effectiveIssueProductId,
         quantity: Number(issueQuantity),
         unitId: effectiveIssueUnitId,
-        batchId: selectedIssueBalance?.batchId || undefined,
         notes: issueNotes.trim() || undefined,
       };
       const editingIndex = editingIssueId ? draft.issues.findIndex((line) => line.id === editingIssueId) : -1;
@@ -221,7 +219,7 @@ export function DepartmentsView() {
       return departmentsService.saveIssueBatchLines(draft.id, currentLines);
     },
     onSuccess: async (draft) => {
-      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), draft);
+      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.projectId || user?.id), draft);
       setEditingIssueId(null);
       setIssueDepartmentId('');
       setIssueProductId('');
@@ -247,13 +245,12 @@ export function DepartmentsView() {
         productId: line.productId,
         quantity: Number(line.quantity),
         unitId: (line as DepartmentIssue & { unitId?: string }).unitId || line.unit?.id,
-        batchId: line.batchId || undefined,
         notes: line.notes || undefined,
       }));
       return departmentsService.saveIssueBatchLines(draft.id, lines);
     },
     onSuccess: (draft) => {
-      if (draft) queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), draft);
+      if (draft) queryClient.setQueryData(queryKeys.departments.issueDraft(user?.projectId || user?.id), draft);
     },
     onError: (err: unknown) => setErrorMsg(err instanceof Error ? err.message : 'Draft line could not be removed.'),
   });
@@ -265,7 +262,7 @@ export function DepartmentsView() {
       return departmentsService.submitIssueBatch(draft.id);
     },
     onSuccess: async (batch) => {
-      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.clientId || user?.id), batch);
+      queryClient.setQueryData(queryKeys.departments.issueDraft(user?.projectId || user?.id), batch);
       await invalidation.afterDepartmentMutation(queryClient);
       await queryClient.invalidateQueries({ queryKey: queryKeys.approvals.all });
       setActionSuccess(batch.status === 'POSTED' ? 'Stock out was posted.' : 'Stock out was sent for approval.');
@@ -335,7 +332,7 @@ export function DepartmentsView() {
     setErrorMsg(null);
     refetchDepts();
     refetchIssues();
-    if (role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') {
+    if (role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN') {
       void refetchCatalogProducts();
       void refetchBalances();
     }
@@ -344,12 +341,12 @@ export function DepartmentsView() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={activeTab === 'RETURNS' ? 'Department Returns & Write-offs' : activeTab === 'ISSUES' ? 'Stock Out to Departments' : 'Departments'}
-        description={activeTab === 'RETURNS' ? 'Record returned items and review condition-specific stock actions.' : 'Add stocked products, choose a department for each line, and submit the day’s stock out together.'}
+        title={activeTab === 'RETURNS' ? 'Department Returns' : activeTab === 'ISSUES' ? 'Stock Out to Departments' : 'Departments'}
+        description={activeTab === 'RETURNS' ? 'Record usable returned items and review their approval status.' : 'Add stocked products, choose a department for each line, and submit the day’s stock out together.'}
         actions={
           activeTab !== 'RETURNS' ? (
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              {(role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') && (
+              {(role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN') && (
                 <div className="flex flex-1 sm:flex-none items-center gap-2 w-full sm:w-auto">
                   <Button
                     variant="secondary"
@@ -370,7 +367,7 @@ export function DepartmentsView() {
                 </div>
               )}
               <Button
-                variant={role === 'CLIENT_ADMIN' ? 'secondary' : 'primary'}
+                variant={role === 'PROJECT_ADMIN' ? 'secondary' : 'primary'}
                 className="w-full sm:w-auto text-xs"
                 onClick={() => setIsModalOpen(true)}
               >
@@ -392,7 +389,7 @@ export function DepartmentsView() {
         <ErrorState message={currentError} onRetry={handleRetry} />
       )}
 
-      {role === 'CLIENT_ADMIN' && activeDepartments.length === 0 && (
+      {role === 'PROJECT_ADMIN' && activeDepartments.length === 0 && (
         <p className="text-xs text-[#5b6678]">Add a department and wait for Super Admin approval before issuing manufactured stock to it.</p>
       )}
 
@@ -432,7 +429,7 @@ export function DepartmentsView() {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          Returns &amp; write-offs
+          Returns
         </button>
       </div>
 
@@ -475,7 +472,7 @@ export function DepartmentsView() {
                   </div>
                 )}
                 <p className="text-[11px] text-[#5b6678]">
-                  {d.clientName || 'Client Entity'}
+                  {d.projectName || 'Project Entity'}
                 </p>
                 {role === 'SUPER_ADMIN' && (d.status === 'PENDING_APPROVAL' || d.proposedName || d.proposedStatus) && (
                   <div className="flex gap-2 pt-2">
@@ -506,7 +503,7 @@ export function DepartmentsView() {
         )
       ) : (
         <div className="space-y-6">
-          {(role === 'CLIENT_ADMIN' || role === 'SUPER_ADMIN') && (
+          {(role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN') && (
             <Card>
               <CardHeader
                 action={
@@ -726,7 +723,7 @@ export function DepartmentsView() {
                                 setIssueDepartmentId(line.departmentId);
                                 setIssueProductId(line.productId);
                                 setIssueUnitId(line.unit?.id || '');
-                                setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
+                                setIssueBalanceId(balances.find((b) => b.productId === line.productId)?.id || '');
                                 setIssueQuantity(String(line.quantity));
                                 setIssueNotes(line.notes || '');
                                 setIsIssueModalOpen(true);
@@ -789,7 +786,7 @@ export function DepartmentsView() {
                                       setIssueDepartmentId(line.departmentId);
                                       setIssueProductId(line.productId);
                                       setIssueUnitId(line.unit?.id || '');
-                                      setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
+                                      setIssueBalanceId(balances.find((b) => b.productId === line.productId)?.id || '');
                                       setIssueQuantity(String(line.quantity));
                                       setIssueNotes(line.notes || '');
                                       setIsIssueModalOpen(true);
@@ -1071,7 +1068,7 @@ export function DepartmentsView() {
               disabled={!stockedProducts.length}
               className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033] disabled:bg-slate-100"
             >
-              {!stockedProducts.length && <option value="">No manufactured client stock is available</option>}
+              {!stockedProducts.length && <option value="">No manufactured project stock is available</option>}
               {stockedProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
@@ -1079,27 +1076,9 @@ export function DepartmentsView() {
           {isIssueDataLoading ? (
             <p className="text-[#5b6678]">Loading manufactured products and available stock…</p>
           ) : !stockedProducts.length ? (
-            <p className="rounded-md bg-amber-50 p-2 text-amber-800">There are no approved manufactured products with available client stock to send to a department.</p>
+            <p className="rounded-md bg-amber-50 p-2 text-amber-800">There are no approved manufactured products with available project stock to send to a department.</p>
           ) : (
             <>
-              {(issueBalances.length > 1 || selectedIssueProduct?.trackingMode === 'BATCH_ONLY' || selectedIssueProduct?.trackingMode === 'BOTH') && (
-                <div>
-                  <label htmlFor="issue-batch" className="mb-1 block font-medium text-[#172033]">Stock lot</label>
-                  <select
-                    id="issue-batch"
-                    value={effectiveIssueBalanceId}
-                    onChange={(event) => setIssueBalanceId(event.target.value)}
-                    required
-                    className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]"
-                  >
-                    {issueBalances.map((balance) => (
-                      <option key={balance.id} value={balance.id}>
-                        {balance.batchNumber || 'Untracked stock'} · {balance.availableQty} {selectedIssueProduct?.baseUnit || balance.unit || 'units'} available
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Quantity"

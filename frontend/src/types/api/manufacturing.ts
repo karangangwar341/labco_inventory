@@ -6,17 +6,15 @@ export interface BOMItemDto {
   quantity: number | string;
   unit?: string;
   unitId?: string;
-  batchNumber?: string | null;
-  expiryDate?: string | null;
 }
 
 export interface ProductionRunDto {
   id: string;
   runNumber: string;
   status: ProductionStatus;
-  clientId: string;
-  clientName?: string;
-  client?: { id: string; name: string };
+  projectId: string;
+  projectName?: string;
+  project?: { id: string; name: string };
   locationId: string;
   locationName?: string;
   yieldProductId: string;
@@ -36,7 +34,7 @@ export interface ProductionRunDto {
 }
 
 export interface CreateProductionRunDto {
-  clientId?: string;
+  projectId?: string;
   mode?: 'LINKED' | 'SEPARATE';
   productionReference?: string;
   plannedOutput?: number;
@@ -44,14 +42,11 @@ export interface CreateProductionRunDto {
   wastage?: number;
   inputs: Array<{
     productId: string;
-    batchId?: string;
     quantity: number;
     unitId: string;
   }>;
   outputs: Array<{
     productId: string;
-    batchNumber?: string;
-    expiryDate?: string;
     quantity: number;
     unitId: string;
   }>;

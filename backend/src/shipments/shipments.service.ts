@@ -14,10 +14,12 @@ import {
   TransactionType,
   Prisma,
   LocationType,
+  ShipmentDiscrepancyResolution,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { ReceiveShipmentDto } from './dto/receive-shipment.dto.js';
 import { ApproveReceiptDto } from './dto/approve-receipt.dto.js';
+import { ResolveDiscrepancyDto, DiscrepancyResolution } from './dto/resolve-discrepancy.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 
 @Injectable()
@@ -31,7 +33,7 @@ export class ShipmentsService {
   /**
    * Called during dispatch approval.
    * If receipt confirmation is enabled (baseline): deducts warehouse stock and creates IN_TRANSIT shipment.
-   * If receipt confirmation is disabled (D-001): atomically transfers stock to client in the same transaction.
+   * If receipt confirmation is disabled (D-001): atomically transfers stock to project in the same transaction.
    */
   async createShipmentForApprovedDispatch(
     tx: Prisma.TransactionClient,
@@ -45,8 +47,8 @@ export class ShipmentsService {
     const receiptConfirmationEnabled =
       setting?.valueJson !== undefined ? Boolean(setting.valueJson) : true;
 
-    const isClientLoc = (loc: any) =>
-      Boolean(loc && (loc.locationType === LocationType.CLIENT || (!loc.warehouseId && Boolean(loc.clientId))));
+    const isProjectLoc = (loc: any) =>
+      Boolean(loc && (loc.locationType === LocationType.PROJECT || (!loc.warehouseId && Boolean(loc.projectId))));
 
     let sourceLoc = request.sourceLocation;
     let destLoc = request.destinationLocation;
@@ -57,19 +59,19 @@ export class ShipmentsService {
       destLoc = await tx.stockLocation.findUnique({ where: { id: request.destinationLocationId } });
     }
 
-    if (isClientLoc(sourceLoc) && isClientLoc(destLoc)) {
-      throw new BadRequestException('Client-to-client shipment is strictly prohibited.');
+    if (isProjectLoc(sourceLoc) && isProjectLoc(destLoc)) {
+      throw new BadRequestException('Project-to-project shipment is strictly prohibited.');
     }
-    if (request.requestType === 'DISPATCH' && isClientLoc(sourceLoc)) {
+    if (request.requestType === 'DISPATCH' && isProjectLoc(sourceLoc)) {
       throw new BadRequestException('Dispatch must originate from a warehouse.');
     }
-    if (request.requestType === 'TRANSFER' && (isClientLoc(sourceLoc) || isClientLoc(destLoc))) {
+    if (request.requestType === 'TRANSFER' && (isProjectLoc(sourceLoc) || isProjectLoc(destLoc))) {
       throw new BadRequestException('Transfers are strictly inter-warehouse.');
     }
 
     const shipmentType =
       request.requestType === 'DISPATCH'
-        ? ShipmentType.DISPATCH_TO_CLIENT
+        ? ShipmentType.DISPATCH_TO_PROJECT
         : ShipmentType.WAREHOUSE_TRANSFER;
 
     // Deduct source location stock in shared atomic transaction
@@ -82,7 +84,6 @@ export class ShipmentsService {
         lines: request.lines.map((l: any) => ({
           locationId: request.sourceLocationId,
           productId: l.productId,
-          batchId: l.batchId || undefined,
           condition: l.condition,
           quantity: l.quantity.toNumber(),
           unitName: l.unitNameSnapshot,
@@ -94,7 +95,7 @@ export class ShipmentsService {
     );
 
     if (!receiptConfirmationEnabled) {
-      // D-001: Immediate atomic warehouse-to-client transfer on dispatch approval
+      // D-001: Immediate atomic warehouse-to-project transfer on dispatch approval
       await this.ledgerService.postTransaction(
         {
           transactionType: TransactionType.TRANSFER_RECEIPT,
@@ -104,7 +105,6 @@ export class ShipmentsService {
           lines: request.lines.map((l: any) => ({
             locationId: request.destinationLocationId,
             productId: l.productId,
-            batchId: l.batchId || undefined,
             condition: l.condition,
             quantity: l.quantity.toNumber(),
             unitName: l.unitNameSnapshot,
@@ -127,8 +127,8 @@ export class ShipmentsService {
           lines: {
             create: request.lines.map((l: any) => ({
               productId: l.productId,
-              batchId: l.batchId || null,
               unitName: l.unitNameSnapshot,
+              conversionToBaseSnapshot: l.conversionToBaseSnapshot ?? new Prisma.Decimal(1),
               dispatchedQty: l.quantity,
               receivedQty: l.quantity,
               discrepancyQty: new Prisma.Decimal(0),
@@ -151,8 +151,8 @@ export class ShipmentsService {
         lines: {
           create: request.lines.map((l: any) => ({
             productId: l.productId,
-            batchId: l.batchId || null,
             unitName: l.unitNameSnapshot,
+            conversionToBaseSnapshot: l.conversionToBaseSnapshot ?? new Prisma.Decimal(1),
             dispatchedQty: l.quantity,
             condition: l.condition,
           })),
@@ -189,10 +189,10 @@ export class ShipmentsService {
     }
 
     // Access authorization check on destination
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (shipment.destinationLocation.clientId !== dbUser?.clientId) {
-        throw new ForbiddenException('Cannot receive shipment for another client');
+      if (shipment.destinationLocation.projectId !== dbUser?.projectId) {
+        throw new ForbiddenException('Cannot receive shipment for another project');
       }
     } else if (user.role === UserRole.STORE_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
@@ -269,7 +269,7 @@ export class ShipmentsService {
           },
           destinationLocation: {
             include: {
-              client: { select: { id: true, name: true } },
+              project: { select: { id: true, name: true } },
               warehouse: { select: { id: true, name: true } },
             },
           },
@@ -279,7 +279,7 @@ export class ShipmentsService {
       return this.formatShipment(updated);
     });
     const shpNumber = (shipment as any).shipmentNumber || `SHP-${shipment.id.slice(0, 8).toUpperCase()}`;
-    const destName = (shipment.destinationLocation as any)?.client?.name || (shipment.destinationLocation as any)?.warehouse?.name || 'Client Facility';
+    const destName = (shipment.destinationLocation as any)?.project?.name || (shipment.destinationLocation as any)?.warehouse?.name || 'Project Facility';
     const linesSummary = shipment.lines
       .slice(0, 2)
       .map((l: any) => `${Number(l.dispatchedQty)} ${l.unitName || 'units'} of ${l.productName || 'Item'}`)
@@ -303,7 +303,7 @@ export class ShipmentsService {
 
   /**
    * Super Admin approves receipt.
-   * D-002: Received quantity credits client usable stock; discrepancies enter DISCREPANCY_HOLD.
+   * D-002: Received quantity credits project usable stock; discrepancies enter DISCREPANCY_HOLD.
    */
   async approveReceipt(
     user: AuthenticatedUser,
@@ -326,7 +326,7 @@ export class ShipmentsService {
         },
         destinationLocation: {
           include: {
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
             warehouse: { select: { id: true, name: true } },
           },
         },
@@ -358,7 +358,6 @@ export class ShipmentsService {
         .map((l) => ({
           locationId: shipment.destinationLocationId,
           productId: l.productId,
-          batchId: l.batchId || undefined,
           condition: l.condition,
           quantity: l.receivedQty!.toNumber(),
           unitName: l.unitName,
@@ -384,10 +383,9 @@ export class ShipmentsService {
         (l) => l.discrepancyQty && !l.discrepancyQty.isZero(),
       );
 
-      const nextStatus =
-        hasDiscrepancy && dto.holdDiscrepancy !== false
-          ? ShipmentStatus.DISCREPANCY_HOLD
-          : ShipmentStatus.COMPLETED;
+      const nextStatus = hasDiscrepancy
+        ? ShipmentStatus.DISCREPANCY_HOLD
+        : ShipmentStatus.COMPLETED;
 
       if (automated) {
         await tx.auditEvent.create({ data: {
@@ -413,7 +411,7 @@ export class ShipmentsService {
           },
           destinationLocation: {
             include: {
-              client: { select: { id: true, name: true } },
+              project: { select: { id: true, name: true } },
               warehouse: { select: { id: true, name: true } },
             },
           },
@@ -422,14 +420,118 @@ export class ShipmentsService {
 
       return this.formatShipment(updated);
     });
-    await this.notificationsService.notifyClientAdmins(
-      shipment.destinationLocation?.clientId,
+    await this.notificationsService.notifyProjectAdmins(
+      shipment.destinationLocation?.projectId,
       'Shipment receipt approved',
       'Your confirmed shipment quantities were approved and added to stock.',
       'SHIPMENT',
       shipment.id,
     );
     return approved;
+  }
+
+  /** Super Admin makes one immutable final decision for every shortage line on a shipment. */
+  async resolveDiscrepancy(
+    user: AuthenticatedUser,
+    shipmentId: string,
+    dto: ResolveDiscrepancyDto,
+  ) {
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Super Admin can resolve shipment discrepancies');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const shipment = await tx.shipment.findUnique({
+        where: { id: shipmentId },
+        include: {
+          lines: { include: { product: { include: { units: { where: { isBaseUnit: true, status: 'ACTIVE' }, take: 1 } } } } },
+          sourceLocation: true,
+          destinationLocation: { include: { project: { select: { id: true, name: true } }, warehouse: { select: { id: true, name: true } } } },
+        },
+      });
+      if (!shipment) throw new NotFoundException(`Shipment ${shipmentId} not found`);
+
+      if (shipment.discrepancyResolution) {
+        if (shipment.discrepancyResolution === dto.resolution) return shipment;
+        throw new ConflictException('This shipment discrepancy has already been resolved with the other decision');
+      }
+      if (shipment.status !== ShipmentStatus.DISCREPANCY_HOLD) {
+        throw new ConflictException('Shipment must be on discrepancy hold before it can be resolved');
+      }
+
+      const shortageLines = shipment.lines.filter((line) => line.discrepancyQty && line.discrepancyQty.greaterThan(0));
+      if (shortageLines.length === 0) {
+        throw new ConflictException('Shipment has no outstanding discrepancy quantities');
+      }
+
+      if (dto.resolution === DiscrepancyResolution.CALCULATION_MISTAKE) {
+        if (!shipment.sourceLocation.warehouseId) {
+          throw new BadRequestException('Calculation-mistake resolution requires a warehouse source location');
+        }
+        await this.ledgerService.postTransaction({
+          transactionType: TransactionType.STOCK_IN,
+          idempotencyKey: `shipment-discrepancy-return-${shipment.id}`,
+          sourceRefType: 'SHIPMENT_DISCREPANCY',
+          sourceRefId: shipment.id,
+          reason: 'Super Admin resolved shipment discrepancy as a calculation mistake; shortage returned to source warehouse.',
+          lines: shortageLines.map((line) => {
+            const baseUnit = line.product.units[0];
+            if (!baseUnit) throw new BadRequestException(`Product ${line.product.name} has no active base unit`);
+            return {
+              locationId: shipment.sourceLocationId,
+              productId: line.productId,
+              condition: line.condition,
+              quantity: line.discrepancyQty!.mul(line.conversionToBaseSnapshot).toNumber(),
+              unitName: baseUnit.unitName,
+              direction: 'IN' as const,
+            };
+          }),
+        }, user.id, tx);
+      }
+
+      const resolvedAt = new Date();
+      const updatedCount = await tx.shipment.updateMany({
+        where: { id: shipment.id, status: ShipmentStatus.DISCREPANCY_HOLD, discrepancyResolution: null },
+        data: {
+          status: ShipmentStatus.COMPLETED,
+          discrepancyResolution: dto.resolution as ShipmentDiscrepancyResolution,
+          discrepancyResolvedAt: resolvedAt,
+          discrepancyResolvedById: user.id,
+          discrepancyResolutionNote: dto.note?.trim() || null,
+        },
+      });
+      if (updatedCount.count !== 1) {
+        throw new ConflictException('Shipment discrepancy was resolved by another request; refresh and retry');
+      }
+
+      await tx.auditEvent.create({ data: {
+        actorUserId: user.id,
+        action: dto.resolution === DiscrepancyResolution.MISSING
+          ? 'SHIPMENT_DISCREPANCY_MARKED_MISSING'
+          : 'SHIPMENT_DISCREPANCY_RETURNED_TO_WAREHOUSE',
+        entityType: 'SHIPMENT',
+        entityId: shipment.id,
+        beforeJson: { status: shipment.status },
+        afterJson: {
+          status: ShipmentStatus.COMPLETED,
+          resolution: dto.resolution,
+          lines: shortageLines.map((line) => ({ productId: line.productId, quantity: line.discrepancyQty!.toString(), unit: line.unitName })),
+          resolvedAt: resolvedAt.toISOString(),
+        },
+        reason: dto.note?.trim() || null,
+      } });
+
+      return tx.shipment.findUnique({
+        where: { id: shipment.id },
+        include: {
+          lines: { include: { product: { select: { id: true, name: true } } } },
+          sourceLocation: { include: { warehouse: { select: { id: true, name: true } } } },
+          destinationLocation: { include: { project: { select: { id: true, name: true } }, warehouse: { select: { id: true, name: true } } } },
+        },
+      });
+    });
+
+    return this.formatShipment(result);
   }
 
   private formatShipment(shipment: any) {
@@ -442,7 +544,7 @@ export class ShipmentsService {
       shipment.sourceWarehouseName ||
       'Central Warehouse';
     const destinationName =
-      shipment.destinationLocation?.client?.name ||
+      shipment.destinationLocation?.project?.name ||
       shipment.destinationLocation?.warehouse?.name ||
       shipment.destinationName ||
       'Destination Facility';
@@ -488,11 +590,11 @@ export class ShipmentsService {
         { sourceLocationId: location.id },
         { destinationLocationId: location.id },
       ];
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.clientId) return [];
+      if (!dbUser?.projectId) return [];
       const location = await this.prisma.stockLocation.findUnique({
-        where: { clientId: dbUser.clientId },
+        where: { projectId: dbUser.projectId },
       });
       if (!location) return [];
       where.destinationLocationId = location.id;
@@ -515,7 +617,7 @@ export class ShipmentsService {
         },
         destinationLocation: {
           include: {
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
             warehouse: { select: { id: true, name: true } },
           },
         },
@@ -537,7 +639,7 @@ export class ShipmentsService {
         },
         destinationLocation: {
           include: {
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
             warehouse: { select: { id: true, name: true } },
           },
         },
@@ -560,13 +662,13 @@ export class ShipmentsService {
       ) {
         throw new ForbiddenException('Access denied to shipment from another warehouse');
       }
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
       const location = await this.prisma.stockLocation.findUnique({
-        where: { clientId: dbUser?.clientId || '' },
+        where: { projectId: dbUser?.projectId || '' },
       });
       if (shipment.destinationLocationId !== location?.id) {
-        throw new ForbiddenException('Access denied to shipment for another client');
+        throw new ForbiddenException('Access denied to shipment for another project');
       }
     }
 

@@ -4,10 +4,10 @@ import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 export enum ReportType {
   STOCK_BALANCE = 'STOCK_BALANCE',
   INVENTORY_LEDGER = 'INVENTORY_LEDGER',
-  BATCH_EXPIRY = 'BATCH_EXPIRY',
-  CLIENT_CONSUMPTION = 'CLIENT_CONSUMPTION',
+  PROJECT_CONSUMPTION = 'PROJECT_CONSUMPTION',
   PRODUCTION_RUNS = 'PRODUCTION_RUNS',
   SHIPMENTS = 'SHIPMENTS',
+  MISSING_STOCK = 'MISSING_STOCK',
 }
 
 export enum ReportFormat {
@@ -32,10 +32,10 @@ export class QueryReportDto {
   @IsUUID('4')
   productId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by Client UUID (Super Admin only)' })
+  @ApiPropertyOptional({ description: 'Filter by Project UUID (Super Admin only)' })
   @IsOptional()
   @IsUUID('4')
-  clientId?: string;
+  projectId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by Warehouse UUID (Super Admin only)' })
   @IsOptional()

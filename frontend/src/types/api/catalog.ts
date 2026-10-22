@@ -8,16 +8,15 @@ export interface ProductDto {
   kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
   category?: CategoryDto;
   categoryName?: string;
-  ownerScope?: 'COMPANY' | 'CLIENT';
-  clientId?: string | null;
-  client?: { id: string; name: string } | null;
+  ownerScope?: 'COMPANY' | 'PROJECT';
+  projectId?: string | null;
+  project?: { id: string; name: string } | null;
   baseUnit: string;
   minThreshold: number;
   minQuantity?: number | string;
   minOrderQuantity?: number | string;
   isActive: boolean;
   status?: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
-  trackingMode?: 'NONE' | 'BATCH_ONLY' | 'EXPIRY_ONLY' | 'BOTH';
   quantityPrecision?: number;
   allowFractional?: boolean;
   createdAt: string;
@@ -31,8 +30,8 @@ export interface CategoryDto {
   name: string;
   description?: string;
   parentId?: string | null;
-  ownerScope?: 'COMPANY' | 'CLIENT';
-  clientId?: string | null;
+  ownerScope?: 'COMPANY' | 'PROJECT';
+  projectId?: string | null;
   parent?: CategoryDto | null;
   children?: CategoryDto[];
 }
@@ -73,7 +72,6 @@ export interface CreateProductDto {
   description?: string;
   quantityPrecision: number;
   allowFractional: boolean;
-  trackingMode: 'NONE' | 'BATCH_ONLY' | 'EXPIRY_ONLY' | 'BOTH';
   minQuantity?: number;
   minOrderQuantity?: number;
   attributes?: ProductAttributeDto[];

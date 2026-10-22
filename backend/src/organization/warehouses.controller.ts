@@ -33,7 +33,7 @@ export class WarehousesController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List warehouses within authorized caller scope' })
   findAll(@CurrentUser() user: AuthenticatedUser) {
     return this.warehousesService.findAll(user);

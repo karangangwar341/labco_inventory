@@ -25,7 +25,7 @@ export const queryKeys = {
     product: (id: string) => ['catalog', 'product', id] as const,
     categories: (scope?: string) => ['catalog', 'categories', scope || 'all'] as const,
     units: () => ['catalog', 'units'] as const,
-    manufacturingOptions: (clientId?: string) => ['catalog', 'manufacturing-options', clientId || 'current-client'] as const,
+    manufacturingOptions: (projectId?: string) => ['catalog', 'manufacturing-options', projectId || 'current-project'] as const,
   },
 
   // Stock Requests
@@ -60,9 +60,9 @@ export const queryKeys = {
   // Departments
   departments: {
     all: ['departments'] as const,
-    list: (clientId?: string) => ['departments', 'list', clientId || 'default'] as const,
-    issues: (clientId?: string) => ['departments', 'issues', clientId || 'default'] as const,
-    issueDraft: (clientId?: string) => ['departments', 'issue-draft', clientId || 'default'] as const,
+    list: (projectId?: string) => ['departments', 'list', projectId || 'default'] as const,
+    issues: (projectId?: string) => ['departments', 'issues', projectId || 'default'] as const,
+    issueDraft: (projectId?: string) => ['departments', 'issue-draft', projectId || 'default'] as const,
   },
 
   // Manufacturing / Production Runs
@@ -70,7 +70,7 @@ export const queryKeys = {
     all: ['manufacturing'] as const,
     list: (scope?: string, filters?: Record<string, unknown>) =>
       ['manufacturing', 'list', { scope: scope || 'default', ...filters }] as const,
-    cycles: (clientId?: string) => ['manufacturing', 'cycles', clientId || 'default'] as const,
+    cycles: (projectId?: string) => ['manufacturing', 'cycles', projectId || 'default'] as const,
     analytics: (filters?: Record<string, unknown>) => ['manufacturing', 'analytics', { ...filters }] as const,
     detail: (id: string) => ['manufacturing', 'detail', id] as const,
   },
@@ -95,8 +95,8 @@ export const queryKeys = {
   administration: {
     all: ['administration'] as const,
     users: () => ['administration', 'users'] as const,
-    clients: () => ['administration', 'clients'] as const,
-    client: (id: string) => ['administration', 'client', id] as const,
+    projects: () => ['administration', 'projects'] as const,
+    project: (id: string) => ['administration', 'project', id] as const,
     warehouses: () => ['administration', 'warehouses'] as const,
   },
 
@@ -107,12 +107,12 @@ export const queryKeys = {
       ['reports', reportType, { ...params }] as const,
   },
 
-  // Client Staff & HR Management
+  // Project Staff & HR Management
   staff: {
     all: ['staff'] as const,
-    list: (clientId?: string) => ['staff', 'list', clientId || 'default'] as const,
+    list: (projectId?: string) => ['staff', 'list', projectId || 'default'] as const,
     detail: (id: string) => ['staff', 'detail', id] as const,
-    workLogs: (clientId?: string) => ['staff', 'work-logs', clientId || 'default'] as const,
+    workLogs: (projectId?: string) => ['staff', 'work-logs', projectId || 'default'] as const,
     staffWorkLogs: (staffId: string) => ['staff', staffId, 'work-logs'] as const,
   },
 };

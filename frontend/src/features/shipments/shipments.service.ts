@@ -6,6 +6,7 @@ import {
   ReceiveShipmentDto,
   ApproveReceiptDto,
   ShipmentStatus,
+  ResolveDiscrepancyDto,
 } from './shipments.types';
 
 export const shipmentsService = {
@@ -46,5 +47,9 @@ export const shipmentsService = {
     } catch (err) {
       throw err;
     }
+  },
+
+  resolveDiscrepancy: async (id: string, dto: ResolveDiscrepancyDto): Promise<Shipment> => {
+    return apiClient.post<Shipment>(endpoints.shipments.resolveDiscrepancy(id), dto);
   },
 };

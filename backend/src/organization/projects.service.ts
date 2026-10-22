@@ -5,27 +5,27 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CreateClientDto } from './dto/create-client.dto.js';
-import { UpdateClientDto } from './dto/update-client.dto.js';
+import { CreateProjectDto } from './dto/create-project.dto.js';
+import { UpdateProjectDto } from './dto/update-project.dto.js';
 import { UserRole, OrganizationStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 
 @Injectable()
-export class ClientsService {
+export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateClientDto) {
+  async create(dto: CreateProjectDto) {
     const normalizedName = dto.name.trim();
 
-    const existing = await this.prisma.client.findUnique({
+    const existing = await this.prisma.project.findUnique({
       where: { name: normalizedName },
     });
 
     if (existing) {
-      throw new ConflictException(`Client with name "${normalizedName}" already exists`);
+      throw new ConflictException(`Project with name "${normalizedName}" already exists`);
     }
 
-    return this.prisma.client.create({
+    return this.prisma.project.create({
       data: {
         name: normalizedName,
         status: OrganizationStatus.ACTIVE,
@@ -35,7 +35,7 @@ export class ClientsService {
 
   async findAll(currentUser: AuthenticatedUser) {
     if (currentUser.role === UserRole.SUPER_ADMIN) {
-      return this.prisma.client.findMany({
+      return this.prisma.project.findMany({
         orderBy: { name: 'asc' },
         include: {
           warehouseAssignments: {
@@ -46,41 +46,41 @@ export class ClientsService {
       });
     }
 
-    if (currentUser.role === UserRole.CLIENT_ADMIN) {
-      // Find client assigned to this client admin
+    if (currentUser.role === UserRole.PROJECT_ADMIN) {
+      // Find project assigned to this project admin
       const user = await this.prisma.user.findUnique({
         where: { id: currentUser.id },
       });
 
-      if (!user?.clientId) {
+      if (!user?.projectId) {
         return [];
       }
 
-      return this.prisma.client.findMany({
-        where: { id: user.clientId },
+      return this.prisma.project.findMany({
+        where: { id: user.projectId },
         include: {
           warehouseAssignments: {
             where: { isActive: true },
-            // Note REQ: Client Admin inbound views hide warehouse identity, but allowed warehouses metadata can be scoped
+            // Note REQ: Project Admin inbound views hide warehouse identity, but allowed warehouses metadata can be scoped
           },
         },
       });
     }
 
-    throw new ForbiddenException('Store Admin cannot list client directory');
+    throw new ForbiddenException('Store Admin cannot list project directory');
   }
 
   async findById(id: string, currentUser: AuthenticatedUser) {
-    if (currentUser.role === UserRole.CLIENT_ADMIN) {
+    if (currentUser.role === UserRole.PROJECT_ADMIN) {
       const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (user?.clientId !== id) {
-        throw new ForbiddenException('Access denied to other client organization data');
+      if (user?.projectId !== id) {
+        throw new ForbiddenException('Access denied to other project organization data');
       }
     } else if (currentUser.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Store Admin cannot view client organization');
+      throw new ForbiddenException('Store Admin cannot view project organization');
     }
 
-    const client = await this.prisma.client.findUnique({
+    const project = await this.prisma.project.findUnique({
       where: { id },
       include: {
         warehouseAssignments: {
@@ -90,28 +90,28 @@ export class ClientsService {
       },
     });
 
-    if (!client) {
-      throw new NotFoundException(`Client not found`);
+    if (!project) {
+      throw new NotFoundException(`Project not found`);
     }
 
-    return client;
+    return project;
   }
 
-  async update(id: string, dto: UpdateClientDto) {
-    const client = await this.prisma.client.findUnique({ where: { id } });
-    if (!client) {
-      throw new NotFoundException(`Client not found`);
+  async update(id: string, dto: UpdateProjectDto) {
+    const project = await this.prisma.project.findUnique({ where: { id } });
+    if (!project) {
+      throw new NotFoundException(`Project not found`);
     }
 
     if (dto.name) {
       const normalizedName = dto.name.trim();
-      const existing = await this.prisma.client.findUnique({ where: { name: normalizedName } });
+      const existing = await this.prisma.project.findUnique({ where: { name: normalizedName } });
       if (existing && existing.id !== id) {
-        throw new ConflictException(`Client name "${normalizedName}" is already taken`);
+        throw new ConflictException(`Project name "${normalizedName}" is already taken`);
       }
     }
 
-    return this.prisma.client.update({
+    return this.prisma.project.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
@@ -120,28 +120,28 @@ export class ClientsService {
     });
   }
 
-  async assignWarehouse(clientId: string, warehouseId: string, changedById: string) {
-    const client = await this.prisma.client.findUnique({ where: { id: clientId } });
-    if (!client) throw new NotFoundException('Client not found');
+  async assignWarehouse(projectId: string, warehouseId: string, changedById: string) {
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Project not found');
 
     const warehouse = await this.prisma.warehouse.findUnique({ where: { id: warehouseId } });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
 
-    const existingActive = await this.prisma.clientWarehouseAssignment.findFirst({
+    const existingActive = await this.prisma.projectWarehouseAssignment.findFirst({
       where: {
-        clientId,
+        projectId,
         warehouseId,
         isActive: true,
       },
     });
 
     if (existingActive) {
-      throw new ConflictException('Warehouse is already actively assigned to this client');
+      throw new ConflictException('Warehouse is already actively assigned to this project');
     }
 
-    return this.prisma.clientWarehouseAssignment.create({
+    return this.prisma.projectWarehouseAssignment.create({
       data: {
-        clientId,
+        projectId,
         warehouseId,
         isActive: true,
         activeFrom: new Date(),
@@ -153,10 +153,10 @@ export class ClientsService {
     });
   }
 
-  async deactivateWarehouseAssignment(clientId: string, warehouseId: string, changedById: string) {
-    const existingActive = await this.prisma.clientWarehouseAssignment.findFirst({
+  async deactivateWarehouseAssignment(projectId: string, warehouseId: string, changedById: string) {
+    const existingActive = await this.prisma.projectWarehouseAssignment.findFirst({
       where: {
-        clientId,
+        projectId,
         warehouseId,
         isActive: true,
       },
@@ -166,7 +166,7 @@ export class ClientsService {
       throw new NotFoundException('Active warehouse assignment not found');
     }
 
-    return this.prisma.clientWarehouseAssignment.update({
+    return this.prisma.projectWarehouseAssignment.update({
       where: { id: existingActive.id },
       data: {
         isActive: false,

@@ -20,18 +20,18 @@ export class CategoriesService {
 
     const normalizedName = dto.name.trim();
     let ownerScope: CatalogScope = CatalogScope.COMPANY;
-    let clientId: string | null = null;
+    let projectId: string | null = null;
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      ownerScope = CatalogScope.CLIENT;
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      ownerScope = CatalogScope.PROJECT;
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { clientId: true },
+        select: { projectId: true },
       });
-      if (!dbUser?.clientId) {
-        throw new ForbiddenException('Client Admin must belong to an organization');
+      if (!dbUser?.projectId) {
+        throw new ForbiddenException('Project Admin must belong to an organization');
       }
-      clientId = dbUser.clientId;
+      projectId = dbUser.projectId;
     }
 
     if (dto.parentId) {
@@ -45,10 +45,10 @@ export class CategoriesService {
         throw new ConflictException('Categories can only have one level of subcategories. Choose a main category as the parent.');
       }
       if (ownerScope === CatalogScope.COMPANY && parent.ownerScope !== CatalogScope.COMPANY) {
-        throw new ForbiddenException('Company categories cannot be nested under client categories');
+        throw new ForbiddenException('Company categories cannot be nested under project categories');
       }
-      if (ownerScope === CatalogScope.CLIENT && (parent.ownerScope !== CatalogScope.CLIENT || parent.clientId !== clientId)) {
-        throw new ForbiddenException('Client categories can only be nested under a category owned by the same client');
+      if (ownerScope === CatalogScope.PROJECT && (parent.ownerScope !== CatalogScope.PROJECT || parent.projectId !== projectId)) {
+        throw new ForbiddenException('Project categories can only be nested under a category owned by the same project');
       }
     }
 
@@ -56,7 +56,7 @@ export class CategoriesService {
       where: {
         name: normalizedName,
         ownerScope,
-        clientId,
+        projectId,
       },
     });
 
@@ -71,7 +71,7 @@ export class CategoriesService {
         name: normalizedName,
         parentId: dto.parentId || null,
         ownerScope,
-        clientId,
+        projectId,
       },
       include: {
         parent: true,
@@ -85,7 +85,7 @@ export class CategoriesService {
   private categoriesCache = new Map<string, { data: any[]; expiresAt: number }>();
 
   async findAll(user: AuthenticatedUser) {
-    const cacheKey = `${user.role}_${user.id}_${user.clientId || ''}`;
+    const cacheKey = `${user.role}_${user.id}_${user.projectId || ''}`;
     const cached = this.categoriesCache.get(cacheKey);
     const now = Date.now();
     if (cached && now < cached.expiresAt) {
@@ -105,16 +105,16 @@ export class CategoriesService {
         orderBy: { name: 'asc' },
         include: { children: true },
       });
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { clientId: true },
+        select: { projectId: true },
       });
 
       categories = await this.prisma.category.findMany({
         where: {
-          ownerScope: CatalogScope.CLIENT,
-          clientId: dbUser?.clientId || '',
+          ownerScope: CatalogScope.PROJECT,
+          projectId: dbUser?.projectId || '',
         },
         orderBy: { name: 'asc' },
         include: { children: true },

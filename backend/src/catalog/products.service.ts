@@ -14,15 +14,15 @@ import type { AuthenticatedUser } from '../auth/decorators/current-user.decorato
 
 export function computeDuplicateKey(params: {
   ownerScope: CatalogScope;
-  clientId?: string | null;
+  projectId?: string | null;
   name: string;
   categoryId: string;
   brand?: string | null;
   attributes?: { attributeName: string; value: string }[];
 }): string {
   const scopePart =
-    params.ownerScope === CatalogScope.CLIENT
-      ? `client:${params.clientId}`
+    params.ownerScope === CatalogScope.PROJECT
+      ? `project:${params.projectId}`
       : 'company';
   const namePart = params.name.trim().toLowerCase();
   const categoryPart = params.categoryId;
@@ -61,7 +61,6 @@ export class ProductsService {
       categoryId: dto.categoryId,
       quantityPrecision: dto.quantityPrecision,
       allowFractional: dto.allowFractional,
-      trackingMode: dto.trackingMode,
       minQuantity: String(dto.minQuantity || 0),
       minOrderQuantity: String(dto.minOrderQuantity || 1),
       attributes: (dto.attributes || []).map((attribute, index) => ({
@@ -100,8 +99,8 @@ export class ProductsService {
     if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException('Store Admin cannot create or edit products');
     }
-    if (user.role === UserRole.CLIENT_ADMIN && dto.kind !== 'MANUFACTURED_PRODUCT') {
-      throw new BadRequestException('Client Admins can create manufactured products only');
+    if (user.role === UserRole.PROJECT_ADMIN && dto.kind !== 'MANUFACTURED_PRODUCT') {
+      throw new BadRequestException('Project Admins can create manufactured products only');
     }
 
     this.validateUnits(dto);
@@ -116,41 +115,41 @@ export class ProductsService {
     }
 
     let ownerScope: CatalogScope = CatalogScope.COMPANY;
-    let clientId: string | null = null;
+    let projectId: string | null = null;
     let initialStatus: ProductStatus = ProductStatus.APPROVED; // Super Admin company products are immediately approved
 
     if (user.role === UserRole.SUPER_ADMIN) {
-      if (dto.kind === 'MANUFACTURED_PRODUCT' || dto.clientId) {
-        ownerScope = CatalogScope.CLIENT;
-        if (dto.clientId) {
-          clientId = dto.clientId;
+      if (dto.kind === 'MANUFACTURED_PRODUCT' || dto.projectId) {
+        ownerScope = CatalogScope.PROJECT;
+        if (dto.projectId) {
+          projectId = dto.projectId;
         } else {
-          const firstClient = await this.prisma.client.findFirst({
+          const firstProject = await this.prisma.project.findFirst({
             where: { status: 'ACTIVE' },
             orderBy: { createdAt: 'asc' },
           });
-          clientId = firstClient?.id || null;
+          projectId = firstProject?.id || null;
         }
       }
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      ownerScope = CatalogScope.CLIENT;
-      initialStatus = ProductStatus.PENDING_APPROVAL; // Client products require Super Admin approval
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      ownerScope = CatalogScope.PROJECT;
+      initialStatus = ProductStatus.PENDING_APPROVAL; // Project products require Super Admin approval
 
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { clientId: true },
+        select: { projectId: true },
       });
-      if (!dbUser?.clientId) {
-        throw new ForbiddenException('Client Admin must belong to an organization');
+      if (!dbUser?.projectId) {
+        throw new ForbiddenException('Project Admin must belong to an organization');
       }
-      clientId = dbUser.clientId;
+      projectId = dbUser.projectId;
     }
 
     const rootScope = category.parent ? category.parent.ownerScope : category.ownerScope;
-    const rootClientId = category.parent ? category.parent.clientId : category.clientId;
+    const rootProjectId = category.parent ? category.parent.projectId : category.projectId;
     if (
       (ownerScope === CatalogScope.COMPANY && (category.ownerScope !== CatalogScope.COMPANY || rootScope !== CatalogScope.COMPANY)) ||
-      (ownerScope === CatalogScope.CLIENT && (category.ownerScope !== CatalogScope.CLIENT || (clientId && category.clientId !== clientId) || (clientId && rootClientId !== clientId)))
+      (ownerScope === CatalogScope.PROJECT && (category.ownerScope !== CatalogScope.PROJECT || (projectId && category.projectId !== projectId) || (projectId && rootProjectId !== projectId)))
     ) {
       throw new ForbiddenException('Choose a category available in your catalog');
     }
@@ -158,7 +157,7 @@ export class ProductsService {
     // Compute deterministic duplicate key (D-003)
     const duplicateKey = computeDuplicateKey({
       ownerScope,
-      clientId,
+      projectId,
       name: dto.name,
       categoryId: dto.categoryId,
       brand: dto.brand,
@@ -185,11 +184,10 @@ export class ProductsService {
         categoryId: dto.categoryId,
         kind: dto.kind,
         ownerScope,
-        clientId,
+        projectId,
         status: initialStatus,
         quantityPrecision: dto.quantityPrecision,
         allowFractional: dto.allowFractional,
-        trackingMode: dto.trackingMode,
         minQuantity: new Prisma.Decimal(dto.minQuantity || 0),
         minOrderQuantity: new Prisma.Decimal(dto.minOrderQuantity || 1),
         duplicateKey,
@@ -228,10 +226,10 @@ export class ProductsService {
         units: true,
       },
     });
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       await this.notificationsService.notifySuperAdmins(
         'Product awaiting approval',
-        `A client submitted “${created.name}” for catalog approval.`,
+        `A project submitted “${created.name}” for catalog approval.`,
         'PRODUCT',
         created.id,
       );
@@ -258,13 +256,13 @@ export class ProductsService {
       throw new BadRequestException('Product type cannot be changed after creation. Create a separate product for the other type.');
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { clientId: true },
+        select: { projectId: true },
       });
-      if (product.ownerScope !== CatalogScope.CLIENT || product.clientId !== dbUser?.clientId) {
-        throw new ForbiddenException('You can only edit products in your client catalog');
+      if (product.ownerScope !== CatalogScope.PROJECT || product.projectId !== dbUser?.projectId) {
+        throw new ForbiddenException('You can only edit products in your project catalog');
       }
     }
 
@@ -274,18 +272,18 @@ export class ProductsService {
     });
     if (!category) throw new NotFoundException('Category not found');
     const rootScope = category.parent ? category.parent.ownerScope : category.ownerScope;
-    const rootClientId = category.parent ? category.parent.clientId : category.clientId;
+    const rootProjectId = category.parent ? category.parent.projectId : category.projectId;
     if (
       (product.ownerScope === CatalogScope.COMPANY && (category.ownerScope !== CatalogScope.COMPANY || rootScope !== CatalogScope.COMPANY)) ||
-      (product.ownerScope === CatalogScope.CLIENT && category.id !== product.categoryId &&
-        (category.ownerScope !== CatalogScope.CLIENT || category.clientId !== product.clientId || rootClientId !== product.clientId))
+      (product.ownerScope === CatalogScope.PROJECT && category.id !== product.categoryId &&
+        (category.ownerScope !== CatalogScope.PROJECT || category.projectId !== product.projectId || rootProjectId !== product.projectId))
     ) {
       throw new ForbiddenException('Choose a category available in this catalog');
     }
 
     const duplicateKey = computeDuplicateKey({
       ownerScope: product.ownerScope,
-      clientId: product.clientId,
+      projectId: product.projectId,
       name: dto.name,
       categoryId: dto.categoryId,
       brand: dto.brand,
@@ -317,7 +315,6 @@ export class ProductsService {
         categoryId: product.categoryId,
         quantityPrecision: product.quantityPrecision,
         allowFractional: product.allowFractional,
-        trackingMode: product.trackingMode,
         minQuantity: product.minQuantity.toString(),
         minOrderQuantity: (product.minOrderQuantity || 1).toString(),
         attributes: product.attributes.map(({ attributeName, value, unit, sortOrder }) => ({ attributeName, value, unit, sortOrder })),
@@ -393,13 +390,13 @@ export class ProductsService {
 
     const specification = version.specification as unknown as {
       name: string; kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT'; brand: string | null; description: string | null; categoryId: string;
-      quantityPrecision: number; allowFractional: boolean; trackingMode: 'NONE' | 'BATCH_ONLY' | 'EXPIRY_ONLY' | 'BOTH';
+      quantityPrecision: number; allowFractional: boolean;
       minQuantity: string; minOrderQuantity?: string; attributes: Array<{ attributeName: string; value: string; unit: string | null; sortOrder: number }>;
       units: Array<{ unitName: string; isBaseUnit: boolean; conversionToBase: string }>;
     };
     const duplicateKey = computeDuplicateKey({
       ownerScope: version.product.ownerScope,
-      clientId: version.product.clientId,
+      projectId: version.product.projectId,
       name: specification.name,
       categoryId: specification.categoryId,
       brand: specification.brand,
@@ -422,7 +419,6 @@ export class ProductsService {
           categoryId: specification.categoryId,
           quantityPrecision: specification.quantityPrecision,
           allowFractional: specification.allowFractional,
-          trackingMode: specification.trackingMode,
           minQuantity: new Prisma.Decimal(specification.minQuantity),
           minOrderQuantity: new Prisma.Decimal(specification.minOrderQuantity || 1),
           duplicateKey,
@@ -492,7 +488,7 @@ export class ProductsService {
           category: true,
           attributes: true,
           units: true,
-          client: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
           versions: {
             where: { status: ProductVersionStatus.PENDING_APPROVAL },
             select: { id: true, versionNumber: true, status: true, changeReason: true, createdAt: true },
@@ -503,7 +499,7 @@ export class ProductsService {
         orderBy: { name: 'asc' },
       });
     } else if (user.role === UserRole.STORE_ADMIN) {
-      // Store Admins only handle company raw materials; manufactured goods belong to clients.
+      // Store Admins only handle company raw materials; manufactured goods belong to projects.
       where.ownerScope = CatalogScope.COMPANY;
       where.kind = ProductKind.RAW_MATERIAL;
       where.status = ProductStatus.APPROVED;
@@ -523,18 +519,18 @@ export class ProductsService {
         },
         orderBy: { name: 'asc' },
       });
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientOrgId =
-        user.clientId ||
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectOrgId =
+        user.projectId ||
         (
           await this.prisma.user.findUnique({
             where: { id: user.id },
-            select: { clientId: true },
+            select: { projectId: true },
           })
-        )?.clientId ||
+        )?.projectId ||
         '';
 
-      // Client Admin sees approved company products OR products for their client
+      // Project Admin sees approved company products OR products for their project
       results = await this.prisma.product.findMany({
         where: {
           AND: [
@@ -542,7 +538,7 @@ export class ProductsService {
             {
               OR: [
                 { ownerScope: CatalogScope.COMPANY, status: ProductStatus.APPROVED },
-                { ownerScope: CatalogScope.CLIENT, clientId: clientOrgId },
+                { ownerScope: CatalogScope.PROJECT, projectId: projectOrgId },
               ],
             },
           ],
@@ -568,40 +564,40 @@ export class ProductsService {
 
   async getManufacturingOptions(
     user: AuthenticatedUser,
-    explicitClientId?: string,
+    explicitProjectId?: string,
   ) {
     if (
-      user.role !== UserRole.CLIENT_ADMIN &&
+      user.role !== UserRole.PROJECT_ADMIN &&
       user.role !== UserRole.SUPER_ADMIN
     ) {
       throw new ForbiddenException(
-        'Manufacturing options are available to Client Admins and Super Admins',
+        'Manufacturing options are available to Project Admins and Super Admins',
       );
     }
 
-    let clientId =
-      (user.role === UserRole.SUPER_ADMIN ? explicitClientId : null) ||
-      user.clientId ||
+    let projectId =
+      (user.role === UserRole.SUPER_ADMIN ? explicitProjectId : null) ||
+      user.projectId ||
       (
         await this.prisma.user.findUnique({
           where: { id: user.id },
-          select: { clientId: true },
+          select: { projectId: true },
         })
-      )?.clientId;
+      )?.projectId;
 
-    if (!clientId && user.role === UserRole.SUPER_ADMIN) {
-      clientId = (await this.prisma.client.findFirst({ where: { status: 'ACTIVE' } }))?.id;
+    if (!projectId && user.role === UserRole.SUPER_ADMIN) {
+      projectId = (await this.prisma.project.findFirst({ where: { status: 'ACTIVE' } }))?.id;
     }
 
-    if (!clientId) {
-      throw new ForbiddenException('Client Admin must belong to an organization');
+    if (!projectId) {
+      throw new ForbiddenException('Project Admin must belong to an organization');
     }
 
-    const location = await this.prisma.stockLocation.findUnique({ where: { clientId } });
+    const location = await this.prisma.stockLocation.findUnique({ where: { projectId } });
     const catalogScope: Prisma.ProductWhereInput = {
       OR: [
         { ownerScope: CatalogScope.COMPANY },
-        { ownerScope: CatalogScope.CLIENT, clientId },
+        { ownerScope: CatalogScope.PROJECT, projectId },
       ],
     };
     const [rawMaterials, manufacturedProducts] = await Promise.all([
@@ -626,8 +622,8 @@ export class ProductsService {
         where: {
           kind: ProductKind.MANUFACTURED_PRODUCT,
           status: ProductStatus.APPROVED,
-          ownerScope: CatalogScope.CLIENT,
-          clientId,
+          ownerScope: CatalogScope.PROJECT,
+          projectId,
         },
         include: { category: true, attributes: true, units: true },
         orderBy: { name: 'asc' },
@@ -644,7 +640,7 @@ export class ProductsService {
         category: true,
         attributes: true,
         units: true,
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         versions: {
           select: { id: true, versionNumber: true, status: true, changeReason: true, createdAt: true, effectiveFrom: true, rejectionReason: true },
           orderBy: { versionNumber: 'desc' },
@@ -656,16 +652,16 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
-        select: { clientId: true },
+        select: { projectId: true },
       });
       if (
-        product.ownerScope === CatalogScope.CLIENT &&
-        product.clientId !== dbUser?.clientId
+        product.ownerScope === CatalogScope.PROJECT &&
+        product.projectId !== dbUser?.projectId
       ) {
-        throw new ForbiddenException('Access denied to other client products');
+        throw new ForbiddenException('Access denied to other project products');
       }
     } else if (user.role === UserRole.STORE_ADMIN && (
       product.ownerScope !== CatalogScope.COMPANY || product.kind !== ProductKind.RAW_MATERIAL
@@ -730,8 +726,8 @@ export class ProductsService {
       });
       return productResult;
     });
-    await this.notificationsService.notifyClientAdmins(
-      product.clientId,
+    await this.notificationsService.notifyProjectAdmins(
+      product.projectId,
       dto.decision === ApprovalDecision.APPROVE ? 'Product approved' : 'Product rejected',
       dto.decision === ApprovalDecision.APPROVE
         ? `Your product “${product.name}” was approved and is ready to use.`

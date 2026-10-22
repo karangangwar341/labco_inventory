@@ -22,7 +22,7 @@ import type {
 export class StorageService implements IStorageService, OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private driver: StorageDriverType = 'local';
-  private s3Client?: S3Client;
+  private s3Project?: S3Client;
   private bucket: string = 'warehouse-inventory-assets';
   private endpoint?: string;
   private localBasePath: string = './storage/uploads';
@@ -76,7 +76,7 @@ export class StorageService implements IStorageService, OnModuleInit {
       !accessKeyId.includes('your_neon_')
     ) {
       this.driver = rawDriver === 's3' ? 's3' : 'neon_s3';
-      this.s3Client = new S3Client({
+      this.s3Project = new S3Client({
         region,
         endpoint: this.endpoint,
         forcePathStyle: true,
@@ -114,7 +114,7 @@ export class StorageService implements IStorageService, OnModuleInit {
     const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content);
     const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
 
-    if (this.s3Client && (this.driver === 'neon_s3' || this.driver === 's3')) {
+    if (this.s3Project && (this.driver === 'neon_s3' || this.driver === 's3')) {
       const command = new PutObjectCommand({
         Bucket: this.bucket,
         Key: key,
@@ -122,7 +122,7 @@ export class StorageService implements IStorageService, OnModuleInit {
         ContentType: mimeType,
       });
 
-      await this.s3Client.send(command);
+      await this.s3Project.send(command);
 
       return {
         storageKey: key,
@@ -149,13 +149,13 @@ export class StorageService implements IStorageService, OnModuleInit {
   }
 
   async getFile(key: string): Promise<Buffer> {
-    if (this.s3Client && (this.driver === 'neon_s3' || this.driver === 's3')) {
+    if (this.s3Project && (this.driver === 'neon_s3' || this.driver === 's3')) {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
       });
 
-      const response = await this.s3Client.send(command);
+      const response = await this.s3Project.send(command);
       if (!response.Body) {
         throw new Error(`File payload not found in storage for key "${key}"`);
       }
@@ -177,13 +177,13 @@ export class StorageService implements IStorageService, OnModuleInit {
     key: string,
     expiresInSeconds = 900,
   ): Promise<string> {
-    if (this.s3Client && (this.driver === 'neon_s3' || this.driver === 's3')) {
+    if (this.s3Project && (this.driver === 'neon_s3' || this.driver === 's3')) {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
       });
 
-      return getSignedUrl(this.s3Client, command, {
+      return getSignedUrl(this.s3Project, command, {
         expiresIn: expiresInSeconds,
       });
     }
@@ -193,12 +193,12 @@ export class StorageService implements IStorageService, OnModuleInit {
   }
 
   async deleteFile(key: string): Promise<void> {
-    if (this.s3Client && (this.driver === 'neon_s3' || this.driver === 's3')) {
+    if (this.s3Project && (this.driver === 'neon_s3' || this.driver === 's3')) {
       const command = new DeleteObjectCommand({
         Bucket: this.bucket,
         Key: key,
       });
-      await this.s3Client.send(command);
+      await this.s3Project.send(command);
       return;
     }
 
@@ -214,9 +214,9 @@ export class StorageService implements IStorageService, OnModuleInit {
   }
 
   async getStorageHealth(): Promise<StorageHealthResult> {
-    if (this.driver !== 'local' && this.s3Client) {
+    if (this.driver !== 'local' && this.s3Project) {
       try {
-        await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+        await this.s3Project.send(new HeadBucketCommand({ Bucket: this.bucket }));
       } catch {
         return {
           status: 'DEGRADED',

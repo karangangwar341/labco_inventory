@@ -77,7 +77,7 @@ describe('StorageService (Neon Object Storage & Local Driver)', () => {
       };
 
       const s3Service = new StorageService(mockConfig);
-      Object.assign(s3Service, { s3Client: { send: vi.fn().mockResolvedValue({}) } });
+      Object.assign(s3Service, { s3Project: { send: vi.fn().mockResolvedValue({}) } });
       const health = await s3Service.getStorageHealth();
 
       expect(health.status).toBe('HEALTHY');
@@ -97,7 +97,7 @@ describe('StorageService (Neon Object Storage & Local Driver)', () => {
         })[key],
       };
       const s3Service = new StorageService(mockConfig);
-      Object.assign(s3Service, { s3Client: { send: vi.fn().mockRejectedValue(new Error('secret details omitted')) } });
+      Object.assign(s3Service, { s3Project: { send: vi.fn().mockRejectedValue(new Error('secret details omitted')) } });
 
       const health = await s3Service.getStorageHealth();
 

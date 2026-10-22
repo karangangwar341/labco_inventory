@@ -135,7 +135,7 @@ export function ShipmentsList() {
     setSubmitSuccess(
       hasDiscrepancy
         ? 'Receipt submitted for Super Admin approval. Received stock will be posted after approval; the short quantity will be held for investigation.'
-        : 'Receipt submitted for Super Admin approval. Client stock will update after approval.',
+        : 'Receipt submitted for Super Admin approval. Project stock will update after approval.',
     );
 
     setSelectedShipment(null);
@@ -144,29 +144,29 @@ export function ShipmentsList() {
 
   const canSeeSource = canViewWarehouseIdentity(user?.role);
   const isStoreAdmin = user?.role === 'STORE_ADMIN';
-  const isClientAdmin = user?.role === 'CLIENT_ADMIN';
+  const isProjectAdmin = user?.role === 'PROJECT_ADMIN';
 
   const pageTitle = isStoreAdmin
-    ? 'Client Dispatches'
-    : isClientAdmin
+    ? 'Project Dispatches'
+    : isProjectAdmin
     ? 'Incoming Deliveries'
     : 'Shipments & Deliveries';
 
   const pageDescription = isStoreAdmin
-    ? 'Track outbound orders dispatched from this warehouse to client clinics and facilities.'
-    : isClientAdmin
+    ? 'Track outbound orders dispatched from this warehouse to project clinics and facilities.'
+    : isProjectAdmin
     ? 'Inspect and verify incoming shipments arriving at your facility dock.'
     : 'Origin to destination transit tracking and receiving audit verification.';
 
   const emptyTitle = isStoreAdmin
-    ? 'No client dispatches found'
-    : isClientAdmin
+    ? 'No project dispatches found'
+    : isProjectAdmin
     ? 'No incoming deliveries found'
     : 'No shipments found';
 
   const emptyDescription = isStoreAdmin
-    ? 'When you dispatch approved stock requests to clients, they will appear here.'
-    : isClientAdmin
+    ? 'When you dispatch approved stock requests to projects, they will appear here.'
+    : isProjectAdmin
     ? 'There are currently no inbound shipments on the way to your facility dock.'
     : 'There are currently no inbound or outbound shipments recorded.';
 
@@ -209,7 +209,7 @@ export function ShipmentsList() {
       }
       const dest =
         s.destinationName ||
-        s.destinationLocation?.client?.name ||
+        s.destinationLocation?.project?.name ||
         s.destinationLocation?.warehouse?.name;
       if (dest) destinations.add(dest);
     }
@@ -240,7 +240,7 @@ export function ShipmentsList() {
       if (selectedDestination !== 'ALL') {
         const dest =
           s.destinationName ||
-          s.destinationLocation?.client?.name ||
+          s.destinationLocation?.project?.name ||
           s.destinationLocation?.warehouse?.name ||
           '';
         if (dest !== selectedDestination) return false;
@@ -253,14 +253,13 @@ export function ShipmentsList() {
         const origin = (s.sourceWarehouseName || s.sourceDescription || '').toLowerCase();
         const dest = (
           s.destinationName ||
-          s.destinationLocation?.client?.name ||
+          s.destinationLocation?.project?.name ||
           s.destinationLocation?.warehouse?.name ||
           ''
         ).toLowerCase();
         const matchesLines = s.lines?.some((l) => {
           const pName = (l.productName || l.product?.name || '').toLowerCase();
-          const batch = (l.batchNumber || '').toLowerCase();
-          return pName.includes(q) || batch.includes(q);
+          return pName.includes(q);
         });
 
         if (!tracking.includes(q) && !origin.includes(q) && !dest.includes(q) && !matchesLines) {
@@ -322,7 +321,7 @@ export function ShipmentsList() {
       minWidth: '150px',
       cell: (s) => (
         <span className="text-[#334155] text-xs font-medium">
-          {s.destinationName || s.destinationLocation?.client?.name || s.destinationLocation?.warehouse?.name || 'Destination Facility'}
+          {s.destinationName || s.destinationLocation?.project?.name || s.destinationLocation?.warehouse?.name || 'Destination Facility'}
         </span>
       ),
     },
@@ -417,12 +416,12 @@ export function ShipmentsList() {
         </div>
       )}
 
-      {/* Warehouse Identity Privacy Banner for Client Admin */}
+      {/* Warehouse Identity Privacy Banner for Project Admin */}
       {!canSeeSource && (
         <div className="p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg text-xs text-[#2563eb] flex items-center gap-2">
           <span>🔒</span>
           <span>
-            <strong>Tenant Privacy Active:</strong> Source warehouse operational identifiers are redacted in accordance with multi-client security policy.
+            <strong>Tenant Privacy Active:</strong> Source warehouse operational identifiers are redacted in accordance with multi-project security policy.
           </span>
         </div>
       )}
@@ -555,7 +554,7 @@ export function ShipmentsList() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search tracking #, product, batch..."
+                placeholder="Search tracking #, product..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
@@ -670,7 +669,7 @@ export function ShipmentsList() {
         {selectedShipment && (
           <form onSubmit={handleReceiveSubmit} className="space-y-4 text-xs">
             <p className="text-[#5b6678]">
-              Verify the quantities received. Your confirmation goes to a Super Admin for approval; client stock is updated only after approval. A short count may be held for investigation. Quantities above the dispatched amount are rejected.
+              Verify the quantities received. Your confirmation goes to a Super Admin for approval; project stock is updated only after approval. A short count may be held for investigation. Quantities above the dispatched amount are rejected.
             </p>
 
             {formError && (

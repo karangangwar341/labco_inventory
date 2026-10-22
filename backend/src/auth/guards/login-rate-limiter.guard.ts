@@ -21,7 +21,7 @@ export class LoginRateLimiterGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     // Express request.ip honors X-Forwarded-For only when trust proxy is configured.
-    // Never trust that header directly: clients can forge it to bypass throttling.
+    // Never trust that header directly: projects can forge it to bypass throttling.
     const ip = request.ip || request.socket.remoteAddress || 'unknown-ip';
 
     const now = Date.now();

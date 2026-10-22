@@ -19,7 +19,7 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
       warehouse: {
         findUnique: vi.fn(),
       },
-      client: {
+      project: {
         findUnique: vi.fn(),
       },
     };
@@ -63,14 +63,14 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('requires clientId when creating CLIENT_ADMIN', async () => {
+    it('requires projectId when creating PROJECT_ADMIN', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         usersService.create({
-          username: 'client_mgr',
+          username: 'project_mgr',
           password: 'Password123456!',
-          role: UserRole.CLIENT_ADMIN,
+          role: UserRole.PROJECT_ADMIN,
         }),
       ).rejects.toThrow(BadRequestException);
     });

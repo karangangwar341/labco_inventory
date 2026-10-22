@@ -64,7 +64,7 @@ export default function LoginPage() {
                 <span className="text-blue-700">Management &amp; Ledger</span> System
               </h1>
               <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl">
-                The centralized operational platform for Labco Instruments manufacturing facilities, regional distribution warehouses, and healthcare client facilities. Engineered for batch-level traceability, chain of custody, and verified delivery challans.
+                The centralized operational platform for Labco Instruments manufacturing facilities, regional distribution warehouses, and healthcare project facilities. Built for clear stock control, chain of custody, and verified delivery challans.
               </p>
             </div>
 

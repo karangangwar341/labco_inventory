@@ -6,7 +6,7 @@ export interface CallerScope {
   role: UserRole;
   isGlobal: boolean;
   warehouseId?: string;
-  clientId?: string;
+  projectId?: string;
 }
 
 export const Scope = createParamDecorator(
@@ -35,12 +35,12 @@ export const Scope = createParamDecorator(
       };
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       return {
         userId: user.id,
         role: user.role,
         isGlobal: false,
-        clientId: user.clientId,
+        projectId: user.projectId,
       };
     }
 

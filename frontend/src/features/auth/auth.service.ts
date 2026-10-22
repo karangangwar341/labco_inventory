@@ -22,7 +22,7 @@ export const authService = {
     try {
       await apiClient.post(endpoints.auth.logout());
     } catch {
-      // Backend session revocation attempted; proceeding with client state wipe
+      // Backend session revocation attempted; proceeding with project state wipe
     } finally {
       clearSessionToken();
       if (typeof window !== 'undefined') {

@@ -25,8 +25,8 @@ export const departmentsService = {
   submitIssueBatch: async (id: string): Promise<DepartmentIssueBatch> =>
     apiClient.post<DepartmentIssueBatch>(endpoints.departments.submitIssueBatch(id)),
 
-  getDepartments: async (clientId?: string): Promise<Department[]> => {
-    return apiClient.get<Department[]>(endpoints.departments.list({ clientId }));
+  getDepartments: async (projectId?: string): Promise<Department[]> => {
+    return apiClient.get<Department[]>(endpoints.departments.list({ projectId }));
   },
 
   getDepartmentById: async (id: string): Promise<Department> => {
@@ -59,7 +59,7 @@ export const departmentsService = {
     apiClient.post<Department>(endpoints.departments.reject(id), { reason }),
 
   getIssues: async (params?: {
-    clientId?: string;
+    projectId?: string;
     departmentId?: string;
     status?: DepartmentIssueStatus;
   }): Promise<DepartmentIssue[]> => {
@@ -97,7 +97,7 @@ export const departmentsService = {
     return apiClient.post(endpoints.departments.rejectIssue(id), { reason });
   },
 
-  getReturns: async (params?: { clientId?: string; departmentId?: string; condition?: string; status?: string }): Promise<DepartmentReturn[]> =>
+  getReturns: async (params?: { projectId?: string; departmentId?: string; condition?: string; status?: string }): Promise<DepartmentReturn[]> =>
     apiClient.get<DepartmentReturn[]>(endpoints.departments.returns(params)),
 
   createReturn: async (payload: CreateDepartmentReturnPayload): Promise<DepartmentReturn> =>
@@ -122,27 +122,4 @@ export const departmentsService = {
   rejectReturn: async (id: string, reason: string): Promise<DepartmentReturn> =>
     apiClient.post<DepartmentReturn>(endpoints.departments.rejectReturn(id), { reason }),
 
-  writeOff: async (payload: {
-    clientId: string;
-    productId: string;
-    batchId?: string;
-    condition: 'DAMAGED' | 'EXPIRED';
-    quantity: number;
-    unitName?: string;
-    reason: string;
-  }): Promise<unknown> => {
-    const actionKey = `write-off-${payload.clientId}-${payload.productId}-${payload.batchId || 'untracked'}-${payload.condition}`;
-    const idempotencyKey = actionIdempotency.getKey(actionKey);
-    try {
-      const result = await apiClient.post<unknown>(
-        endpoints.departments.writeOff(),
-        { ...payload, idempotencyKey },
-        { idempotencyKey },
-      );
-      actionIdempotency.clearKey(actionKey);
-      return result;
-    } catch (err) {
-      throw err;
-    }
-  },
 };

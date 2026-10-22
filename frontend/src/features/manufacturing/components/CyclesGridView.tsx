@@ -10,8 +10,6 @@ import { ProductionCycle } from "../manufacturing.types";
 export interface BatchReRunItem {
   cycle: ProductionCycle;
   plannedOutput: number;
-  batchNumber?: string;
-  expiryDate?: string;
 }
 
 interface CyclesGridViewProps {
@@ -31,8 +29,6 @@ interface CyclesGridViewProps {
 
 interface RowConfig {
   plannedOutput: number;
-  batchNumber: string;
-  expiryDate: string;
 }
 
 export function CyclesGridView({
@@ -62,37 +58,20 @@ export function CyclesGridView({
   const [rowConfigs, setRowConfigs] = useState<Record<string, RowConfig>>({});
   const [autoSubmitForApproval, setAutoSubmitForApproval] = useState<boolean>(true);
 
-  const todayLotPrefix = useMemo(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `LOT-${y}${m}${day}`;
-  }, []);
-
-  const defaultExpiry = useMemo(() => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() + 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
-
   // Initialize row configs when cycles change
   useEffect(() => {
     setRowConfigs((prev) => {
       const next = { ...prev };
       cycles.forEach((c, idx) => {
         if (!next[c.cycleKey]) {
-          const pad = String(idx + 1).padStart(2, "0");
           next[c.cycleKey] = {
             plannedOutput: c.plannedOutput || 25,
-            batchNumber: `${todayLotPrefix}-${pad}`,
-            expiryDate: defaultExpiry,
           };
         }
       });
       return next;
     });
-  }, [cycles, todayLotPrefix, defaultExpiry]);
+  }, [cycles]);
 
   const lowStockCycles = useMemo(
     () => cycles.filter((c) => c.isLowStock || c.isOutOfStock),
@@ -113,8 +92,8 @@ export function CyclesGridView({
         const matchName = c.outputProductName?.toLowerCase().includes(q);
         const matchSku = c.outputProductSku?.toLowerCase().includes(q);
         const matchRef = c.cycleReference?.toLowerCase().includes(q);
-        const matchClient = c.clientName?.toLowerCase().includes(q);
-        if (!matchName && !matchSku && !matchRef && !matchClient) return false;
+        const matchProject = c.projectName?.toLowerCase().includes(q);
+        if (!matchName && !matchSku && !matchRef && !matchProject) return false;
       }
 
       return true;
@@ -161,15 +140,13 @@ export function CyclesGridView({
   const updateRowConfig = (
     cycleKey: string,
     field: keyof RowConfig,
-    value: string | number,
+    value: number,
   ) => {
     setRowConfigs((prev) => ({
       ...prev,
       [cycleKey]: {
         ...(prev[cycleKey] || {
           plannedOutput: 25,
-          batchNumber: `${todayLotPrefix}-01`,
-          expiryDate: defaultExpiry,
         }),
         [field]: value,
       },
@@ -186,15 +163,11 @@ export function CyclesGridView({
 
       const conf = rowConfigs[key] || {
         plannedOutput: cycle.plannedOutput || 25,
-        batchNumber: `${todayLotPrefix}-01`,
-        expiryDate: defaultExpiry,
       };
 
       itemsToRun.push({
         cycle,
         plannedOutput: Number(conf.plannedOutput) || 25,
-        batchNumber: conf.batchNumber.trim() || undefined,
-        expiryDate: conf.expiryDate || undefined,
       });
     }
 
@@ -386,7 +359,7 @@ export function CyclesGridView({
         <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
           {/* Mobile Swipe Guide Banner */}
           <div className="md:hidden px-3 py-1.5 bg-blue-50/90 border-b border-blue-100 flex items-center justify-between text-[11px] text-blue-700">
-            <span>👉 Swipe table sideways to see batch output & lot dates</span>
+            <span>👉 Swipe table sideways to view production cycle details</span>
             <button
               type="button"
               onClick={() => setViewMode("CARDS")}
@@ -416,9 +389,7 @@ export function CyclesGridView({
                   <th className="py-2.5 px-3">Formula & Finished Product</th>
                   <th className="py-2.5 px-3">Finished Stock</th>
                   <th className="py-2.5 px-3">BOM Raw Materials</th>
-                  <th className="py-2.5 px-3 text-right w-36">Batch Output</th>
-                  <th className="py-2.5 px-3 w-40">Target Lot / Batch #</th>
-                  <th className="py-2.5 px-3 w-36">Expiry Date</th>
+                  <th className="py-2.5 px-3 text-right w-36">Planned Output</th>
                   <th className="py-2.5 px-3 text-right w-24">Action</th>
                 </tr>
               </thead>
@@ -427,8 +398,6 @@ export function CyclesGridView({
                   const isSelected = selectedKeys.has(cycle.cycleKey);
                   const conf = rowConfigs[cycle.cycleKey] || {
                     plannedOutput: cycle.plannedOutput || 25,
-                    batchNumber: `${todayLotPrefix}-01`,
-                    expiryDate: defaultExpiry,
                   };
 
                   return (
@@ -469,8 +438,8 @@ export function CyclesGridView({
                             {cycle.outputProductSku && (
                               <span>SKU: {cycle.outputProductSku}</span>
                             )}
-                            {cycle.clientName && (
-                              <span className="text-slate-400">· {cycle.clientName}</span>
+                            {cycle.projectName && (
+                              <span className="text-slate-400">· {cycle.projectName}</span>
                             )}
                           </div>
                         </div>
@@ -547,43 +516,6 @@ export function CyclesGridView({
                         )}
                       </td>
 
-                      {/* Target Lot Number */}
-                      <td className="py-2.5 px-3">
-                        {canCreateRuns ? (
-                          <input
-                            type="text"
-                            value={conf.batchNumber}
-                            onChange={(e) =>
-                              updateRowConfig(cycle.cycleKey, "batchNumber", e.target.value)
-                            }
-                            placeholder="LOT / Batch #"
-                            className="w-full font-mono text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                          />
-                        ) : (
-                          <span className="font-mono text-slate-500 text-xs">
-                            {conf.batchNumber}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Expiry Date */}
-                      <td className="py-2.5 px-3">
-                        {canCreateRuns ? (
-                          <input
-                            type="date"
-                            value={conf.expiryDate}
-                            onChange={(e) =>
-                              updateRowConfig(cycle.cycleKey, "expiryDate", e.target.value)
-                            }
-                            className="w-full text-xs py-1 px-2 rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                          />
-                        ) : (
-                          <span className="text-slate-500 text-xs">
-                            {conf.expiryDate || "—"}
-                          </span>
-                        )}
-                      </td>
-
                       {/* Action Button */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <Button
@@ -639,10 +571,10 @@ export function CyclesGridView({
                     {cycle.outputProductName}
                   </h3>
 
-                  {/* Client name if super admin */}
-                  {cycle.clientName && (
+                  {/* Project name if super admin */}
+                  {cycle.projectName && (
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Facility: <span className="font-medium text-slate-700">{cycle.clientName}</span>
+                      Facility: <span className="font-medium text-slate-700">{cycle.projectName}</span>
                     </p>
                   )}
 

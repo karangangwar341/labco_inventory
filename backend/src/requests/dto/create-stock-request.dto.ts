@@ -23,21 +23,6 @@ export class CreateStockRequestLineDto {
   @IsNotEmpty()
   productId!: string;
 
-  @ApiPropertyOptional({ description: 'Batch UUID if tracking lot/expiry' })
-  @IsOptional()
-  @IsUUID('4')
-  batchId?: string;
-
-  @ApiPropertyOptional({ example: 'LOT-2026-X1', description: 'Batch number' })
-  @IsOptional()
-  @IsString()
-  batchNumber?: string;
-
-  @ApiPropertyOptional({ example: '2027-12-31T00:00:00.000Z', description: 'Expiry date ISO string' })
-  @IsOptional()
-  @IsString()
-  expiryDate?: string;
-
   @ApiProperty({ example: 10, description: 'Quantity in selected unit' })
   @IsNumber()
   @IsPositive()
@@ -87,10 +72,10 @@ export class CreateStockRequestDto {
   @IsUUID('4')
   destinationLocationId?: string;
 
-  @ApiPropertyOptional({ description: 'Client UUID' })
+  @ApiPropertyOptional({ description: 'Project UUID' })
   @IsOptional()
   @IsUUID('4')
-  clientId?: string;
+  projectId?: string;
 
   @ApiPropertyOptional({ example: 'Monthly restock request' })
   @IsOptional()

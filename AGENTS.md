@@ -33,14 +33,14 @@ If documents conflict, stop and report the conflict. Do not silently choose one.
 
 ## Non-negotiable invariants
 - Never let imports/drafts/pending requests change finalized inventory.
-- No negative usable stock. Available = Usable - Reserved >= 0. Physical = Usable + Damaged + Expired.
+- No negative usable stock. Available = Usable - Reserved >= 0. Damaged stock is an approved stock-out flagged DAMAGED in the immutable ledger; there is no damaged or expired balance bucket.
 - Stock posting, ledger entries, balance projections, reservations and request state changes must be transactionally consistent.
 - Posted ledger/audit entries are append-only; correct by linked reversal/replacement.
 - Super Admin approval is required by default for inventory-affecting workflows. Super Admin may disable approval per supported workflow; the server must still validate, atomically post, and audit those submissions. A policy change applies to new submissions only.
 - Server-side authorization is mandatory on every endpoint and object.
 - Use idempotency to prevent duplicate posting.
-- Never expose one client's data to another client.
-- Client Admin inbound shipment responses must not reveal source warehouse identity.
+- Never expose one project's data to another project.
+- Project Admin inbound shipment responses must not reveal source warehouse identity.
 - AI output is untrusted data; it cannot approve, post, or autonomously resolve duplicates.
 - Never store secrets in source control or logs.
 - Do not add cost/price/valuation, barcode, offline mode, email/SMS/push or natural-language transaction execution unless approved.

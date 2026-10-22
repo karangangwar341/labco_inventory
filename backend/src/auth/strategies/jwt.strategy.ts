@@ -11,7 +11,7 @@ export interface JwtPayload {
   sessionId: string;
   deviceId?: string | null;
   warehouseId?: string | null;
-  clientId?: string | null;
+  projectId?: string | null;
 }
 
 @Injectable()
@@ -61,7 +61,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       status: user.status,
       sessionId: payload.sessionId,
       warehouseId: user.warehouseId ?? payload.warehouseId ?? null,
-      clientId: user.clientId ?? payload.clientId ?? null,
+      projectId: user.projectId ?? payload.projectId ?? null,
     };
   }
 }

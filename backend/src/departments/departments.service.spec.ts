@@ -35,10 +35,10 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     sessionId: 'sess-1',
   };
 
-  const clientAdminUser: any = {
+  const projectAdminUser: any = {
     id: 'ca-1',
-    username: 'clientadmin',
-    role: UserRole.CLIENT_ADMIN,
+    username: 'projectadmin',
+    role: UserRole.PROJECT_ADMIN,
     status: 'ACTIVE',
     sessionId: 'sess-2',
   };
@@ -53,12 +53,11 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
 
   const testProduct = {
     id: 'prod-1',
-    clientId: 'client-123',
+    projectId: 'project-123',
     name: 'Lab Diagnostic Cartridge',
     kind: ProductKind.MANUFACTURED_PRODUCT,
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
-    trackingMode: 'NONE',
     units: [
       {
         id: 'unit-box',
@@ -81,7 +80,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     mockPrisma = {
       $transaction: vi.fn(async (cb) => cb(mockPrisma)),
       $queryRaw: vi.fn(),
-      client: {
+      project: {
         findUnique: vi.fn(),
       },
       department: {
@@ -115,9 +114,6 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       product: {
         findUnique: vi.fn(),
       },
-      stockBatch: {
-        findUnique: vi.fn(),
-      },
       stockLocation: {
         findUnique: vi.fn(),
         create: vi.fn(),
@@ -135,16 +131,16 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     };
 
     mockInventoryService = {
-      getOrCreateLocationForClient: vi.fn().mockResolvedValue({
-        id: 'loc-client-1',
-        clientId: 'client-123',
-        locationType: 'CLIENT',
+      getOrCreateLocationForProject: vi.fn().mockResolvedValue({
+        id: 'loc-project-1',
+        projectId: 'project-123',
+        locationType: 'PROJECT',
       }),
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
       notifyUser: vi.fn(),
-      notifyClientAdmins: vi.fn(),
+      notifyProjectAdmins: vi.fn(),
       getSettings: vi.fn().mockResolvedValue({ approvalRequirements: { departmentIssue: true } }),
     };
 
@@ -159,44 +155,44 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
 
   describe('Daily department issue batches', () => {
     it('rejects company raw materials for a department issue batch', async () => {
-      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', projectId: 'project-123', status: DepartmentStatus.ACTIVE });
       mockPrisma.product.findUnique.mockResolvedValue({
         ...testProduct,
         kind: ProductKind.RAW_MATERIAL,
         ownerScope: CatalogScope.COMPANY,
-        clientId: null,
+        projectId: null,
       });
 
       await expect((departmentsService as any).prepareIssueLine({
         departmentId: 'dept-1', productId: 'prod-1', quantity: 2, unitId: 'unit-piece',
-      }, clientAdminUser, 'client-123')).rejects.toThrow(BadRequestException);
+      }, projectAdminUser, 'project-123')).rejects.toThrow(BadRequestException);
     });
 
-    it('rejects manufactured products owned by another client', async () => {
-      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
-      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, clientId: 'another-client' });
+    it('rejects manufactured products owned by another project', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', projectId: 'project-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, projectId: 'another-project' });
 
       await expect((departmentsService as any).prepareIssueLine({
         departmentId: 'dept-1', productId: 'prod-1', quantity: 2, unitId: 'unit-piece',
-      }, clientAdminUser, 'client-123')).rejects.toThrow(BadRequestException);
+      }, projectAdminUser, 'project-123')).rejects.toThrow(BadRequestException);
     });
 
-    it('creates one client-scoped daily draft for a Client Admin', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+    it('creates one project-scoped daily draft for a Project Admin', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
       mockPrisma.departmentIssueBatch.findFirst.mockResolvedValue(null);
       mockPrisma.departmentIssueBatch.create.mockResolvedValue({
         id: 'issue-batch-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         createdById: 'ca-1',
         status: DepartmentIssueBatchStatus.DRAFT,
         issues: [],
       });
 
-      const result = await departmentsService.getOpenIssueBatch(clientAdminUser);
+      const result = await departmentsService.getOpenIssueBatch(projectAdminUser);
 
       expect(result!.status).toBe(DepartmentIssueBatchStatus.DRAFT);
       expect(mockPrisma.departmentIssueBatch.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: { clientId: 'client-123', createdById: 'ca-1' },
+        data: { projectId: 'project-123', createdById: 'ca-1' },
       }));
     });
 
@@ -212,12 +208,12 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         baseQuantity: new Prisma.Decimal(2), notes: null,
       };
       const batch = {
-        id: 'issue-batch-1', clientId: 'client-123', createdById: 'ca-1',
+        id: 'issue-batch-1', projectId: 'project-123', createdById: 'ca-1',
         status: DepartmentIssueBatchStatus.DRAFT, issues: [issue],
       };
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
-      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', clientId: 'client-123', status: DepartmentStatus.ACTIVE });
-      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', projectId: 'project-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, projectId: 'project-123' });
       mockPrisma.departmentIssueBatch.findUnique.mockResolvedValue(batch);
       mockPrisma.departmentIssueBatch.update.mockResolvedValue({
         ...batch, status: DepartmentIssueBatchStatus.POSTED,
@@ -226,7 +222,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         approvalRequirements: { departmentIssue: false },
       });
 
-      const result = await departmentsService.submitIssueBatch('issue-batch-1', clientAdminUser);
+      const result = await departmentsService.submitIssueBatch('issue-batch-1', projectAdminUser);
 
       expect(result.status).toBe(DepartmentIssueBatchStatus.POSTED);
       expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(expect.objectContaining({
@@ -238,23 +234,23 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       }));
     });
 
-    it('Super Admin approves a department issue batch containing client manufactured products', async () => {
+    it('Super Admin approves a department issue batch containing project manufactured products', async () => {
       const issues = [
         {
           id: 'issue-1', issueBatchId: 'issue-batch-1', productId: 'prod-mfg-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
           quantity: new Prisma.Decimal(2), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(2), notes: null,
           department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
-          product: { id: 'prod-mfg-1', name: 'Chemical Reagent Kit', kind: ProductKind.MANUFACTURED_PRODUCT, clientId: 'client-123', status: ProductStatus.APPROVED },
+          product: { id: 'prod-mfg-1', name: 'Chemical Reagent Kit', kind: ProductKind.MANUFACTURED_PRODUCT, projectId: 'project-123', status: ProductStatus.APPROVED },
         },
         {
           id: 'issue-2', issueBatchId: 'issue-batch-1', productId: 'prod-mfg-2', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
           quantity: new Prisma.Decimal(1), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(1), notes: null,
           department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
-          product: { id: 'prod-mfg-2', name: 'Diagnostic Cartridge', kind: ProductKind.MANUFACTURED_PRODUCT, clientId: 'client-123', status: ProductStatus.APPROVED },
+          product: { id: 'prod-mfg-2', name: 'Diagnostic Cartridge', kind: ProductKind.MANUFACTURED_PRODUCT, projectId: 'project-123', status: ProductStatus.APPROVED },
         },
       ];
       const batch = {
-        id: 'issue-batch-1', clientId: 'client-123', createdById: 'ca-1',
+        id: 'issue-batch-1', projectId: 'project-123', createdById: 'ca-1',
         status: DepartmentIssueBatchStatus.PENDING_APPROVAL, issues,
       };
 
@@ -281,11 +277,11 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           id: 'issue-1', issueBatchId: 'issue-batch-company', productId: 'prod-co-mfg-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,
           quantity: new Prisma.Decimal(2), unitNameSnapshot: 'PIECE', baseQuantity: new Prisma.Decimal(2), notes: null,
           department: { id: 'dept-1', status: DepartmentStatus.ACTIVE },
-          product: { id: 'prod-co-mfg-1', name: 'ALT / SGPT Liquid Reagent 4x100ml', kind: ProductKind.MANUFACTURED_PRODUCT, ownerScope: CatalogScope.COMPANY, clientId: null, status: ProductStatus.APPROVED },
+          product: { id: 'prod-co-mfg-1', name: 'ALT / SGPT Liquid Reagent 4x100ml', kind: ProductKind.MANUFACTURED_PRODUCT, ownerScope: CatalogScope.COMPANY, projectId: null, status: ProductStatus.APPROVED },
         },
       ];
       const batch = {
-        id: 'issue-batch-company', clientId: 'client-123', createdById: 'ca-1',
+        id: 'issue-batch-company', projectId: 'project-123', createdById: 'ca-1',
         status: DepartmentIssueBatchStatus.PENDING_APPROVAL, issues,
       };
 
@@ -307,27 +303,27 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   });
 
   describe('1. Department Master CRUD and Approval Workflow', () => {
-    it('Client Admin creates department with PENDING_APPROVAL status', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-123', name: 'Alpha Biotech' });
+    it('Project Admin creates department with PENDING_APPROVAL status', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'project-123', name: 'Alpha Biotech' });
       mockPrisma.department.findUnique.mockResolvedValue(null);
       mockPrisma.department.create.mockResolvedValue({
         id: 'dept-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Hematology Lab',
         status: DepartmentStatus.PENDING_APPROVAL,
       });
 
       const result = await departmentsService.createDepartment(
         { name: 'Hematology Lab' },
-        clientAdminUser,
+        projectAdminUser,
       );
 
       expect(result.status).toBe(DepartmentStatus.PENDING_APPROVAL);
       expect(mockPrisma.department.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            clientId: 'client-123',
+            projectId: 'project-123',
             name: 'Hematology Lab',
             status: DepartmentStatus.PENDING_APPROVAL,
             createdById: 'ca-1',
@@ -337,17 +333,17 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     });
 
     it('Super Admin creates department directly with ACTIVE status', async () => {
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-123', name: 'Alpha Biotech' });
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'project-123', name: 'Alpha Biotech' });
       mockPrisma.department.findUnique.mockResolvedValue(null);
       mockPrisma.department.create.mockResolvedValue({
         id: 'dept-2',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Serology Lab',
         status: DepartmentStatus.ACTIVE,
       });
 
       const result = await departmentsService.createDepartment(
-        { name: 'Serology Lab', clientId: 'client-123' },
+        { name: 'Serology Lab', projectId: 'project-123' },
         superAdminUser,
       );
 
@@ -362,13 +358,13 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       );
     });
 
-    it('prevents duplicate department names within the same client', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
-      mockPrisma.client.findUnique.mockResolvedValue({ id: 'client-123' });
+    it('prevents duplicate department names within the same project', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'project-123' });
       mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-existing', name: 'Hematology Lab' });
 
       await expect(
-        departmentsService.createDepartment({ name: 'Hematology Lab' }, clientAdminUser),
+        departmentsService.createDepartment({ name: 'Hematology Lab' }, projectAdminUser),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -378,10 +374,10 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('Client Admin proposals are approved by Super Admin and activated', async () => {
+    it('Project Admin proposals are approved by Super Admin and activated', async () => {
       mockPrisma.department.findUnique.mockResolvedValue({
         id: 'dept-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Hematology Lab',
         status: DepartmentStatus.PENDING_APPROVAL,
         proposedName: null,
@@ -408,15 +404,15 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     });
   });
 
-  describe('2. Department Issues (Test Plan 15: Department issue reduces central client stock only after approval; no department balance is created)', () => {
+  describe('2. Department Issues (Test Plan 15: Department issue reduces central project stock only after approval; no department balance is created)', () => {
     it('creates a department issue request with conversion ratio snapshot and pre-checks stock', async () => {
       mockPrisma.department.findUnique.mockResolvedValue({
         id: 'dept-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Hematology Lab',
         status: DepartmentStatus.ACTIVE,
       });
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
       mockPrisma.product.findUnique.mockResolvedValue(testProduct);
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
         usableQty: new Prisma.Decimal(100),
@@ -442,7 +438,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           quantity: 5,
           unitName: 'BOX',
         },
-        clientAdminUser,
+        projectAdminUser,
       );
 
       expect(issue.status).toBe(DepartmentIssueStatus.PENDING_APPROVAL);
@@ -462,11 +458,11 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     it('rejects department issue when available stock is insufficient', async () => {
       mockPrisma.department.findUnique.mockResolvedValue({
         id: 'dept-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Hematology Lab',
         status: DepartmentStatus.ACTIVE,
       });
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
       mockPrisma.product.findUnique.mockResolvedValue(testProduct);
       mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
         usableQty: new Prisma.Decimal(40),
@@ -482,7 +478,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
             quantity: 5,
             unitName: 'BOX',
           },
-          clientAdminUser,
+          projectAdminUser,
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -490,7 +486,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     it('rejects issue to an INACTIVE department', async () => {
       mockPrisma.department.findUnique.mockResolvedValue({
         id: 'dept-inactive',
-        clientId: 'client-123',
+        projectId: 'project-123',
         name: 'Closed Unit',
         status: DepartmentStatus.INACTIVE,
       });
@@ -503,15 +499,15 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
             quantity: 1,
             unitName: 'BOX',
           },
-          clientAdminUser,
+          projectAdminUser,
         ),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('Super Admin approval posts stock deduction to central client stock; NO department balance is created', async () => {
+    it('Super Admin approval posts stock deduction to central project stock; NO department balance is created', async () => {
       mockPrisma.departmentIssue.findUnique.mockResolvedValue({
         id: 'issue-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         departmentId: 'dept-1',
         productId: 'prod-1',
         quantity: new Prisma.Decimal(5),
@@ -520,7 +516,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         status: DepartmentIssueStatus.PENDING_APPROVAL,
         department: { name: 'Hematology Lab' },
         product: {
-          clientId: 'client-123',
+          projectId: 'project-123',
           name: 'Lab Diagnostic Cartridge',
           kind: ProductKind.MANUFACTURED_PRODUCT,
           status: ProductStatus.APPROVED,
@@ -546,7 +542,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           idempotencyKey: 'idem-issue-1',
           lines: [
             expect.objectContaining({
-              locationId: 'loc-client-1',
+              locationId: 'loc-project-1',
               productId: 'prod-1',
               quantity: 5,
               unitName: 'BOX',
@@ -559,7 +555,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         expect.anything(),
       );
 
-      // Invariant verification: Ledger deducted client stock; status updated; no department balance table accessed
+      // Invariant verification: Ledger deducted project stock; status updated; no department balance table accessed
       expect(mockPrisma.departmentIssue.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'issue-1' },
@@ -574,7 +570,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     it('Super Admin approval rejects issue if product is a raw material', async () => {
       mockPrisma.departmentIssue.findUnique.mockResolvedValue({
         id: 'issue-rm-1',
-        clientId: 'client-123',
+        projectId: 'project-123',
         departmentId: 'dept-1',
         productId: 'prod-rm',
         quantity: new Prisma.Decimal(10),
@@ -583,7 +579,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         status: DepartmentIssueStatus.PENDING_APPROVAL,
         department: { name: 'Biochemistry Lab' },
         product: {
-          clientId: null,
+          projectId: null,
           ownerScope: CatalogScope.COMPANY,
           name: 'Chemical Reagent',
           kind: ProductKind.RAW_MATERIAL,
@@ -601,13 +597,12 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
     });
   });
 
-  describe('3. Department Returns (Test Plan 16: Usable return restores central stock; damaged/expired remains unavailable)', () => {
-    it('creates department return with USABLE, DAMAGED, or EXPIRED condition', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+  describe('3. Department Returns (usable returns restore central stock)', () => {
+    it('creates a usable department return', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
       mockPrisma.product.findUnique.mockResolvedValue(testProduct);
       mockPrisma.departmentReturn.create.mockResolvedValue({
         id: 'ret-1',
-        condition: StockCondition.DAMAGED,
         reason: 'Broken vial seals in lab storage',
         status: DepartmentReturnStatus.PENDING_APPROVAL,
       });
@@ -617,17 +612,15 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           productId: 'prod-1',
           quantity: 2,
           unitName: 'BOX',
-          condition: StockCondition.DAMAGED,
           reason: 'Broken vial seals in lab storage',
         },
-        clientAdminUser,
+        projectAdminUser,
       );
 
       expect(ret.status).toBe(DepartmentReturnStatus.PENDING_APPROVAL);
       expect(mockPrisma.departmentReturn.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            condition: StockCondition.DAMAGED,
             reason: 'Broken vial seals in lab storage',
             status: DepartmentReturnStatus.PENDING_APPROVAL,
             baseQuantity: new Prisma.Decimal(20),
@@ -636,10 +629,10 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       );
     });
 
-    it('Super Admin approval of USABLE return credits client usable stock', async () => {
+    it('Super Admin approval of USABLE return credits project usable stock', async () => {
       mockPrisma.departmentReturn.findUnique.mockResolvedValue({
         id: 'ret-usable',
-        clientId: 'client-123',
+        projectId: 'project-123',
         productId: 'prod-1',
         quantity: new Prisma.Decimal(1),
         unitNameSnapshot: 'BOX',
@@ -677,138 +670,5 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       );
     });
 
-    it('Super Admin approval of DAMAGED return credits client DAMAGED condition bucket', async () => {
-      mockPrisma.departmentReturn.findUnique.mockResolvedValue({
-        id: 'ret-damaged',
-        clientId: 'client-123',
-        productId: 'prod-1',
-        quantity: new Prisma.Decimal(2),
-        unitNameSnapshot: 'BOX',
-        condition: StockCondition.DAMAGED,
-        reason: 'Dropped on floor',
-        status: DepartmentReturnStatus.PENDING_APPROVAL,
-        department: { name: 'Hematology Lab' },
-      });
-
-      mockPrisma.departmentReturn.update.mockResolvedValue({
-        id: 'ret-damaged',
-        status: DepartmentReturnStatus.APPROVED,
-      });
-
-      await departmentsService.approveReturn(
-        'ret-damaged',
-        { idempotencyKey: 'idem-ret-damaged' },
-        superAdminUser,
-      );
-
-      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          transactionType: TransactionType.STOCK_IN,
-          sourceRefType: 'DEPARTMENT_RETURN',
-          lines: [
-            expect.objectContaining({
-              condition: StockCondition.DAMAGED,
-              direction: 'IN',
-              quantity: 2,
-            }),
-          ],
-        }),
-        'sa-1',
-        expect.anything(),
-      );
-    });
-  });
-
-  describe('4. Damaged/Expired Stock Write-Off (Test Plan 12: Damaged/expired stock write-off requires approval)', () => {
-    it('Super Admin writes off damaged stock deducting from DAMAGED condition balance', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(testProduct);
-      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
-        damagedQty: new Prisma.Decimal(50),
-        expiredQty: new Prisma.Decimal(0),
-        usableQty: new Prisma.Decimal(100),
-      });
-
-      await departmentsService.writeOffStock(
-        {
-          clientId: 'client-123',
-          productId: 'prod-1',
-          condition: StockCondition.DAMAGED,
-          quantity: 3, // 3 boxes = 30 pieces
-          unitName: 'BOX',
-          reason: 'Biohazard incineration per lab protocol',
-        },
-        superAdminUser,
-      );
-
-      expect(mockLedgerService.postTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          transactionType: TransactionType.ADJUSTMENT,
-          sourceRefType: 'STOCK_WRITE_OFF',
-          lines: [
-            expect.objectContaining({
-              condition: StockCondition.DAMAGED,
-              direction: 'OUT',
-              quantity: 3,
-            }),
-          ],
-        }),
-        'sa-1',
-      );
-    });
-
-    it('rejects write-off when requested quantity exceeds damaged balance', async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(testProduct);
-      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
-        damagedQty: new Prisma.Decimal(10), // Only 10 pieces damaged
-        expiredQty: new Prisma.Decimal(0),
-        usableQty: new Prisma.Decimal(100),
-      });
-
-      await expect(
-        departmentsService.writeOffStock(
-          {
-            clientId: 'client-123',
-            productId: 'prod-1',
-            condition: StockCondition.DAMAGED,
-            quantity: 2, // 2 boxes = 20 pieces > 10 pieces
-            unitName: 'BOX',
-            reason: 'Excess write-off',
-          },
-          superAdminUser,
-        ),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('rejects write-off with USABLE condition', async () => {
-      await expect(
-        departmentsService.writeOffStock(
-          {
-            clientId: 'client-123',
-            productId: 'prod-1',
-            condition: StockCondition.USABLE,
-            quantity: 1,
-            unitName: 'BOX',
-            reason: 'Invalid condition',
-          },
-          superAdminUser,
-        ),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('forbids Client Admin from executing write-off directly without Super Admin authority', async () => {
-      await expect(
-        departmentsService.writeOffStock(
-          {
-            clientId: 'client-123',
-            productId: 'prod-1',
-            condition: StockCondition.DAMAGED,
-            quantity: 1,
-            unitName: 'BOX',
-            reason: 'Unauthorized write-off attempt',
-          },
-          clientAdminUser,
-        ),
-      ).rejects.toThrow(ForbiddenException);
-    });
   });
 });

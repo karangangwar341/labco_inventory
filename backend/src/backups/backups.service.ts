@@ -248,13 +248,11 @@ export class BackupsService {
 
       for (const balance of balances) {
         const usable = Number(balance.usableQty);
-        const damaged = Number(balance.damagedQty);
-        const expired = Number(balance.expiredQty);
         const reserved = Number(balance.reservedQty);
 
-        // Invariant: Non-negative inventory buckets (Usable, Damaged, Expired, Reserved >= 0)
-        if (usable < 0 || damaged < 0 || expired < 0 || reserved < 0) {
-          const bucketError = `Negative inventory bucket detected for balance ${balance.id}: Usable (${usable}), Damaged (${damaged}), Expired (${expired}), Reserved (${reserved})`;
+        // Damage is recorded as a stock-out; only usable and reserved balances remain.
+        if (usable < 0 || reserved < 0) {
+          const bucketError = `Negative inventory bucket detected for balance ${balance.id}: Usable (${usable}), Reserved (${reserved})`;
 
           await this.prisma.backupRecord.update({
             where: { id: backup.id },

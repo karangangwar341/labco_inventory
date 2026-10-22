@@ -10,8 +10,8 @@ export interface QueueItem {
   type: string;
   requester: string;
   location: string;
-  clientId?: string;
-  clientName?: string;
+  projectId?: string;
+  projectName?: string;
   details: string;
   quantitySummary: string;
   lineItems?: QueueLineItem[];
@@ -25,8 +25,6 @@ export interface QueueLineItem {
   productName: string;
   quantity: string;
   unitName?: string;
-  batchNumber?: string | null;
-  expiryDate?: string | null;
   label?: string;
   quantityNote?: string;
   stockWarning?: string;

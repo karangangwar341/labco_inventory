@@ -115,9 +115,9 @@ describe('UnitsService', () => {
 
   describe('delete', () => {
     it('blocks non-Super Admin from deleting units', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
       await expect(
-        unitsService.delete('Vial', clientAdmin),
+        unitsService.delete('Vial', projectAdmin),
       ).rejects.toThrow(ForbiddenException);
     });
 

@@ -4,18 +4,15 @@ import { Decimal } from '@prisma/client/runtime/library';
 
 describe('T-016 Release Readiness & Invariant Verification Suite', () => {
   describe('1. Release-Blocking Mathematical & Balance Invariants (REQ-004 & 07_TEST_PLAN Item 1)', () => {
-    it('enforces Physical = Usable + Damaged + Expired', () => {
+    it('reports physical inventory as usable stock after damaged stock-outs', () => {
       const balance = {
         usableQty: new Decimal('150.50'),
         reservedQty: new Decimal('40.00'),
-        damagedQty: new Decimal('12.25'),
-        expiredQty: new Decimal('5.75'),
       };
 
       const projected = calculateProjectedQuantities(balance);
 
-      // 150.50 + 12.25 + 5.75 = 168.50
-      expect(projected.physicalQty.toString()).toBe('168.5');
+      expect(projected.physicalQty.toString()).toBe('150.5');
       // 150.50 - 40.00 = 110.50
       expect(projected.availableQty.toString()).toBe('110.5');
     });
@@ -24,8 +21,6 @@ describe('T-016 Release Readiness & Invariant Verification Suite', () => {
       const balance = {
         usableQty: new Decimal('50.00'),
         reservedQty: new Decimal('60.00'), // Invalid: 50 - 60 = -10
-        damagedQty: new Decimal('0'),
-        expiredQty: new Decimal('0'),
       };
 
       const projected = calculateProjectedQuantities(balance);
@@ -34,7 +29,7 @@ describe('T-016 Release Readiness & Invariant Verification Suite', () => {
   });
 
   describe('2. Tenant Privacy & Redaction Invariant (07_TEST_PLAN Item 4)', () => {
-    it('redacts source warehouse identity on inbound shipment payloads for Client Admin', () => {
+    it('redacts source warehouse identity on inbound shipment payloads for Project Admin', () => {
       const rawInboundShipment = {
         id: 'shipment-101',
         trackingNumber: 'TRK-2026-001',
@@ -43,11 +38,11 @@ describe('T-016 Release Readiness & Invariant Verification Suite', () => {
           name: 'Main Central Hub',
           locationDescription: 'Confidential Internal Facility',
         },
-        destinationLocationId: 'loc-client-factory',
+        destinationLocationId: 'loc-project-factory',
         status: 'IN_TRANSIT',
       };
 
-      // Client Admin redaction policy
+      // Project Admin redaction policy
       const sanitizedShipment = {
         ...rawInboundShipment,
         sourceWarehouse: {

@@ -31,16 +31,6 @@ function ReRunCycleModalContent({
 }: ReRunCycleModalProps & { cycle: ProductionCycle }) {
   const defaultPlanned = cycle.plannedOutput || 25;
   const [plannedQty, setPlannedQty] = useState<number>(defaultPlanned);
-  const [batchNumber, setBatchNumber] = useState<string>(() => {
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `BATCH-${today}-${rand}`;
-  });
-  const [expiryDate, setExpiryDate] = useState<string>(() => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() + 2);
-    return d.toISOString().slice(0, 10);
-  });
   const [notes, setNotes] = useState<string>(
     `Re-run production cycle for ${cycle.outputProductName} (${cycle.cycleReference})`,
   );
@@ -84,8 +74,6 @@ function ReRunCycleModalContent({
     await onSubmit(
       {
         plannedOutput: Number(plannedQty),
-        batchNumber: batchNumber.trim() || undefined,
-        expiryDate: expiryDate ? new Date(expiryDate).toISOString() : undefined,
         notes: notes.trim() || undefined,
       },
       autoSubmitApproval,
@@ -133,8 +121,7 @@ function ReRunCycleModalContent({
           </div>
         </div>
 
-        {/* Quantities & Batch Info */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <Input
             label={`Planned Output Quantity (${cycle.unitName})`}
             type="number"
@@ -144,24 +131,11 @@ function ReRunCycleModalContent({
             min={1}
             step="any"
           />
-          <Input
-            label="Generated Batch Number"
-            type="text"
-            value={batchNumber}
-            onChange={(e) => setBatchNumber(e.target.value)}
-            required
-          />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <Input
-            label="Batch Expiry Date"
-            type="date"
-            value={expiryDate}
-            onChange={(e) => setExpiryDate(e.target.value)}
-          />
-          <Input
-            label="Batch / Execution Notes"
+            label="Execution Notes"
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

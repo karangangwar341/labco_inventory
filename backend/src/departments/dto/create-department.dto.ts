@@ -7,8 +7,8 @@ export class CreateDepartmentDto {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ description: 'Client UUID (Super Admin only; derived from auth user for Client Admin)' })
+  @ApiPropertyOptional({ description: 'Project UUID (Super Admin only; derived from auth user for Project Admin)' })
   @IsOptional()
   @IsUUID('4')
-  clientId?: string;
+  projectId?: string;
 }

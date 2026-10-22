@@ -73,9 +73,9 @@ export function SuperAdminDashboard() {
     staleTime: 2 * 60 * 1000,
   });
 
-  const { data: clients = [], isLoading: isClientsLoading, error: clientsError } = useQuery({
-    queryKey: queryKeys.administration.clients(),
-    queryFn: administrationService.getClients,
+  const { data: projects = [], isLoading: isProjectsLoading, error: projectsError } = useQuery({
+    queryKey: queryKeys.administration.projects(),
+    queryFn: administrationService.getProjects,
     staleTime: 10 * 60 * 1000,
   });
 
@@ -183,10 +183,10 @@ export function SuperAdminDashboard() {
           </p>
         </Link>
 
-        {/* Active Client Tenants Card */}
-        <Link href="/admin/organizations" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+        {/* Active Project Tenants Card */}
+        <Link href="/admin/projects" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Client Tenants</span>
+            <span>Project Tenants</span>
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -194,7 +194,7 @@ export function SuperAdminDashboard() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">{clients.length}</span>
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">{projects.length}</span>
             <span className="text-xs text-slate-500">organizations</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Active tenant workspaces</p>
@@ -222,7 +222,7 @@ export function SuperAdminDashboard() {
         </Link>
       </div>
 
-      {/* Main Grid: Needs Review & Client Operations */}
+      {/* Main Grid: Needs Review & Project Operations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Needs Your Review Card */}
         <section aria-labelledby="needs-review-heading" className="saas-card overflow-hidden flex flex-col">
@@ -287,45 +287,45 @@ export function SuperAdminDashboard() {
           </div>
         </section>
 
-        {/* Client Operations Card */}
-        <section aria-labelledby="client-operations-heading" className="saas-card overflow-hidden flex flex-col">
+        {/* Project Operations Card */}
+        <section aria-labelledby="project-operations-heading" className="saas-card overflow-hidden flex flex-col">
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white">
             <div>
-              <h2 id="client-operations-heading" className="text-sm font-semibold text-slate-900">
-                Client Tenants
+              <h2 id="project-operations-heading" className="text-sm font-semibold text-slate-900">
+                Project Tenants
               </h2>
             </div>
-            <Link href="/admin/organizations" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">
+            <Link href="/admin/projects" className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline">
               Manage all
             </Link>
           </div>
 
           <div className="flex-1 bg-white">
-            {isClientsLoading ? (
-              <div className="p-8 text-center text-xs text-slate-400">Loading client organizations…</div>
-            ) : clientsError ? (
-              <div className="p-8 text-center text-xs text-red-600">Client overviews could not be loaded.</div>
-            ) : clients.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">No clients have been onboarded yet.</div>
+            {isProjectsLoading ? (
+              <div className="p-8 text-center text-xs text-slate-400">Loading project organizations…</div>
+            ) : projectsError ? (
+              <div className="p-8 text-center text-xs text-red-600">Project overviews could not be loaded.</div>
+            ) : projects.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">No projects have been onboarded yet.</div>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {clients.slice(0, 5).map((client) => (
+                {projects.slice(0, 5).map((project) => (
                   <li
-                    key={client.id}
+                    key={project.id}
                     className="p-4 hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-4"
                   >
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{client.name}</p>
+                      <p className="text-xs font-semibold text-slate-800 truncate">{project.name}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5 truncate flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
                         <span>
-                          {client.warehouseAssignments?.map((a) => a.warehouse.name).join(', ') || 'No warehouse assigned'}
+                          {project.warehouseAssignments?.map((a) => a.warehouse.name).join(', ') || 'No warehouse assigned'}
                         </span>
                       </p>
                     </div>
-                    <Link href={`/admin/organizations/${client.id}`} className="shrink-0">
+                    <Link href={`/admin/projects/${project.id}`} className="shrink-0">
                       <Button variant="ghost" size="sm">
                         Activity →
                       </Button>

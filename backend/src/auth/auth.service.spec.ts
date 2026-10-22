@@ -69,31 +69,31 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
       }));
     });
 
-    it('loads bounded role-scoped startup references in parallel and omits other warehouse identities for clients', async () => {
+    it('loads bounded role-scoped startup references in parallel and omits other warehouse identities for projects', async () => {
       mockPrisma.stockLocation.findMany.mockResolvedValue([{
-        id: 'location-client', locationType: 'CLIENT', warehouseId: null, clientId: 'client-1',
-        warehouse: null, client: { name: 'Client One' },
+        id: 'location-project', locationType: 'PROJECT', warehouseId: null, projectId: 'project-1',
+        warehouse: null, project: { name: 'Project One' },
       }]);
 
       const result = await authService.getBootstrap({
-        id: 'client-admin-1', username: 'client-admin', role: UserRole.CLIENT_ADMIN,
-        status: UserStatus.ACTIVE, clientId: 'client-1', warehouseId: null,
+        id: 'project-admin-1', username: 'project-admin', role: UserRole.PROJECT_ADMIN,
+        status: UserStatus.ACTIVE, projectId: 'project-1', warehouseId: null,
       });
 
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ OR: expect.arrayContaining([
-          { ownerScope: 'CLIENT', clientId: 'client-1' },
+          { ownerScope: 'PROJECT', projectId: 'project-1' },
         ]) }),
         take: 250,
       }));
       expect(mockPrisma.category.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: { OR: [
           { ownerScope: 'COMPANY' },
-          { ownerScope: 'CLIENT', clientId: 'client-1' },
+          { ownerScope: 'PROJECT', projectId: 'project-1' },
         ] },
         take: 250,
       }));
-      expect(result.locations).toEqual([{ id: 'location-client', name: 'Client One', locationType: 'CLIENT', warehouseId: null, clientId: 'client-1' }]);
+      expect(result.locations).toEqual([{ id: 'location-project', name: 'Project One', locationType: 'PROJECT', warehouseId: null, projectId: 'project-1' }]);
       expect(result.products).toEqual([]);
       expect(result.categories).toEqual([]);
     });

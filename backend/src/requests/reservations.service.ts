@@ -63,18 +63,11 @@ export class ReservationsService {
     lines: Array<{
       id: string;
       productId: string;
-      batchId?: string | null;
       baseQuantity: Prisma.Decimal;
       condition?: StockCondition;
     }>,
   ) {
     for (const line of lines) {
-      if (line.condition && line.condition !== StockCondition.USABLE) {
-        throw new BadRequestException(
-          'Reservations can only be placed on USABLE stock condition',
-        );
-      }
-
       const product = await tx.product.findUnique({
         where: { id: line.productId },
         select: { name: true },
@@ -85,17 +78,16 @@ export class ReservationsService {
         where: { id: locationId },
         include: {
           warehouse: { select: { name: true } },
-          client: { select: { name: true } },
+          project: { select: { name: true } },
         },
       });
-      const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
+      const locationName = location?.warehouse?.name || location?.project?.name || 'Selected Location';
 
       // Query inventory balance under lock / transaction
       const balance = await tx.inventoryBalance.findFirst({
         where: {
           locationId,
           productId: line.productId,
-          batchId: line.batchId || null,
         },
       });
 
@@ -131,7 +123,6 @@ export class ReservationsService {
           requestLineId: line.id,
           locationId,
           productId: line.productId,
-          batchId: line.batchId || null,
           quantityBase: line.baseQuantity,
           status: ReservationStatus.ACTIVE,
         },
@@ -170,11 +161,11 @@ export class ReservationsService {
   async reserveDepartmentIssues(
     tx: Prisma.TransactionClient,
     locationId: string,
-    lines: Array<{ id: string; productId: string; batchId?: string | null; baseQuantity: Prisma.Decimal }>,
+    lines: Array<{ id: string; productId: string; baseQuantity: Prisma.Decimal }>,
   ) {
     for (const line of lines) {
       const balance = await tx.inventoryBalance.findFirst({
-        where: { locationId, productId: line.productId, batchId: line.batchId || null },
+        where: { locationId, productId: line.productId },
       });
       const product = await tx.product.findUnique({
         where: { id: line.productId },
@@ -194,7 +185,6 @@ export class ReservationsService {
         departmentIssueId: line.id,
         locationId,
         productId: line.productId,
-        batchId: line.batchId || null,
         quantityBase: line.baseQuantity,
         status: ReservationStatus.ACTIVE,
       } });
@@ -212,7 +202,7 @@ export class ReservationsService {
     });
     for (const reservation of reservations) {
       const balance = await tx.inventoryBalance.findFirst({
-        where: { locationId: reservation.locationId, productId: reservation.productId, batchId: reservation.batchId || null },
+        where: { locationId: reservation.locationId, productId: reservation.productId },
       });
       if (!balance) throw new ConflictException('Reserved inventory balance is missing.');
       await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
@@ -233,7 +223,7 @@ export class ReservationsService {
     });
     for (const reservation of reservations) {
       const balance = await tx.inventoryBalance.findFirst({
-        where: { locationId: reservation.locationId, productId: reservation.productId, batchId: reservation.batchId || null },
+        where: { locationId: reservation.locationId, productId: reservation.productId },
       });
       if (balance) {
         await tx.$queryRaw`SELECT id FROM inventory_balances WHERE id = ${balance.id} FOR UPDATE`;
@@ -269,7 +259,6 @@ export class ReservationsService {
         where: {
           locationId: reservation.locationId,
           productId: reservation.productId,
-          batchId: reservation.batchId || null,
         },
       });
 
@@ -344,7 +333,6 @@ export class ReservationsService {
         where: {
           locationId: reservation.locationId,
           productId: reservation.productId,
-          batchId: reservation.batchId || null,
         },
       });
 

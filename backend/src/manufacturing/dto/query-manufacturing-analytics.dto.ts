@@ -3,10 +3,10 @@ import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ProductionStatus } from '@prisma/client';
 
 export class QueryManufacturingAnalyticsDto {
-  @ApiPropertyOptional({ description: 'Client UUID (Super Admin only filter)' })
+  @ApiPropertyOptional({ description: 'Project UUID (Super Admin only filter)' })
   @IsOptional()
   @IsUUID('4')
-  clientId?: string;
+  projectId?: string;
 
   @ApiPropertyOptional({ description: 'Start date ISO string' })
   @IsOptional()

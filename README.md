@@ -1,6 +1,6 @@
 # Labco Warehouse & Stock
 
-Warehouse, client manufacturing, and inventory management application. The repository contains a NestJS API, Next.js web application, and Prisma migrations for PostgreSQL.
+Warehouse, project manufacturing, and inventory management application. The repository contains a NestJS API, Next.js web application, and Prisma migrations for PostgreSQL.
 
 ## Runtime
 

@@ -15,14 +15,12 @@ function mapRequestLines(lines: any[] = []) {
     productName: line.product?.name || line.productName || `Item ${index + 1}`,
     quantity: asDisplayQuantity(line.quantity),
     unitName: line.unitNameSnapshot || line.unitName || line.unit?.unitName,
-    batchNumber: line.batchNumber || line.batch?.batchNumber || null,
-    expiryDate: line.expiryDate || null,
     stockWarning: line.stockWarning || undefined,
   }));
 }
 
 function locationName(location: any): string | undefined {
-  return location?.warehouse?.name || location?.client?.name || location?.name;
+  return location?.warehouse?.name || location?.project?.name || location?.name;
 }
 
 export const approvalsService = {
@@ -66,15 +64,15 @@ export const approvalsService = {
           : requestType === 'STOCK_OUT'
             ? `Out of ${source || destination || 'Location not available'}`
             : source && destination ? `${source} → ${destination}` : source || destination || 'Location not available';
-        const clientId = r.clientId || r.client?.id || r.destinationLocation?.clientId || r.sourceLocation?.clientId;
-        const clientName = r.client?.name || r.destinationLocation?.client?.name || r.sourceLocation?.client?.name;
+        const projectId = r.projectId || r.project?.id || r.destinationLocation?.projectId || r.sourceLocation?.projectId;
+        const projectName = r.project?.name || r.destinationLocation?.project?.name || r.sourceLocation?.project?.name;
         return {
           id: r.id,
           type: `STOCK_REQUEST (${requestType})`,
           requester: r.requesterUsername || r.requester?.username || 'Store Admin',
           location,
-          clientId,
-          clientName,
+          projectId,
+          projectName,
           details: r.reason || r.notes || 'Review the requested products and quantities.',
           quantitySummary: `${lineItems.length} ${lineItems.length === 1 ? 'product' : 'products'}`,
           lineItems,
@@ -87,18 +85,17 @@ export const approvalsService = {
       queue.SHIPMENTS = (Array.isArray(shipmentsRes) ? shipmentsRes : []).map((s) => ({
         id: s.id,
         type: 'SHIPMENT RECEIPT APPROVAL',
-        requester: s.recipientUsername || 'Client Admin',
-        location: s.destinationName || s.destinationLocation?.name || 'Client Location',
-        clientId: s.destinationLocation?.clientId || s.clientId,
-        clientName: s.destinationLocation?.client?.name || s.destinationName,
-        details: `The client confirmed receipt${s.shipmentNumber ? ` for shipment ${s.shipmentNumber}` : ''}. Approve to add the received quantities to client stock.${s.notes ? ` Note: ${s.notes}` : ''}`,
+        requester: s.recipientUsername || 'Project Admin',
+        location: s.destinationName || s.destinationLocation?.name || 'Project Location',
+        projectId: s.destinationLocation?.projectId || s.projectId,
+        projectName: s.destinationLocation?.project?.name || s.destinationName,
+        details: `The project confirmed receipt${s.shipmentNumber ? ` for shipment ${s.shipmentNumber}` : ''}. Approve to add the received quantities to project stock.${s.notes ? ` Note: ${s.notes}` : ''}`,
         quantitySummary: `${s.lines?.length || 0} lines · awaiting receipt approval`,
         lineItems: (s.lines || []).map((line: any, index: number) => ({
           id: line.id || `shipment-line-${index}`,
           productName: line.product?.name || line.productName || `Item ${index + 1}`,
           quantity: asDisplayQuantity(line.dispatchedQty ?? line.quantity),
           unitName: line.unitName || line.unitNameSnapshot,
-          batchNumber: line.batch?.batchNumber || line.batchNumber || null,
           label: 'Dispatched',
           quantityNote: line.receivedQty != null || line.discrepancyQty != null
             ? `Received: ${asDisplayQuantity(line.receivedQty)} · Discrepancy: ${asDisplayQuantity(line.discrepancyQty)}`
@@ -127,10 +124,10 @@ export const approvalsService = {
         return {
           id: p.id,
           type: `PRODUCTION_RUN${p.runNumber || p.productionReference ? ` (${p.runNumber || p.productionReference})` : ''}`,
-          requester: p.submittedBy?.username || p.client?.name || 'Client Admin',
-          location: p.client?.name || 'Client location',
-          clientId: p.clientId || p.client?.id,
-          clientName: p.client?.name,
+          requester: p.submittedBy?.username || p.project?.name || 'Project Admin',
+          location: p.project?.name || 'Project location',
+          projectId: p.projectId || p.project?.id,
+          projectName: p.project?.name,
           details: p.notes || `Review the production plan${p.plannedOutput ? ` for ${asDisplayQuantity(p.plannedOutput)} units` : ''}.`,
           quantitySummary: `${inputs.length} inputs · ${outputs.length} outputs`,
           lineItems: [...inputs, ...outputs],
@@ -144,9 +141,9 @@ export const approvalsService = {
         id: d.id,
         type: 'DEPARTMENT_ISSUE',
         requester: d.issuedBy?.username || d.requesterName || 'Department Admin',
-        location: d.department?.name || d.departmentName || 'Client department',
-        clientId: d.clientId || d.department?.clientId,
-        clientName: d.client?.name || d.department?.client?.name,
+        location: d.department?.name || d.departmentName || 'Project department',
+        projectId: d.projectId || d.department?.projectId,
+        projectName: d.project?.name || d.department?.project?.name,
         details: d.notes || 'Review the requested product and quantity.',
         quantitySummary: `${asDisplayQuantity(d.quantity)} ${d.unit?.unitName || d.unitNameSnapshot || ''}`.trim(),
         lineItems: [{
@@ -154,7 +151,6 @@ export const approvalsService = {
           productName: d.product?.name || d.productName || 'Product',
           quantity: asDisplayQuantity(d.quantity),
           unitName: d.unit?.unitName || d.unitNameSnapshot,
-          batchNumber: d.batch?.batchNumber || null,
         }],
         createdAt: d.createdAt ? new Date(d.createdAt).toLocaleString() : 'Recent',
         createdAtRaw: d.createdAt,
@@ -164,10 +160,10 @@ export const approvalsService = {
       queue.DEPARTMENTS.push(...(Array.isArray(departmentBatchesRes) ? departmentBatchesRes : []).map((batch) => ({
         id: `batch:${batch.id}`,
         type: 'DEPARTMENT_ISSUE_BATCH',
-        requester: batch.createdBy?.username || 'Client Admin',
-        location: batch.client?.name || 'Client departments',
-        clientId: batch.clientId || batch.client?.id,
-        clientName: batch.client?.name,
+        requester: batch.createdBy?.username || 'Project Admin',
+        location: batch.project?.name || 'Project departments',
+        projectId: batch.projectId || batch.project?.id,
+        projectName: batch.project?.name,
         details: 'Review all department issues together. Approval posts every line atomically.',
         quantitySummary: `${batch.issues?.length || 0} issue lines · one decision`,
         lineItems: (batch.issues || []).map((issue: any, index: number) => ({
@@ -175,7 +171,6 @@ export const approvalsService = {
           productName: issue.product?.name || 'Product',
           quantity: asDisplayQuantity(issue.quantity),
           unitName: issue.unit?.unitName || issue.unitNameSnapshot,
-          batchNumber: issue.batch?.batchNumber || null,
           label: issue.department?.name || 'Department',
         })),
         createdAt: batch.submittedAt ? new Date(batch.submittedAt).toLocaleString() : 'Recent',

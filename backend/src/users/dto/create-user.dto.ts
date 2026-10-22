@@ -15,7 +15,7 @@ export class CreateUserDto {
   password!: string;
 
   @ApiProperty({ enum: UserRole, example: UserRole.STORE_ADMIN })
-  @IsEnum(UserRole, { message: 'Role must be SUPER_ADMIN, STORE_ADMIN, or CLIENT_ADMIN' })
+  @IsEnum(UserRole, { message: 'Role must be SUPER_ADMIN, STORE_ADMIN, or PROJECT_ADMIN' })
   role!: UserRole;
 
   @ApiPropertyOptional({ description: 'Required for STORE_ADMIN role' })
@@ -23,8 +23,8 @@ export class CreateUserDto {
   @IsUUID('4', { message: 'warehouseId must be a valid UUID' })
   warehouseId?: string;
 
-  @ApiPropertyOptional({ description: 'Required for CLIENT_ADMIN role' })
+  @ApiPropertyOptional({ description: 'Required for PROJECT_ADMIN role' })
   @IsOptional()
-  @IsUUID('4', { message: 'clientId must be a valid UUID' })
-  clientId?: string;
+  @IsUUID('4', { message: 'projectId must be a valid UUID' })
+  projectId?: string;
 }

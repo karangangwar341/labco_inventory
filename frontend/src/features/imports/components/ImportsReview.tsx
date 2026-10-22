@@ -83,8 +83,8 @@ export function ImportsReview() {
     }).then((items) => {
       const allowed = user?.role === 'STORE_ADMIN'
         ? items.filter((location) => location.locationType === 'WAREHOUSE')
-        : user?.role === 'CLIENT_ADMIN'
-          ? items.filter((location) => location.locationType === 'CLIENT')
+        : user?.role === 'PROJECT_ADMIN'
+          ? items.filter((location) => location.locationType === 'PROJECT')
           : items;
       setLocations(allowed);
       if (allowed.length === 1) setDefaultLocationId(allowed[0].id);
@@ -153,10 +153,10 @@ export function ImportsReview() {
   };
 
   const handleDownloadSample = (format: 'csv' | 'xlsx') => {
-    const sampleHeaders = ['productName', 'quantity', 'unitName', 'batchNumber', 'expiryDate', 'condition'];
+    const sampleHeaders = ['productName', 'quantity', 'unitName', 'condition'];
     const sampleRows = [
-      ['Diagnostic Cartridge A', 50, 'PIECE', 'LOT-SAMPLE-01', '2027-12-31', 'USABLE'],
-      ['Reagent Solution B', 20, 'BOX', 'LOT-SAMPLE-02', '2026-11-30', 'USABLE'],
+      ['Diagnostic Cartridge A', 50, 'PIECE', 'USABLE'],
+      ['Reagent Solution B', 20, 'BOX', 'USABLE'],
     ];
 
     if (format === 'csv') {
@@ -540,8 +540,6 @@ export function ImportsReview() {
                   <th className="py-2.5 px-3.5 font-semibold">Product Name / Identifier</th>
                   <th className="py-2.5 px-3.5 font-semibold">Quantity</th>
                   <th className="py-2.5 px-3.5 font-semibold">Unit</th>
-                  <th className="py-2.5 px-3.5 font-semibold">Batch / Lot</th>
-                  <th className="py-2.5 px-3.5 font-semibold">Expiry</th>
                   <th className="py-2.5 px-3.5 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -552,8 +550,6 @@ export function ImportsReview() {
                   const productName = mapped.productName || raw.productName || raw.item || raw.description || '—';
                   const quantity = mapped.quantity ?? raw.quantity ?? raw.qty ?? 0;
                   const unitName = mapped.unitName || raw.unit || 'PIECE';
-                  const batchNumber = mapped.batchNumber || raw.batch || raw.lot || '';
-                  const expiryDate = mapped.expiryDate || raw.expiry || '';
                   const hasErrors = (row.validationErrors && row.validationErrors.length > 0) || row.status === 'ERROR';
 
                   return (
@@ -588,28 +584,6 @@ export function ImportsReview() {
                             disabled={!editableBatch}
                             onChange={(e) => handleCellChange(row.id, 'unitName', e.target.value)}
                             className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-16 text-[#172033]"
-                          />
-                        </td>
-
-                        <td className="py-2.5 px-3.5 font-mono text-[#5b6678]">
-                          <input
-                            type="text"
-                            value={batchNumber}
-                            placeholder="None"
-                            disabled={!editableBatch}
-                            onChange={(e) => handleCellChange(row.id, 'batchNumber', e.target.value)}
-                            className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-28 text-[#172033]"
-                          />
-                        </td>
-
-                        <td className="py-2.5 px-3.5 text-[#5b6678]">
-                          <input
-                            type="text"
-                            value={expiryDate}
-                            placeholder="None"
-                            disabled={!editableBatch}
-                            onChange={(e) => handleCellChange(row.id, 'expiryDate', e.target.value)}
-                            className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-24 text-[#172033]"
                           />
                         </td>
 
@@ -687,7 +661,7 @@ export function ImportsReview() {
               </Button>
             </>
           ) : editableBatch ? (
-            /* Store Admin & Client Admin: Draft Preparation Only - NO POSTING BUTTON */
+            /* Store Admin & Project Admin: Draft Preparation Only - NO POSTING BUTTON */
             <>
               <Button
                 variant="secondary"

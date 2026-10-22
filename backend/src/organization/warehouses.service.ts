@@ -39,9 +39,9 @@ export class WarehousesService {
       return this.prisma.warehouse.findMany({
         orderBy: { name: 'asc' },
         include: {
-          clientAssignments: {
+          projectAssignments: {
             where: { isActive: true },
-            include: { client: true },
+            include: { project: true },
           },
         },
       });
@@ -55,22 +55,22 @@ export class WarehousesService {
       return this.prisma.warehouse.findMany({
         where: { id: user.warehouseId },
         include: {
-          clientAssignments: {
+          projectAssignments: {
             where: { isActive: true },
-            include: { client: true },
+            include: { project: true },
           },
         },
       });
     }
 
-    if (currentUser.role === UserRole.CLIENT_ADMIN) {
+    if (currentUser.role === UserRole.PROJECT_ADMIN) {
       const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (!user?.clientId) {
+      if (!user?.projectId) {
         return [];
       }
-      // Return warehouses actively assigned to this client
-      const assignments = await this.prisma.clientWarehouseAssignment.findMany({
-        where: { clientId: user.clientId, isActive: true },
+      // Return warehouses actively assigned to this project
+      const assignments = await this.prisma.projectWarehouseAssignment.findMany({
+        where: { projectId: user.projectId, isActive: true },
         include: { warehouse: true },
       });
       return assignments.map((a) => a.warehouse);
@@ -90,9 +90,9 @@ export class WarehousesService {
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id },
       include: {
-        clientAssignments: {
+        projectAssignments: {
           where: { isActive: true },
-          include: { client: true },
+          include: { project: true },
         },
       },
     });

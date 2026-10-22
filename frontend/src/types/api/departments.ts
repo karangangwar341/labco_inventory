@@ -1,10 +1,10 @@
-import { DepartmentStatus, DepartmentIssueStatus, StockCondition } from './common';
+import { DepartmentStatus, DepartmentIssueStatus } from './common';
 
 export interface DepartmentDto {
   id: string;
   name: string;
-  clientId: string;
-  clientName?: string;
+  projectId: string;
+  projectName?: string;
   status: DepartmentStatus;
   proposedName?: string | null;
   proposedStatus?: DepartmentStatus | null;
@@ -25,7 +25,6 @@ export interface DepartmentIssueDto {
   quantity: number | string;
   unitNameSnapshot?: string;
   unit?: { id: string; unitName: string };
-  batchId?: string | null;
   status: DepartmentIssueStatus;
   notes?: string | null;
   createdAt: string;
@@ -34,7 +33,7 @@ export interface DepartmentIssueDto {
 
 export interface DepartmentIssueBatchDto {
   id: string;
-  clientId: string;
+  projectId: string;
   status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'POSTED' | 'REJECTED';
   createdById: string;
   createdAt: string;
@@ -44,7 +43,7 @@ export interface DepartmentIssueBatchDto {
 
 export interface CreateDepartmentDto {
   name: string;
-  clientId?: string;
+  projectId?: string;
 }
 
 export interface CreateDepartmentIssueDto {
@@ -52,7 +51,6 @@ export interface CreateDepartmentIssueDto {
   productId: string;
   quantity: number;
   unitId?: string;
-  batchId?: string;
   notes?: string;
 }
 
@@ -60,7 +58,7 @@ export type DepartmentReturnStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'POSTED' 
 
 export interface DepartmentReturnDto {
   id: string;
-  clientId: string;
+  projectId: string;
   departmentId?: string | null;
   departmentIssueId?: string | null;
   department?: { id: string; name: string } | null;
@@ -68,7 +66,6 @@ export interface DepartmentReturnDto {
   product?: { id: string; name: string };
   quantity: number | string;
   unitNameSnapshot?: string;
-  condition: StockCondition;
   reason: string;
   status: DepartmentReturnStatus;
   rejectionReason?: string | null;
@@ -79,10 +76,8 @@ export interface DepartmentReturnDto {
 export interface CreateDepartmentReturnDto {
   departmentIssueId: string;
   productId: string;
-  batchId?: string;
   quantity: number;
   unitId?: string;
-  condition: StockCondition;
   reason: string;
   notes?: string;
 }

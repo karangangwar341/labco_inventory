@@ -20,7 +20,6 @@ import {
   DepartmentIssueStatus,
   DepartmentIssueBatchStatus,
   DepartmentReturnStatus,
-  StockCondition,
 } from '@prisma/client';
 import { DepartmentsService } from './departments.service.js';
 import { CreateDepartmentDto } from './dto/create-department.dto.js';
@@ -35,7 +34,6 @@ import {
   ApproveDepartmentActionDto,
   RejectDepartmentActionDto,
 } from './dto/decide-department-request.dto.js';
-import { WriteOffStockDto } from './dto/write-off-stock.dto.js';
 import { SaveDepartmentIssueBatchDto } from './dto/save-department-issue-batch.dto.js';
 
 @ApiTags('Departments, Issues & Returns')
@@ -50,8 +48,8 @@ export class DepartmentsController {
   // ==========================================
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'Create department (Client Admin proposes PENDING_APPROVAL; Super Admin creates ACTIVE)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Create department (Project Admin proposes PENDING_APPROVAL; Super Admin creates ACTIVE)' })
   async createDepartment(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDepartmentDto,
@@ -60,17 +58,17 @@ export class DepartmentsController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List departments within caller scope' })
   async getDepartments(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
   ) {
-    return this.departmentsService.getDepartments(clientId, user);
+    return this.departmentsService.getDepartments(projectId, user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Update or propose updates to a department' })
   async updateDepartment(
     @CurrentUser() user: AuthenticatedUser,
@@ -107,17 +105,17 @@ export class DepartmentsController {
   // ==========================================
 
   @Post('issues/draft')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'Get or create the client daily department issue draft' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Get or create the project daily department issue draft' })
   async getOpenIssueBatch(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
   ) {
-    return this.departmentsService.getOpenIssueBatch(user, clientId);
+    return this.departmentsService.getOpenIssueBatch(user, projectId);
   }
 
   @Get('issues/batches')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List department issue batches within caller scope' })
   async getIssueBatches(
     @CurrentUser() user: AuthenticatedUser,
@@ -127,7 +125,7 @@ export class DepartmentsController {
   }
 
   @Patch('issues/batches/:id/lines')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Replace line items in an editable daily department issue draft' })
   async saveIssueBatchLines(
     @CurrentUser() user: AuthenticatedUser,
@@ -138,7 +136,7 @@ export class DepartmentsController {
   }
 
   @Post('issues/batches/:id/submit')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Submit the daily department issue batch for posting or approval' })
   async submitIssueBatch(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.departmentsService.submitIssueBatch(id, user);
@@ -164,7 +162,7 @@ export class DepartmentsController {
   }
 
   @Post('issues')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Submit department issue request (pending approval)' })
   async createIssue(
     @CurrentUser() user: AuthenticatedUser,
@@ -174,19 +172,19 @@ export class DepartmentsController {
   }
 
   @Get('issues')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List department issues within caller scope' })
   async getIssues(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
     @Query('departmentId') departmentId?: string,
     @Query('status') status?: DepartmentIssueStatus,
   ) {
-    return this.departmentsService.getIssues({ clientId, departmentId, status }, user);
+    return this.departmentsService.getIssues({ projectId, departmentId, status }, user);
   }
 
   @Get('issues/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Get department issue details by ID' })
   async getIssue(
     @CurrentUser() user: AuthenticatedUser,
@@ -198,7 +196,7 @@ export class DepartmentsController {
   @Post('issues/:id/approve')
   @Roles(UserRole.SUPER_ADMIN)
   @ApiHeader({ name: 'Idempotency-Key', required: false })
-  @ApiOperation({ summary: 'Super Admin approves issue, deducts client usable stock atomically' })
+  @ApiOperation({ summary: 'Super Admin approves issue, deducts project usable stock atomically' })
   async approveIssue(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
@@ -228,8 +226,8 @@ export class DepartmentsController {
   // ==========================================
 
   @Post('returns')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
-  @ApiOperation({ summary: 'Submit department return request with condition (pending approval)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Submit a department return request (pending approval)' })
   async createReturn(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDepartmentReturnDto,
@@ -238,23 +236,22 @@ export class DepartmentsController {
   }
 
   @Get('returns')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List department returns within caller scope' })
   async getReturns(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
     @Query('departmentId') departmentId?: string,
-    @Query('condition') condition?: StockCondition,
     @Query('status') status?: DepartmentReturnStatus,
   ) {
     return this.departmentsService.getReturns(
-      { clientId, departmentId, condition, status },
+      { projectId, departmentId, status },
       user,
     );
   }
 
   @Get('returns/:id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Get department return details by ID' })
   async getReturn(
     @CurrentUser() user: AuthenticatedUser,
@@ -264,7 +261,7 @@ export class DepartmentsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Get department details by ID' })
   async getDepartment(
     @CurrentUser() user: AuthenticatedUser,
@@ -276,7 +273,7 @@ export class DepartmentsController {
   @Post('returns/:id/approve')
   @Roles(UserRole.SUPER_ADMIN)
   @ApiHeader({ name: 'Idempotency-Key', required: false })
-  @ApiOperation({ summary: 'Super Admin approves return, credits client stock in condition bucket' })
+  @ApiOperation({ summary: 'Super Admin approves return and credits usable project stock' })
   async approveReturn(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
@@ -301,23 +298,4 @@ export class DepartmentsController {
     return this.departmentsService.rejectReturn(id, dto, user);
   }
 
-  // ==========================================
-  // DAMAGED / EXPIRED STOCK WRITE-OFF
-  // ==========================================
-
-  @Post('write-offs')
-  @Roles(UserRole.SUPER_ADMIN)
-  @ApiHeader({ name: 'Idempotency-Key', required: false })
-  @ApiOperation({ summary: 'Super Admin write-off of damaged or expired stock' })
-  async writeOffStock(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: WriteOffStockDto,
-    @Headers('Idempotency-Key') headerIdempotencyKey?: string,
-  ) {
-    const finalDto = {
-      ...dto,
-      idempotencyKey: headerIdempotencyKey || dto.idempotencyKey,
-    };
-    return this.departmentsService.writeOffStock(finalDto, user);
-  }
 }

@@ -5,11 +5,11 @@ export interface ShipmentLineDto {
   productId: string;
   productName?: string;
   product?: { id: string; name: string };
+  unitName?: string;
   dispatchedQty: number;
   receivedQty?: number | null;
   discrepancyQty?: number | null;
   condition: StockCondition;
-  batchNumber?: string;
 }
 
 export interface ShipmentDto {
@@ -22,7 +22,7 @@ export interface ShipmentDto {
   destinationName?: string;
   sourceLocation?: { warehouse?: { id: string; name: string } | null };
   destinationLocation?: {
-    client?: { id: string; name: string } | null;
+    project?: { id: string; name: string } | null;
     warehouse?: { id: string; name: string } | null;
   };
   sourceDescription?: string;
@@ -30,6 +30,10 @@ export interface ShipmentDto {
   dispatchedAt: string;
   receivedAt?: string;
   notes?: string;
+  discrepancyResolution?: 'MISSING' | 'CALCULATION_MISTAKE' | null;
+  discrepancyResolvedAt?: string | null;
+  discrepancyResolvedById?: string | null;
+  discrepancyResolutionNote?: string | null;
   lines: ShipmentLineDto[];
 }
 
@@ -42,6 +46,10 @@ export interface ReceiveShipmentDto {
 }
 
 export interface ApproveReceiptDto {
-  discrepancyResolution?: 'ACCEPT_RECEIVED' | 'QUARANTINE_DISCREPANCY';
   idempotencyKey?: string;
+}
+
+export interface ResolveDiscrepancyDto {
+  resolution: 'MISSING' | 'CALCULATION_MISTAKE';
+  note?: string;
 }

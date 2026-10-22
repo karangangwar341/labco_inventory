@@ -19,7 +19,7 @@ export class CreateWorkLogDto {
   @Max(24)
   hoursWorked?: number;
 
-  @ApiProperty({ description: 'Detailed tasks and work activities completed', example: 'Calibrated diagnostic assay pipette lines, conducted batch inspection on Lot #AS-992' })
+  @ApiProperty({ description: 'Detailed tasks and work activities completed', example: 'Calibrated diagnostic assay pipette lines and completed a quality inspection' })
   @IsString()
   @IsNotEmpty()
   tasksCompleted!: string;

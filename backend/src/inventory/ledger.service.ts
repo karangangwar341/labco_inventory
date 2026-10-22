@@ -48,7 +48,6 @@ export class LedgerService {
       const processedLines: Array<{
         locationId: string;
         productId: string;
-        batchId: string | null;
         condition: StockCondition;
         qtyDeltaBase: Prisma.Decimal;
         originalQty: Prisma.Decimal;
@@ -57,6 +56,9 @@ export class LedgerService {
       }> = [];
 
       for (const line of dto.lines) {
+        if (line.condition === StockCondition.DAMAGED && !dto.reason?.trim()) {
+          throw new BadRequestException('A reason is required when posting damaged stock-out');
+        }
         const product = await tx.product.findUnique({
           where: { id: line.productId },
         });
@@ -95,7 +97,6 @@ export class LedgerService {
         processedLines.push({
           locationId: line.locationId,
           productId: line.productId,
-          batchId: line.batchId || null,
           condition: line.condition,
           qtyDeltaBase,
           originalQty: originalQtyDec,
@@ -108,7 +109,6 @@ export class LedgerService {
           where: {
             locationId: line.locationId,
             productId: line.productId,
-            batchId: line.batchId || null,
           },
         });
 
@@ -117,11 +117,8 @@ export class LedgerService {
             data: {
               locationId: line.locationId,
               productId: line.productId,
-              batchId: line.batchId || null,
               usableQty: new Prisma.Decimal(0),
               reservedQty: new Prisma.Decimal(0),
-              damagedQty: new Prisma.Decimal(0),
-              expiredQty: new Prisma.Decimal(0),
               version: 0,
             },
           });
@@ -139,21 +136,20 @@ export class LedgerService {
         }
 
         let newUsable = balance.usableQty;
-        let newDamaged = balance.damagedQty;
-        let newExpired = balance.expiredQty;
-
-        if (line.condition === StockCondition.USABLE) {
-          newUsable = newUsable.add(qtyDeltaBase);
-          // Non-negotiable invariant: Available = Usable - Reserved >= 0
-          if (newUsable.minus(balance.reservedQty).isNegative()) {
+        if (line.condition === StockCondition.DAMAGED && line.direction !== 'OUT') {
+          throw new BadRequestException('Damaged stock must be recorded as a stock-out request');
+        }
+        newUsable = newUsable.add(qtyDeltaBase);
+        // Non-negotiable invariant: Available = Usable - Reserved >= 0
+        if (newUsable.minus(balance.reservedQty).isNegative()) {
             const location = await tx.stockLocation.findUnique({
               where: { id: line.locationId },
               include: {
                 warehouse: { select: { id: true, name: true } },
-                client: { select: { id: true, name: true } },
+                project: { select: { id: true, name: true } },
               },
             });
-            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
+            const locationName = location?.warehouse?.name || location?.project?.name || 'Selected Location';
             const availableAtLocation = balance.usableQty.minus(balance.reservedQty);
             const unitLabel = unit.unitName ? ` ${unit.unitName}` : '';
 
@@ -203,37 +199,6 @@ export class LedgerService {
             throw new BadRequestException(
               `Insufficient stock for "${product.name}" at "${locationName}". Available usable stock is ${availableAtLocation}${unitLabel}, but ${line.quantity}${unitLabel} was requested.${otherWarehouseNote}`,
             );
-          }
-        } else if (line.condition === StockCondition.DAMAGED) {
-          newDamaged = newDamaged.add(qtyDeltaBase);
-          if (newDamaged.isNegative()) {
-            const location = await tx.stockLocation.findUnique({
-              where: { id: line.locationId },
-              include: {
-                warehouse: { select: { id: true, name: true } },
-                client: { select: { id: true, name: true } },
-              },
-            });
-            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
-            throw new BadRequestException(
-              `Damaged stock balance cannot drop below zero for "${product.name}" at "${locationName}"`,
-            );
-          }
-        } else if (line.condition === StockCondition.EXPIRED) {
-          newExpired = newExpired.add(qtyDeltaBase);
-          if (newExpired.isNegative()) {
-            const location = await tx.stockLocation.findUnique({
-              where: { id: line.locationId },
-              include: {
-                warehouse: { select: { name: true } },
-                client: { select: { id: true, name: true } },
-              },
-            });
-            const locationName = location?.warehouse?.name || location?.client?.name || 'Selected Location';
-            throw new BadRequestException(
-              `Expired stock balance cannot drop below zero for "${product.name}" at "${locationName}"`,
-            );
-          }
         }
 
         // Atomic versioned update to prevent concurrent race conditions
@@ -245,8 +210,6 @@ export class LedgerService {
             },
             data: {
               usableQty: newUsable,
-              damagedQty: newDamaged,
-              expiredQty: newExpired,
               version: { increment: 1 },
             },
           });
@@ -261,8 +224,6 @@ export class LedgerService {
             where: { id: balance.id },
             data: {
               usableQty: newUsable,
-              damagedQty: newDamaged,
-              expiredQty: newExpired,
               version: balance.version + 1,
             },
           });
@@ -273,6 +234,7 @@ export class LedgerService {
       const ledgerTx = await tx.ledgerTransaction.create({
         data: {
           transactionType: dto.transactionType,
+          reason: dto.reason || null,
           sourceRefType: dto.sourceRefType || null,
           sourceRefId: dto.sourceRefId || null,
           idempotencyKey: dto.idempotencyKey || null,
@@ -281,7 +243,6 @@ export class LedgerService {
             create: processedLines.map((l) => ({
               locationId: l.locationId,
               productId: l.productId,
-              batchId: l.batchId,
               condition: l.condition,
               qtyDeltaBase: l.qtyDeltaBase,
               originalQty: l.originalQty,
@@ -346,7 +307,6 @@ export class LedgerService {
           where: {
             locationId: entry.locationId,
             productId: entry.productId,
-            batchId: entry.batchId || null,
           },
         });
 
@@ -366,20 +326,11 @@ export class LedgerService {
         }
 
         let newUsable = balance.usableQty;
-        let newDamaged = balance.damagedQty;
-        let newExpired = balance.expiredQty;
-
-        if (entry.condition === StockCondition.USABLE) {
-          newUsable = newUsable.add(compensatingDelta);
+        newUsable = newUsable.add(compensatingDelta);
           if (newUsable.minus(balance.reservedQty).isNegative()) {
             throw new BadRequestException(
               'Cannot reverse transaction: insufficient usable stock to compensate deduction',
             );
-          }
-        } else if (entry.condition === StockCondition.DAMAGED) {
-          newDamaged = newDamaged.add(compensatingDelta);
-        } else if (entry.condition === StockCondition.EXPIRED) {
-          newExpired = newExpired.add(compensatingDelta);
         }
 
         if (tx.inventoryBalance.updateMany) {
@@ -390,8 +341,6 @@ export class LedgerService {
             },
             data: {
               usableQty: newUsable,
-              damagedQty: newDamaged,
-              expiredQty: newExpired,
               version: { increment: 1 },
             },
           });
@@ -406,8 +355,6 @@ export class LedgerService {
             where: { id: balance.id },
             data: {
               usableQty: newUsable,
-              damagedQty: newDamaged,
-              expiredQty: newExpired,
               version: balance.version + 1,
             },
           });
@@ -426,7 +373,6 @@ export class LedgerService {
             create: originalTx.entries.map((e) => ({
               locationId: e.locationId,
               productId: e.productId,
-              batchId: e.batchId,
               condition: e.condition,
               qtyDeltaBase: e.qtyDeltaBase.negated(),
               originalQty: e.originalQty,
@@ -464,7 +410,6 @@ export class LedgerService {
       replacementLines: Array<{
         locationId: string;
         productId: string;
-        batchId?: string;
         condition: StockCondition;
         quantity: number;
         unitName: string;

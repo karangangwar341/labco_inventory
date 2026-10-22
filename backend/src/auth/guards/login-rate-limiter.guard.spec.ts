@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ExecutionContext, HttpException } from '@nestjs/common';
 import { LoginRateLimiterGuard } from './login-rate-limiter.guard.js';
 
-function contextFor(ip: string, forwardedFor = 'forged-client-value') {
+function contextFor(ip: string, forwardedFor = 'forged-project-value') {
   return {
     switchToHttp: () => ({
       getRequest: () => ({

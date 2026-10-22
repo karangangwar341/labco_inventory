@@ -10,7 +10,7 @@ export function createQueryClient(): QueryClient {
         gcTime: 30 * 60 * 1000,
         // Do not spam backend on window/tab focus
         refetchOnWindowFocus: false,
-        // Bounded retry policy: only retry transient network/5xx errors, never 4xx client/auth errors
+        // Bounded retry policy: only retry transient network/5xx errors, never 4xx project/auth errors
         retry: (failureCount, error) => {
           if (error instanceof ApiError) {
             // Authentication, authorization, and validation failures should never retry automatically

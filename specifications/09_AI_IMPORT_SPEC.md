@@ -6,9 +6,9 @@ AI may classify/extract data from uploaded product images, scans, PDFs and suppo
 
 ## 2. Supported import intents
 - Prepare company product creation.
-- Prepare client product creation.
+- Prepare project product creation.
 - Prepare stock-in, stock-out, opening stock and physical adjustment drafts.
-- Prepare client manufacturing input/output draft where explicitly supported by the selected workflow.
+- Prepare project manufacturing input/output draft where explicitly supported by the selected workflow.
 - CSV/XLSX import with deterministic parsing and validation.
 
 ## 3. Pipeline
@@ -19,7 +19,7 @@ AI may classify/extract data from uploaded product images, scans, PDFs and suppo
 5. Match catalog items using deterministic identifiers/normalized text and display candidates; AI similarity may not silently decide identity.
 6. Return proposed values, source evidence, confidence/uncertainty and warnings.
 7. Show editable review grid; allow cell correction, row add/remove, duplicate-row keep/merge choice.
-8. Validate required fields, units/conversions, client/warehouse scope, product approval status, quantity precision, batch/expiry requirements and available stock.
+8. Validate required fields, units/conversions, project/warehouse scope, product approval status, quantity precision and available stock. Lot and expiry data are not extracted or stored.
 9. Submit a draft/batch only after explicit user action.
 10. Super Admin approval is required for all inventory-affecting rows; stock posts only after approval.
 11. Show per-row final status and exportable errors.

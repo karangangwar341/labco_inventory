@@ -174,7 +174,7 @@ export class AuthService {
       sessionId: session.id,
       deviceId: clientContext?.deviceId || null,
       warehouseId: user.warehouseId ?? null,
-      clientId: user.clientId ?? null,
+      projectId: user.projectId ?? null,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: jwtExpiration as any });
@@ -189,7 +189,7 @@ export class AuthService {
         role: user.role,
         status: user.status,
         warehouseId: user.warehouseId ?? null,
-        clientId: user.clientId ?? null,
+        projectId: user.projectId ?? null,
       },
     };
   }
@@ -209,7 +209,7 @@ export class AuthService {
   }
 
   /** Small, role-scoped reference set used to render the first workspace screen. */
-  async getBootstrap(user: { id: string; username: string; role: string; status: string; clientId?: string | null; warehouseId?: string | null }) {
+  async getBootstrap(user: { id: string; username: string; role: string; status: string; projectId?: string | null; warehouseId?: string | null }) {
     const role = user.role as UserRole;
     const productScope = role === UserRole.SUPER_ADMIN
       ? { status: ProductStatus.APPROVED }
@@ -219,23 +219,23 @@ export class AuthService {
             status: ProductStatus.APPROVED,
             OR: [
               { ownerScope: CatalogScope.COMPANY },
-              { ownerScope: CatalogScope.CLIENT, clientId: user.clientId ?? '__unassigned__' },
+              { ownerScope: CatalogScope.PROJECT, projectId: user.projectId ?? '__unassigned__' },
             ],
           };
 
-    const categoryScope = role === UserRole.CLIENT_ADMIN
+    const categoryScope = role === UserRole.PROJECT_ADMIN
       ? {
           OR: [
             { ownerScope: CatalogScope.COMPANY },
-            { ownerScope: CatalogScope.CLIENT, clientId: user.clientId ?? '__unassigned__' },
+            { ownerScope: CatalogScope.PROJECT, projectId: user.projectId ?? '__unassigned__' },
           ],
         }
       : { ownerScope: CatalogScope.COMPANY };
 
     const locationQuery = role === UserRole.SUPER_ADMIN
       ? this.prisma.stockLocation.findMany({
-          where: { OR: [{ warehouse: { status: OrganizationStatus.ACTIVE } }, { client: { status: OrganizationStatus.ACTIVE } }] },
-          select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+          where: { OR: [{ warehouse: { status: OrganizationStatus.ACTIVE } }, { project: { status: OrganizationStatus.ACTIVE } }] },
+          select: { id: true, locationType: true, warehouseId: true, projectId: true, warehouse: { select: { name: true } }, project: { select: { name: true } } },
           orderBy: { createdAt: 'asc' }, take: 100,
         })
       : role === UserRole.STORE_ADMIN
@@ -243,14 +243,14 @@ export class AuthService {
             where: {
               OR: [
                 { warehouseId: user.warehouseId ?? '__unassigned__', warehouse: { status: OrganizationStatus.ACTIVE } },
-                { client: { status: OrganizationStatus.ACTIVE, warehouseAssignments: { some: { warehouseId: user.warehouseId ?? '__unassigned__', isActive: true } } } },
+                { project: { status: OrganizationStatus.ACTIVE, warehouseAssignments: { some: { warehouseId: user.warehouseId ?? '__unassigned__', isActive: true } } } },
               ],
             },
-            select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+            select: { id: true, locationType: true, warehouseId: true, projectId: true, warehouse: { select: { name: true } }, project: { select: { name: true } } },
           })
         : this.prisma.stockLocation.findMany({
-            where: { clientId: user.clientId ?? '__unassigned__', client: { status: OrganizationStatus.ACTIVE } },
-            select: { id: true, locationType: true, warehouseId: true, clientId: true, warehouse: { select: { name: true } }, client: { select: { name: true } } },
+            where: { projectId: user.projectId ?? '__unassigned__', project: { status: OrganizationStatus.ACTIVE } },
+            select: { id: true, locationType: true, warehouseId: true, projectId: true, warehouse: { select: { name: true } }, project: { select: { name: true } } },
           });
 
     const [products, categories, locations] = await Promise.all([
@@ -258,27 +258,27 @@ export class AuthService {
         where: productScope,
         select: {
           id: true, name: true, kind: true, categoryId: true, brand: true, description: true,
-          ownerScope: true, clientId: true, status: true, quantityPrecision: true, allowFractional: true,
-          minQuantity: true, minOrderQuantity: true, trackingMode: true, createdAt: true,
-          category: { select: { id: true, name: true, parentId: true, ownerScope: true, clientId: true } },
+          ownerScope: true, projectId: true, status: true, quantityPrecision: true, allowFractional: true,
+          minQuantity: true, minOrderQuantity: true, createdAt: true,
+          category: { select: { id: true, name: true, parentId: true, ownerScope: true, projectId: true } },
           units: { where: { status: 'ACTIVE' }, select: { id: true, unitName: true, isBaseUnit: true, conversionToBase: true }, orderBy: { isBaseUnit: 'desc' } },
         },
         orderBy: { name: 'asc' }, take: 250,
       }),
-      this.prisma.category.findMany({ where: categoryScope, select: { id: true, name: true, parentId: true, ownerScope: true, clientId: true }, orderBy: { name: 'asc' }, take: 250 }),
+      this.prisma.category.findMany({ where: categoryScope, select: { id: true, name: true, parentId: true, ownerScope: true, projectId: true }, orderBy: { name: 'asc' }, take: 250 }),
       locationQuery,
     ]);
 
     return {
-      user: { id: user.id, username: user.username, role: user.role, status: user.status, clientId: user.clientId, warehouseId: user.warehouseId },
+      user: { id: user.id, username: user.username, role: user.role, status: user.status, projectId: user.projectId, warehouseId: user.warehouseId },
       products,
       categories,
       locations: locations.map((location) => ({
         id: location.id,
-        name: location.warehouse?.name ?? location.client?.name ?? 'Stock location',
+        name: location.warehouse?.name ?? location.project?.name ?? 'Stock location',
         locationType: location.locationType,
-        warehouseId: user.role === UserRole.CLIENT_ADMIN ? null : location.warehouseId,
-        clientId: user.role === UserRole.STORE_ADMIN ? null : location.clientId,
+        warehouseId: user.role === UserRole.PROJECT_ADMIN ? null : location.warehouseId,
+        projectId: user.role === UserRole.STORE_ADMIN ? null : location.projectId,
       })),
     };
   }
@@ -336,7 +336,7 @@ export class AuthService {
     }
 
     // 2. Browser / User-Agent binding check:
-    // If the session was bound to a User-Agent hash, reject if copied to a different browser/client
+    // If the session was bound to a User-Agent hash, reject if copied to a different browser/project
     if (session.userAgentHash) {
       if (!clientContext?.userAgent) {
         await this.prisma.session.update({

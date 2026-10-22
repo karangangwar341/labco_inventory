@@ -1,6 +1,6 @@
-export type UserRole = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'CLIENT_ADMIN';
+export type UserRole = 'SUPER_ADMIN' | 'STORE_ADMIN' | 'PROJECT_ADMIN';
 export type UserStatus = 'ACTIVE' | 'LOCKED' | 'DISABLED';
-export type StockCondition = 'USABLE' | 'DAMAGED' | 'EXPIRED';
+export type StockCondition = 'USABLE' | 'DAMAGED';
 
 export type RequestStatus =
   | 'DRAFT'

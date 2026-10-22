@@ -5,7 +5,7 @@ import { useAuth } from '@/features/auth/auth.store';
 import { LoadingState } from '@/components/feedback/LoadingState';
 import { SuperAdminDashboard } from '@/features/dashboard/components/SuperAdminDashboard';
 import { StoreAdminDashboard } from '@/features/dashboard/components/StoreAdminDashboard';
-import { ClientAdminDashboard } from '@/features/dashboard/components/ClientAdminDashboard';
+import { ProjectAdminDashboard } from '@/features/dashboard/components/ProjectAdminDashboard';
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
@@ -18,8 +18,8 @@ export default function DashboardPage() {
     return <SuperAdminDashboard />;
   }
 
-  if (user.role === 'CLIENT_ADMIN') {
-    return <ClientAdminDashboard />;
+  if (user.role === 'PROJECT_ADMIN') {
+    return <ProjectAdminDashboard />;
   }
 
   // Default to Store Admin operational dashboard for warehouse personnel

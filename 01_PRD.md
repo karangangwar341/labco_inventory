@@ -1,24 +1,23 @@
 # Product Requirements Document (PRD)
-## Warehouse, Client Manufacturing & Inventory Management System
+## Warehouse, Project Manufacturing & Inventory Management System
 **Version:** 1.0 | **Status:** Implementation authorized by owner on 2026-10-15; implementation audit and open decisions tracked in `16_IMPLEMENTATION_AUDIT.md` and `11_DECISIONS.md`.
 
 ## 1. Product purpose
-Provide an online system for a company to manage warehouse inventory, client supply, client-side manufacturing, department issues/returns, approvals, traceability, bulk imports and reporting. Stock changes must be controlled, auditable and concurrency-safe.
+Provide an online system for a company to manage warehouse inventory, project supply, project-side manufacturing, department issues/returns, approvals, bulk imports and reporting. Stock changes must be controlled, auditable and concurrency-safe.
 
 ## 2. Users and organizational model
-- **Super Admin:** company-wide administrator; creates/disables/resets accounts; manages warehouse/client assignments; manages company catalog and global settings; reviews and approves all inventory-affecting operations; can view company and client-side data.
+- **Super Admin:** company-wide administrator; creates/disables/resets accounts; manages warehouse/project assignments; manages company catalog and global settings; reviews and approves all inventory-affecting operations; can view company and project data.
 - **Store Admin:** operates their assigned warehouse; views stock/history/reports; submits stock-in/out, transfer and correction requests. Cannot create/edit product catalog or categories.
-- **Client Admin:** operates their client account; manages client products, manufacturing records, departments, client inventory transactions and daily reports as permitted by the approved workflow.
-- Accounts are provisioned only by Super Admin. A client account may be handed over to new personnel by resetting the same account's password. This shared-account model does not prove which individual used it; consider named accounts before production.
+- **Project Admin:** operates their project account; manages project products, manufacturing records, departments, project inventory transactions and daily reports as permitted by the approved workflow.
+- Accounts are provisioned only by Super Admin. A project account may be handed over to new personnel by resetting the same account's password. This shared-account model does not prove which individual used it; consider named accounts before production.
 
 ## 3. Scope
 ### In scope
-- Company warehouses and Super-Admin-controlled client-to-warehouse assignments (many-to-many).
-- Company product catalog and separate client-side product catalog.
+- Company warehouses and Super-Admin-controlled project-to-warehouse assignments (many-to-many).
+- Company product catalog and separate project product catalog.
 - Stock-in/out, transfers, dispatch/in-transit/receipt, opening stock, physical adjustments and transaction corrections.
 - Reservations for pending stock-out requests.
-- Client manufacturing, department issue history, returns, damaged/expired stock and approved write-offs.
-- Optional batch/expiry tracking per product.
+- Project manufacturing, department issue history, usable returns, and damaged stock-out requests.
 - Bulk CSV and image/scanned-document extraction with editable human review.
 - Approval queue, notifications, audit, reports and exports.
 - Online-only operation; no offline mode.
@@ -38,12 +37,12 @@ Provide an online system for a company to manage warehouse inventory, client sup
 **REQ-005** Pending stock-out requests reserve available stock immediately. Reservations are released on rejection or requester cancellation; approval converts reservation into a posted deduction without double-deduction.
 **REQ-006** A pending request can be edited only after revalidating availability and atomically recalculating reservations. Failed edits preserve the original request and reservation.
 **REQ-007** Only the original requester may cancel their own pending request.
-**REQ-008** Company products are managed by Super Admin; client products by Client Admin, with Super Admin approval before they become transaction-eligible.
-**REQ-009** Client-to-warehouse assignments are controlled by Super Admin. Removing an assignment blocks new requests but does not interrupt already approved/in-transit movements.
+**REQ-008** Company products are managed by Super Admin; project products by Project Admin, with Super Admin approval before they become transaction-eligible.
+**REQ-009** Project-to-warehouse assignments are controlled by Super Admin. Removing an assignment blocks new requests but does not interrupt already approved/in-transit movements.
 **REQ-010** Units and conversions are explicit. Conversion edits are audited; historical transactions preserve the conversion rule used at transaction time.
 **REQ-011** Quantity precision is configurable per product up to two decimal places. Whole-unit products reject fractions.
-**REQ-012** Lot/batch identification is required only when the product tracking configuration requires it. Expiry date is optional and may be recorded when known; it must not block a request.
-**REQ-013** Expired stock is excluded from usable stock and blocked from routine issue/dispatch. Disposal/write-off requires approval.
+**REQ-012** Products and stock movements have no lot, batch, or expiry tracking fields or rules.
+**REQ-013** Damaged stock is reported through the normal approval-gated stock-out workflow. Approval deducts usable inventory once and records the DAMAGED condition and reason on the immutable ledger transaction; no damaged balance is maintained.
 **REQ-014** Manufacturing linked mode posts raw material consumption and finished product output atomically after approval. Separate stock-out and stock-in mode is also supported.
 **REQ-015** Departments have issue/return history only; no separate department stock balance.
 **REQ-016** Every approval/rejection captures actor, timestamp, decision and reason where applicable. Duplicate approval clicks must not post twice.
@@ -51,18 +50,18 @@ Provide an online system for a company to manage warehouse inventory, client sup
 **REQ-018** Low-stock alerts remain visible until recovered; notify once when crossing below threshold and again only after recovery then a new crossing.
 **REQ-019** Daily automatic backups are retained 90 days. Backup failure retries automatically and alerts Super Admin persistently until success.
 **REQ-020** All workflows and data access are server-authorized; frontend visibility is not an authorization boundary.
-**REQ-021** Client Admins can maintain one open daily department-issue draft per client, containing multiple departments and products, and submit the complete set as one all-or-nothing decision.
+**REQ-021** Project Admins can maintain one open daily department-issue draft per project, containing multiple departments and products, and submit the complete set as one all-or-nothing decision.
 
 ## 5. Product catalog
-- The company catalog contains raw materials; each client has a separate catalog for manufactured products. Client Admins can create manufactured products only, using categories owned by their client. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.
-- Manufacturing input choices are limited to approved raw materials with current client balances or stock-ledger history at that client. Output choices are approved manufactured products from that same client’s catalog. Client stock-out is recorded through the daily department issue workflow; each line selects an active department and an approved manufactured product from that client’s catalog with available stock.
+- The company catalog contains raw materials; each project has a separate catalog for manufactured products. Project Admins can create manufactured products only, using categories owned by their project. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.
+- Manufacturing input choices are limited to approved raw materials with current project balances or stock-ledger history at that project. Output choices are approved manufactured products from that same project’s catalog. Project stock-out is recorded through the daily department issue workflow; each line selects an active department and an approved manufactured product from that project’s catalog with available stock.
 - No SKU/product-code field.
-- Optional image, description and batch details.
+- Optional image and description.
 - Flexible physical attributes (e.g. weight, length, breadth, thickness, diameter) are distinct from inventory unit/quantity.
 - Category → subcategory → optional brand → product name/grade → specifications.
 - Product units/conversion ratios can include e.g. 1 box = 12 pieces.
 - Duplicate detection is deterministic: block exact normalized duplicates unless Super Admin explicitly reuses/resolves; warn on similar names; same base name with different specifications can be distinct. Final duplicate key remains an open schema decision.
-- Client-created products are pending until approved; stock transactions are blocked while pending.
+- Project-created products are pending until approved; stock transactions are blocked while pending.
 
 ## 6. Approval and priority
 - Super Admin may approve any eligible request in any order; dependencies must be enforced.
@@ -73,8 +72,8 @@ Provide an online system for a company to manage warehouse inventory, client sup
 ## 7. Reports and exports
 - Current stock by warehouse/product.
 - Stock-in/out history with filters.
-- Low-stock/shortage and expiry reports.
-- Client-wise dispatch, inbound and receipt reports.
+- Low-stock/shortage reports.
+- Project-wise dispatch, inbound and receipt reports.
 - Manufacturing input/output/wastage and department issue/return history.
 - Export PDF, XLSX, CSV and print-friendly reports. Export/download events are audited.
 

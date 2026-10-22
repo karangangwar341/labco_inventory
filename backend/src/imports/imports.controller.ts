@@ -33,7 +33,7 @@ export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Upload document/CSV and create import batch draft (no stock effect)' })
   async createBatch(
     @CurrentUser() user: AuthenticatedUser,
@@ -43,7 +43,7 @@ export class ImportsController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'List import batches within caller scope' })
   async getBatches(
     @CurrentUser() user: AuthenticatedUser,
@@ -54,7 +54,7 @@ export class ImportsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Get import batch details and rows with validation errors' })
   async getBatch(
     @CurrentUser() user: AuthenticatedUser,
@@ -64,7 +64,7 @@ export class ImportsController {
   }
 
   @Post(':id/validate')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Re-run server-side row validation on batch' })
   async validateBatch(
     @CurrentUser() user: AuthenticatedUser,
@@ -74,7 +74,7 @@ export class ImportsController {
   }
 
   @Post(':id/submit')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Submit a validated import batch for Super Admin review; no inventory changes occur' })
   async submitBatch(
     @CurrentUser() user: AuthenticatedUser,
@@ -85,7 +85,7 @@ export class ImportsController {
   }
 
   @Patch(':batchId/rows/:rowId')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Correct row fields without re-upload (preserves original extraction)' })
   async updateRow(
     @CurrentUser() user: AuthenticatedUser,
@@ -125,7 +125,7 @@ export class ImportsController {
   }
 
   @Get(':id/errors')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.STORE_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({ summary: 'Export batch validation errors with formula-injection neutralization' })
   async exportErrors(
     @CurrentUser() user: AuthenticatedUser,

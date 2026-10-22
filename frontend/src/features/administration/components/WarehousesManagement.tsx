@@ -12,7 +12,7 @@ import { Select } from '../../../components/ui/Select';
 import { Modal } from '../../../components/ui/Modal';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
-import { administrationService, ManagedWarehouse, ManagedClient } from '../administration.service';
+import { administrationService, ManagedWarehouse, ManagedProject } from '../administration.service';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 type WarehouseEdit = {
@@ -29,7 +29,7 @@ export function WarehousesManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [editing, setEditing] = useState<WarehouseEdit | null>(null);
   const [consigningWarehouseId, setConsigningWarehouseId] = useState<string | null>(null);
-  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -38,15 +38,15 @@ export function WarehousesManagement() {
     queryFn: administrationService.getWarehouses,
   });
 
-  const clientsQuery = useQuery({
-    queryKey: queryKeys.administration.clients(),
-    queryFn: administrationService.getClients,
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.administration.projects(),
+    queryFn: administrationService.getProjects,
   });
 
   const refresh = async () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.warehouses() }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.administration.clients() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.administration.projects() }),
     ]);
 
   const mutationOptions = {
@@ -73,19 +73,19 @@ export function WarehousesManagement() {
   });
 
   const assignWarehouse = useMutation({
-    mutationFn: ({ clientId, warehouseId }: { clientId: string; warehouseId: string }) =>
-      administrationService.assignWarehouse(clientId, warehouseId),
+    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
+      administrationService.assignWarehouse(projectId, warehouseId),
     ...mutationOptions,
   });
 
   const deactivateAssignment = useMutation({
-    mutationFn: ({ clientId, warehouseId }: { clientId: string; warehouseId: string }) =>
-      administrationService.deactivateAssignment(clientId, warehouseId),
+    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
+      administrationService.deactivateAssignment(projectId, warehouseId),
     ...mutationOptions,
   });
 
   const warehouses = warehousesQuery.data ?? [];
-  const clients = clientsQuery.data ?? [];
+  const projects = projectsQuery.data ?? [];
   const busy =
     createWarehouse.isPending ||
     updateWarehouse.isPending ||
@@ -100,20 +100,20 @@ export function WarehousesManagement() {
     );
   }, [warehouses, searchTerm]);
 
-  // Client assignments mapped by warehouse ID
-  const clientsByWarehouseId = useMemo(() => {
-    const map = new Map<string, Array<{ clientId: string; clientName: string }>>();
-    for (const c of clients) {
+  // Project assignments mapped by warehouse ID
+  const projectsByWarehouseId = useMemo(() => {
+    const map = new Map<string, Array<{ projectId: string; projectName: string }>>();
+    for (const c of projects) {
       if (c.warehouseAssignments) {
         for (const a of c.warehouseAssignments) {
           const list = map.get(a.warehouseId) ?? [];
-          list.push({ clientId: c.id, clientName: c.name });
+          list.push({ projectId: c.id, projectName: c.name });
           map.set(a.warehouseId, list);
         }
       }
     }
     return map;
-  }, [clients]);
+  }, [projects]);
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault();
@@ -156,17 +156,17 @@ export function WarehousesManagement() {
     );
   };
 
-  const handleConsignClient = (e: FormEvent) => {
+  const handleConsignProject = (e: FormEvent) => {
     e.preventDefault();
-    if (!consigningWarehouseId || !selectedClientId) return;
+    if (!consigningWarehouseId || !selectedProjectId) return;
     setActionError(null);
     assignWarehouse.mutate(
-      { clientId: selectedClientId, warehouseId: consigningWarehouseId },
+      { projectId: selectedProjectId, warehouseId: consigningWarehouseId },
       {
         onSuccess: () => {
           setConsigningWarehouseId(null);
-          setSelectedClientId('');
-          setNotice('Client consignment route established.');
+          setSelectedProjectId('');
+          setNotice('Project consignment route established.');
         },
       }
     );
@@ -179,11 +179,11 @@ export function WarehousesManagement() {
       {/* Page Header */}
       <PageHeader
         title="Distribution Warehouses"
-        description="Configure central storage depots, physical location details, and client consignment dispatch authorization."
+        description="Configure central storage depots, physical location details, and project consignment dispatch authorization."
         actions={
-          <Link href="/admin/clients">
+          <Link href="/admin/projects">
             <Button variant="secondary">
-              ← Go to Clients
+              ← Go to Projects
             </Button>
           </Link>
         }
@@ -236,10 +236,10 @@ export function WarehousesManagement() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Serviced Clients
+                Serviced Projects
               </span>
               <div className="text-xl font-bold font-mono text-slate-900">
-                {clientsQuery.isLoading ? '—' : clients.filter((c) => (c.warehouseAssignments?.length || 0) > 0).length}
+                {projectsQuery.isLoading ? '—' : projects.filter((c) => (c.warehouseAssignments?.length || 0) > 0).length}
               </div>
               <p className="text-[11px] text-slate-500">Consigned organizations</p>
             </div>
@@ -343,7 +343,7 @@ export function WarehousesManagement() {
         >
           <CardTitle>Warehouse Directory</CardTitle>
           <CardDescription>
-            Operational storage facilities and the list of consigned client organizations authorized for dispatch.
+            Operational storage facilities and the list of consigned project organizations authorized for dispatch.
           </CardDescription>
         </CardHeader>
 
@@ -357,7 +357,7 @@ export function WarehousesManagement() {
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredWarehouses.map((warehouse: ManagedWarehouse) => {
-                const servicedClients = clientsByWarehouseId.get(warehouse.id) ?? [];
+                const servicedProjects = projectsByWarehouseId.get(warehouse.id) ?? [];
                 const isInactive = warehouse.status === 'INACTIVE';
 
                 return (
@@ -394,7 +394,7 @@ export function WarehousesManagement() {
                           size="sm"
                           onClick={() => setConsigningWarehouseId(warehouse.id)}
                         >
-                          + Consign Client
+                          + Consign Project
                         </Button>
                         <Button
                           variant="secondary"
@@ -413,38 +413,38 @@ export function WarehousesManagement() {
                       </div>
                     </div>
 
-                    {/* Consigned Clients Tags */}
+                    {/* Consigned Projects Tags */}
                     <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
-                      <span className="text-xs font-medium text-slate-500">Authorized Client Consignments:</span>
-                      {servicedClients.length > 0 ? (
-                        servicedClients.map((client) => (
+                      <span className="text-xs font-medium text-slate-500">Authorized Project Consignments:</span>
+                      {servicedProjects.length > 0 ? (
+                        servicedProjects.map((project) => (
                           <span
-                            key={client.clientId}
+                            key={project.projectId}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 text-xs font-mono"
                           >
                             <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
-                            <span>{client.clientName}</span>
+                            <span>{project.projectName}</span>
                             <button
                               type="button"
-                              aria-label={`Disconnect ${client.clientName} consignment`}
+                              aria-label={`Disconnect ${project.projectName} consignment`}
                               disabled={busy}
                               onClick={() =>
                                 deactivateAssignment.mutate({
-                                  clientId: client.clientId,
+                                  projectId: project.projectId,
                                   warehouseId: warehouse.id,
                                 })
                               }
                               className="ml-1 text-slate-400 hover:text-rose-600 font-bold transition-colors"
-                              title="Disconnect client consignment"
+                              title="Disconnect project consignment"
                             >
                               ×
                             </button>
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-400 italic">No clients currently consigned</span>
+                        <span className="text-xs text-slate-400 italic">No projects currently consigned</span>
                       )}
                     </div>
                   </div>
@@ -502,26 +502,26 @@ export function WarehousesManagement() {
         </Modal>
       )}
 
-      {/* Consign Client Modal */}
+      {/* Consign Project Modal */}
       {consigningWarehouseId && consigningWarehouse && (
         <Modal
           isOpen={Boolean(consigningWarehouseId)}
           onClose={() => {
             setConsigningWarehouseId(null);
-            setSelectedClientId('');
+            setSelectedProjectId('');
           }}
-          title="Consign Client to Warehouse"
-          description={`Authorize Store Admins at ${consigningWarehouse.name} to fulfill stock-out dispatches to this client.`}
+          title="Consign Project to Warehouse"
+          description={`Authorize Store Admins at ${consigningWarehouse.name} to fulfill stock-out dispatches to this project.`}
         >
-          <form onSubmit={handleConsignClient} className="space-y-4">
+          <form onSubmit={handleConsignProject} className="space-y-4">
             <Select
-              label="Select Client Organization"
+              label="Select Project Organization"
               required
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
             >
-              <option value="">Choose a client...</option>
-              {clients
+              <option value="">Choose a project...</option>
+              {projects
                 .filter((c) => c.status !== 'INACTIVE')
                 .map((c) => (
                   <option key={c.id} value={c.id}>
@@ -536,12 +536,12 @@ export function WarehousesManagement() {
                 variant="secondary"
                 onClick={() => {
                   setConsigningWarehouseId(null);
-                  setSelectedClientId('');
+                  setSelectedProjectId('');
                 }}
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={busy || !selectedClientId}>
+              <Button type="submit" variant="primary" disabled={busy || !selectedProjectId}>
                 {busy ? 'Connecting...' : 'Authorize Consignment'}
               </Button>
             </div>

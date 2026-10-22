@@ -34,11 +34,11 @@ import {
 } from "../../../components/data-display/DateQuickFilterBar";
 
 export interface ManufacturingViewProps {
-  clientId?: string;
+  projectId?: string;
   hideHeader?: boolean;
 }
 
-export function ManufacturingView({ clientId: propClientId, hideHeader }: ManufacturingViewProps = {}) {
+export function ManufacturingView({ projectId: propProjectId, hideHeader }: ManufacturingViewProps = {}) {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab") as "CYCLES" | "RUNS" | "ANALYTICS" | null;
@@ -46,16 +46,16 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const urlRunId = searchParams.get("runId");
 
   const { role, user } = useAuth();
-  const isClientAdmin = role === "CLIENT_ADMIN";
+  const isProjectAdmin = role === "PROJECT_ADMIN";
   const isSuperAdmin = role === "SUPER_ADMIN";
-  // Super Admin client filter for runs & analytics
-  const [runsClientId, setRunsClientId] = useState<string>(propClientId || "");
-  const [analyticsClientId, setAnalyticsClientId] = useState<string>("");
+  // Super Admin project filter for runs & analytics
+  const [runsProjectId, setRunsProjectId] = useState<string>(propProjectId || "");
+  const [analyticsProjectId, setAnalyticsProjectId] = useState<string>("");
 
-  const effectiveTargetClientId = isClientAdmin
-    ? (user?.clientId ?? undefined)
-    : (propClientId || runsClientId || undefined);
-  const canCreateRuns = isClientAdmin || (isSuperAdmin && Boolean(effectiveTargetClientId));
+  const effectiveTargetProjectId = isProjectAdmin
+    ? (user?.projectId ?? undefined)
+    : (propProjectId || runsProjectId || undefined);
+  const canCreateRuns = isProjectAdmin || (isSuperAdmin && Boolean(effectiveTargetProjectId));
 
   // Active top-level tab
   const [activeTab, setActiveTab] = useState<"CYCLES" | "RUNS" | "ANALYTICS">(() => {
@@ -80,13 +80,13 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  // Synchronize when propClientId changes
+  // Synchronize when propProjectId changes
   useEffect(() => {
-    if (propClientId) {
-      setRunsClientId(propClientId);
-      setAnalyticsClientId(propClientId);
+    if (propProjectId) {
+      setRunsProjectId(propProjectId);
+      setAnalyticsProjectId(propProjectId);
     }
-  }, [propClientId]);
+  }, [propProjectId]);
 
   // Re-run modal state
   const [reRunModalCycle, setReRunModalCycle] = useState<ProductionCycle | null>(null);
@@ -107,8 +107,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const [wastage, setWastage] = useState("");
   const [productionReference, setProductionReference] = useState("");
   const [notes, setNotes] = useState("");
-  const [batchNumber, setBatchNumber] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   // Day-End Continuous Batch Submission State
@@ -123,8 +121,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     error: optionsError,
     refetch: refetchOptions,
   } = useQuery({
-    queryKey: queryKeys.catalog.manufacturingOptions(effectiveTargetClientId),
-    queryFn: () => catalogService.getManufacturingOptions(effectiveTargetClientId),
+    queryKey: queryKeys.catalog.manufacturingOptions(effectiveTargetProjectId),
+    queryFn: () => catalogService.getManufacturingOptions(effectiveTargetProjectId),
     enabled: canCreateRuns,
     staleTime: 2 * 60 * 1000,
   });
@@ -136,10 +134,10 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     error: runsError,
     refetch: fetchRuns,
   } = useQuery({
-    queryKey: queryKeys.manufacturing.list(runsClientId || 'all', { clientId: runsClientId || undefined }),
+    queryKey: queryKeys.manufacturing.list(runsProjectId || 'all', { projectId: runsProjectId || undefined }),
     queryFn: async () => {
       const data = await manufacturingService.getProductionRuns({
-        clientId: runsClientId || undefined,
+        projectId: runsProjectId || undefined,
       });
       return Array.isArray(data) ? data : [];
     },
@@ -178,7 +176,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     isLoading: isLoadingCycles,
     refetch: fetchCycles,
   } = useQuery({
-    queryKey: queryKeys.manufacturing.cycles(user?.clientId ?? undefined),
+    queryKey: queryKeys.manufacturing.cycles(user?.projectId ?? undefined),
     queryFn: async () => {
       const data = await manufacturingService.getProductionCycles();
       return Array.isArray(data) ? data : [];
@@ -214,20 +212,20 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     refetch: fetchAnalytics,
   } = useQuery({
     queryKey: queryKeys.manufacturing.analytics({
-      clientId: analyticsClientId || undefined,
+      projectId: analyticsProjectId || undefined,
     }),
     queryFn: async () => {
       return manufacturingService.getAnalytics({
-        clientId: analyticsClientId || undefined,
+        projectId: analyticsProjectId || undefined,
       });
     },
     staleTime: 2 * 60 * 1000,
   });
 
-  // Query: Clients for Super Admin filter
-  const { data: clients = [] } = useQuery({
-    queryKey: ["administration", "clients"],
-    queryFn: () => administrationService.getClients(),
+  // Query: Projects for Super Admin filter
+  const { data: projects = [] } = useQuery({
+    queryKey: ["administration", "projects"],
+    queryFn: () => administrationService.getProjects(),
     enabled: isSuperAdmin,
     staleTime: 5 * 60 * 1000,
   });
@@ -476,8 +474,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     setWastage("");
     setProductionReference("");
     setNotes("");
-    setBatchNumber("");
-    setExpiryDate("");
     setErrorMsg(null);
     setIsModalOpen(true);
   };
@@ -498,8 +494,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     setWastage(run.wastage == null ? "" : String(run.wastage));
     setProductionReference(run.productionReference || "");
     setNotes(run.notes || "");
-    setBatchNumber(run.outputLines?.[0]?.batchNumber || "");
-    setExpiryDate(run.outputLines?.[0]?.expiryDate?.slice(0, 10) || "");
     setErrorMsg(null);
     setIsModalOpen(true);
   };
@@ -536,7 +530,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     createMutation.mutate(
       {
         mode: "LINKED",
-        clientId: isSuperAdmin ? effectiveTargetClientId : undefined,
+        projectId: isSuperAdmin ? effectiveTargetProjectId : undefined,
         productionReference: productionReference.trim() || undefined,
         actualOutput: effectiveActualOutput,
         wastage: wastage ? Number(wastage) : undefined,
@@ -552,8 +546,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             productId: effectiveYieldProductId,
             unitId: effectiveYieldUnitId,
             quantity: effectiveActualOutput || Number(yieldQty),
-            batchNumber: batchNumber.trim() || undefined,
-            expiryDate: expiryDate || undefined,
           },
         ],
       },
@@ -586,19 +578,19 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
   const olderRunsCount = useMemo(() => {
     return runs.filter((run) => {
       if (statusFilter !== "ALL" && run.status !== statusFilter) return false;
-      if (runsClientId && run.clientId !== runsClientId && run.client?.id !== runsClientId) return false;
+      if (runsProjectId && run.projectId !== runsProjectId && run.project?.id !== runsProjectId) return false;
       return !isDateInRange(run.createdAt, 'TODAY');
     }).length;
-  }, [runs, statusFilter, runsClientId]);
+  }, [runs, statusFilter, runsProjectId]);
 
   const visibleRuns = useMemo(() => {
     return runs.filter((run) => {
       if (statusFilter !== "ALL" && run.status !== statusFilter) return false;
-      if (runsClientId && run.clientId !== runsClientId && run.client?.id !== runsClientId) return false;
+      if (runsProjectId && run.projectId !== runsProjectId && run.project?.id !== runsProjectId) return false;
       if (!isDateInRange(run.createdAt, dateFilter, customStart, customEnd)) return false;
       return true;
     });
-  }, [runs, statusFilter, runsClientId, dateFilter, customStart, customEnd]);
+  }, [runs, statusFilter, runsProjectId, dateFilter, customStart, customEnd]);
 
   // Trigger re-run modal for a cycle
   const handleReRunFromCycle = (cycle: ProductionCycle) => {
@@ -626,8 +618,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
     items: {
       cycle: ProductionCycle;
       plannedOutput: number;
-      batchNumber?: string;
-      expiryDate?: string;
     }[],
     submitForApproval: boolean,
   ) => {
@@ -641,8 +631,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
         try {
           const run = await manufacturingService.reRunCycle(item.cycle.latestRunId, {
             plannedOutput: item.plannedOutput,
-            batchNumber: item.batchNumber?.trim() || undefined,
-            expiryDate: item.expiryDate || undefined,
           });
           createdRuns.push(run);
         } catch (err) {
@@ -712,8 +700,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200/90 shadow-2xs">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Client Manufacturing Runs & Cycles</h3>
-            <p className="text-xs text-slate-500">Manage formulations, batch execution runs, and cycle replenishment alerts for this client.</p>
+            <h3 className="text-sm font-bold text-slate-900">Project Manufacturing Runs & Cycles</h3>
+            <p className="text-xs text-slate-500">Manage formulations, batch execution runs, and cycle replenishment alerts for this project.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -878,7 +866,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             ))}
           </section>
 
-          {/* Status filter pills, client selector, and date filters */}
+          {/* Status filter pills, project selector, and date filters */}
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -910,16 +898,16 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
                 )}
               </div>
 
-              {isSuperAdmin && !propClientId && (
+              {isSuperAdmin && !propProjectId && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 font-medium">Filter Client:</span>
+                  <span className="text-xs text-slate-500 font-medium">Filter Project:</span>
                   <select
-                    value={runsClientId}
-                    onChange={(e) => setRunsClientId(e.target.value)}
+                    value={runsProjectId}
+                    onChange={(e) => setRunsProjectId(e.target.value)}
                     className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
                   >
-                    <option value="">All Clients</option>
-                    {clients.map((c) => (
+                    <option value="">All Projects</option>
+                    {projects.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -945,7 +933,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
           </div>
 
           {isLoadingRuns ? (
-            <LoadingState message="Loading client production runs..." />
+            <LoadingState message="Loading project production runs..." />
           ) : visibleRuns.length === 0 ? (
             <EmptyState
               title={
@@ -968,8 +956,8 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             />
           ) : (
             <>
-              {/* Day-End Continuous Production Runs Banner for Client Admin */}
-              {isClientAdmin && draftRuns.length > 0 && (
+              {/* Day-End Continuous Production Runs Banner for Project Admin */}
+              {isProjectAdmin && draftRuns.length > 0 && (
                 <div className="mb-4 bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50 border border-indigo-200 rounded-xl p-4 shadow-xs">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
                     <div>
@@ -1128,7 +1116,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
                         </h3>
                         {(selectedRun.productionReference || !canCreateRuns) && (
                           <p className="text-xs text-slate-500">
-                            Ref: {selectedRun.productionReference || selectedRun.clientName}
+                            Ref: {selectedRun.productionReference || selectedRun.projectName}
                           </p>
                         )}
                       </div>
@@ -1269,7 +1257,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
                       </div>
                     </div>
 
-                    {/* Actions: Client Admin Draft Controls */}
+                    {/* Actions: Project Admin Draft Controls */}
                     {canCreateRuns && selectedRun.status === "DRAFT" && (
                       <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3">
                         <Button
@@ -1360,9 +1348,9 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
           analytics={analytics}
           isLoading={isLoadingAnalytics}
           role={role}
-          clients={clients}
-          selectedClientId={analyticsClientId}
-          onClientChange={(id) => setAnalyticsClientId(id)}
+          projects={projects}
+          selectedProjectId={analyticsProjectId}
+          onProjectChange={(id) => setAnalyticsProjectId(id)}
           onReRunCycleId={handleReRunFromRunId}
           onRefresh={() => {
             void fetchAnalytics();
@@ -1395,7 +1383,7 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
       >
         <div className="space-y-4 text-xs">
           <p className="text-slate-600">
-            Please enter a reason for rejecting this production run. The client will be notified and no inventory will be modified.
+            Please enter a reason for rejecting this production run. The project will be notified and no inventory will be modified.
           </p>
           <Input
             label="Rejection Reason"
@@ -1459,8 +1447,6 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
               onChange={(e) => {
                 setYieldProductId(e.target.value);
                 setYieldUnitId("");
-                setBatchNumber("");
-                setExpiryDate("");
               }}
               required
               className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none"
@@ -1550,28 +1536,14 @@ export function ManufacturingView({ clientId: propClientId, hideHeader }: Manufa
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              label="Production reference / Cycle code"
-              value={productionReference}
-              onChange={(event) => setProductionReference(event.target.value)}
-              placeholder="e.g. CYCLE-ASSAY-01"
-            />
-            <Input
-              label="Batch number"
-              value={batchNumber}
-              onChange={(event) => setBatchNumber(event.target.value)}
-              placeholder="e.g. BATCH-20261017-001"
-            />
-          </div>
+          <Input
+            label="Production reference / Cycle code"
+            value={productionReference}
+            onChange={(event) => setProductionReference(event.target.value)}
+            placeholder="e.g. CYCLE-ASSAY-01"
+          />
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Input
-              label="Expiry date"
-              type="date"
-              value={expiryDate}
-              onChange={(event) => setExpiryDate(event.target.value)}
-            />
+          <div>
             <Input
               label="Notes"
               value={notes}

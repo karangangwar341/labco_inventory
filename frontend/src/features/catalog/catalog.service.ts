@@ -26,8 +26,8 @@ export const catalogService = {
     return (raw || []).map(normalizeProduct);
   },
 
-  getManufacturingOptions: async (clientId?: string): Promise<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }> => {
-    const qs = clientId ? `?clientId=${clientId}` : '';
+  getManufacturingOptions: async (projectId?: string): Promise<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }> => {
+    const qs = projectId ? `?projectId=${projectId}` : '';
     const res = await apiClient.get<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }>(`${endpoints.catalog.products()}/manufacturing-options${qs}`);
     return {
       rawMaterials: (res?.rawMaterials || []).map(normalizeProduct),

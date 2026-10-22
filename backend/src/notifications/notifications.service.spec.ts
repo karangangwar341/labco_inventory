@@ -3,7 +3,6 @@ import { NotificationsService } from './notifications.service.js';
 import {
   UserRole,
   NotificationEventType,
-  BatchStatus,
   Prisma,
 } from '@prisma/client';
 import {
@@ -11,7 +10,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-describe('Notifications Service (T-013: Notifications, low-stock and expiry alerts)', () => {
+describe('Notifications Service (T-013: Notifications and low-stock alerts)', () => {
   let notificationsService: NotificationsService;
   let mockPrisma: any;
 
@@ -23,11 +22,11 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
     sessionId: 'sess-1',
   };
 
-  const clientAdminUser: any = {
+  const projectAdminUser: any = {
     id: 'ca-1',
-    username: 'clientadmin',
-    role: UserRole.CLIENT_ADMIN,
-    clientId: 'client-123',
+    username: 'projectadmin',
+    role: UserRole.PROJECT_ADMIN,
+    projectId: 'project-123',
     status: 'ACTIVE',
     sessionId: 'sess-2',
   };
@@ -45,8 +44,8 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
     id: 'prod-cartridge',
     name: 'Diagnostic Cartridge A',
     minQuantity: new Prisma.Decimal(50),
-    clientId: 'client-123',
-    ownerScope: 'CLIENT',
+    projectId: 'project-123',
+    ownerScope: 'PROJECT',
   };
 
   beforeEach(() => {
@@ -73,10 +72,6 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
       },
       inventoryBalance: {
         findMany: vi.fn(),
-      },
-      stockBatch: {
-        findMany: vi.fn(),
-        update: vi.fn(),
       },
       user: {
         findMany: vi.fn(),
@@ -107,7 +102,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
       mockPrisma.user.findMany
         .mockResolvedValueOnce([superAdminUser]) // Super Admins
-        .mockResolvedValueOnce([clientAdminUser]); // Client Admins
+        .mockResolvedValueOnce([projectAdminUser]); // Project Admins
 
       const result = await notificationsService.checkLowStockForProduct('prod-cartridge');
 
@@ -120,7 +115,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
         }),
       );
 
-      // Notification sent to Super Admin and Client Admin
+      // Notification sent to Super Admin and Project Admin
       expect(mockPrisma.notification.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -177,7 +172,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
       mockPrisma.user.findMany
         .mockResolvedValueOnce([superAdminUser])
-        .mockResolvedValueOnce([clientAdminUser]);
+        .mockResolvedValueOnce([projectAdminUser]);
 
       const result = await notificationsService.checkLowStockForProduct('prod-cartridge');
 
@@ -214,7 +209,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
 
       mockPrisma.user.findMany
         .mockResolvedValueOnce([superAdminUser])
-        .mockResolvedValueOnce([clientAdminUser]);
+        .mockResolvedValueOnce([projectAdminUser]);
 
       const result = await notificationsService.checkLowStockForProduct('prod-cartridge');
 
@@ -249,81 +244,6 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
     });
   });
 
-  describe('2. Expiry Warning Engine (REQ-019 & Test Plan 11)', () => {
-    it('isolates expired batch and triggers BATCH_EXPIRED alert when daysRemaining <= 0', async () => {
-      const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 1 day ago
-      mockPrisma.systemSetting.findUnique.mockResolvedValue({
-        valueJson: { expiryWarningIntervals: [90, 30, 7], soundEnabled: false },
-      });
-      mockPrisma.stockBatch.findMany.mockResolvedValue([
-        {
-          id: 'batch-exp-1',
-          batchNumber: 'LOT-EXPIRED',
-          expiryDate: pastDate,
-          status: BatchStatus.ACTIVE,
-          product: { name: 'Expired Diagnostic Kit' },
-        },
-      ]);
-      mockPrisma.user.findMany.mockResolvedValue([superAdminUser]);
-
-      const result = await notificationsService.checkExpiryWarnings(new Date());
-
-      expect(result.warningsIssued).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ batchId: 'batch-exp-1', type: 'EXPIRED' }),
-        ]),
-      );
-      // Batch updated to EXPIRED status
-      expect(mockPrisma.stockBatch.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'batch-exp-1' },
-          data: { status: BatchStatus.EXPIRED },
-        }),
-      );
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            recipientUserId: 'sa-1',
-            eventType: NotificationEventType.BATCH_EXPIRED,
-          }),
-        }),
-      );
-    });
-
-    it('issues EXPIRY_WARNING notification when batch falls within warning interval (30 days)', async () => {
-      const futureDate = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000); // 20 days left
-      mockPrisma.systemSetting.findUnique.mockResolvedValue({
-        valueJson: { expiryWarningIntervals: [90, 30, 7], soundEnabled: false },
-      });
-      mockPrisma.stockBatch.findMany.mockResolvedValue([
-        {
-          id: 'batch-warn-1',
-          batchNumber: 'LOT-SOON',
-          expiryDate: futureDate,
-          status: BatchStatus.ACTIVE,
-          product: { name: 'Active Assay' },
-        },
-      ]);
-      mockPrisma.user.findMany.mockResolvedValue([superAdminUser]);
-
-      const result = await notificationsService.checkExpiryWarnings(new Date());
-
-      expect(result.warningsIssued).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ batchId: 'batch-warn-1', type: 'WARNING' }),
-        ]),
-      );
-      expect(mockPrisma.notification.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            recipientUserId: 'sa-1',
-            eventType: NotificationEventType.EXPIRY_WARNING,
-          }),
-        }),
-      );
-    });
-  });
-
   describe('3. In-App Notification Center & Read Status', () => {
     it('returns notifications and unread count scoped to caller', async () => {
       mockPrisma.notification.findMany.mockResolvedValue([
@@ -331,7 +251,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
       ]);
       mockPrisma.notification.count.mockResolvedValue(1);
 
-      const result = await notificationsService.getNotifications(clientAdminUser, { unreadOnly: true });
+      const result = await notificationsService.getNotifications(projectAdminUser, { unreadOnly: true });
 
       expect(result.unreadCount).toBe(1);
       expect(result.notifications).toHaveLength(1);
@@ -349,7 +269,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
       });
       mockPrisma.notification.update.mockResolvedValue({ id: 'n1', readAt: new Date() });
 
-      await notificationsService.markAsRead('n1', clientAdminUser);
+      await notificationsService.markAsRead('n1', projectAdminUser);
 
       expect(mockPrisma.notification.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -360,7 +280,7 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
     });
 
     it('marks all unread notifications as read for current user', async () => {
-      await notificationsService.markAllAsRead(clientAdminUser);
+      await notificationsService.markAllAsRead(projectAdminUser);
 
       expect(mockPrisma.notification.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -372,13 +292,12 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
   });
 
   describe('4. Settings & Sound Policy (Decision Register)', () => {
-    it('defaults to soundEnabled = false and [90, 30, 7] warning intervals', async () => {
+    it('defaults to soundEnabled = false', async () => {
       mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
 
       const settings = await notificationsService.getSettings();
 
       expect(settings.soundEnabled).toBe(false);
-      expect(settings.expiryWarningIntervals).toEqual([90, 30, 7]);
       expect(settings.approvalRequirements.stockRequests.STOCK_OUT).toBe(true);
     });
 
@@ -387,11 +306,10 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
       mockPrisma.systemSetting.upsert.mockResolvedValue({});
 
       const updated = await notificationsService.updateSettings(
-        { expiryWarningIntervals: [60, 15], soundEnabled: true },
+        { soundEnabled: true },
         superAdminUser,
       );
 
-      expect(updated.expiryWarningIntervals).toEqual([60, 15]);
       expect(updated.soundEnabled).toBe(true);
     });
 
@@ -422,9 +340,9 @@ describe('Notifications Service (T-013: Notifications, low-stock and expiry aler
       } as any, superAdminUser)).rejects.toThrow('must be a boolean');
     });
 
-    it('forbids Client Admin from updating global notification settings', async () => {
+    it('forbids Project Admin from updating global notification settings', async () => {
       await expect(
-        notificationsService.updateSettings({ soundEnabled: true }, clientAdminUser),
+        notificationsService.updateSettings({ soundEnabled: true }, projectAdminUser),
       ).rejects.toThrow(ForbiddenException);
     });
   });

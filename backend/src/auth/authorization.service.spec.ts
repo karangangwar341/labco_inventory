@@ -13,38 +13,38 @@ describe('AuthorizationService (T-004: Tenancy & Role-Scoped Isolation)', () => 
       user: {
         findUnique: vi.fn(),
       },
-      clientWarehouseAssignment: {
+      projectWarehouseAssignment: {
         findFirst: vi.fn(),
       },
     };
     authService = new AuthorizationService(mockPrisma as any);
   });
 
-  describe('assertClientAccess', () => {
-    it('allows Super Admin full access to any client', async () => {
+  describe('assertProjectAccess', () => {
+    it('allows Super Admin full access to any project', async () => {
       const superAdmin: any = { id: 'sa-1', role: UserRole.SUPER_ADMIN };
-      await expect(authService.assertClientAccess(superAdmin, 'client-999')).resolves.toBeUndefined();
+      await expect(authService.assertProjectAccess(superAdmin, 'project-999')).resolves.toBeUndefined();
     });
 
-    it('allows Client Admin access to own client', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+    it('allows Project Admin access to own project', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
 
-      await expect(authService.assertClientAccess(clientAdmin, 'client-123')).resolves.toBeUndefined();
+      await expect(authService.assertProjectAccess(projectAdmin, 'project-123')).resolves.toBeUndefined();
     });
 
-    it('blocks Client Admin cross-client access with ForbiddenException', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      mockPrisma.user.findUnique.mockResolvedValue({ clientId: 'client-123' });
+    it('blocks Project Admin cross-project access with ForbiddenException', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-123' });
 
-      await expect(authService.assertClientAccess(clientAdmin, 'other-client-456')).rejects.toThrow(
+      await expect(authService.assertProjectAccess(projectAdmin, 'other-project-456')).rejects.toThrow(
         ForbiddenException,
       );
     });
 
-    it('blocks Store Admin from accessing client tenant scope', async () => {
+    it('blocks Store Admin from accessing project tenant scope', async () => {
       const storeAdmin: any = { id: 'sm-1', role: UserRole.STORE_ADMIN };
-      await expect(authService.assertClientAccess(storeAdmin, 'client-123')).rejects.toThrow(
+      await expect(authService.assertProjectAccess(storeAdmin, 'project-123')).rejects.toThrow(
         ForbiddenException,
       );
     });
@@ -72,34 +72,34 @@ describe('AuthorizationService (T-004: Tenancy & Role-Scoped Isolation)', () => 
       );
     });
 
-    it('blocks Client Admin operating directly on warehouse scope', async () => {
-      const clientAdmin: any = { id: 'ca-1', role: UserRole.CLIENT_ADMIN };
-      await expect(authService.assertWarehouseAccess(clientAdmin, 'wh-main')).rejects.toThrow(
+    it('blocks Project Admin operating directly on warehouse scope', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      await expect(authService.assertWarehouseAccess(projectAdmin, 'wh-main')).rejects.toThrow(
         ForbiddenException,
       );
     });
   });
 
-  describe('assertActiveWarehouseClientAssignment', () => {
-    it('passes when warehouse-to-client assignment is active', async () => {
-      mockPrisma.clientWarehouseAssignment.findFirst.mockResolvedValue({ id: 'ass-1', isActive: true });
+  describe('assertActiveWarehouseProjectAssignment', () => {
+    it('passes when warehouse-to-project assignment is active', async () => {
+      mockPrisma.projectWarehouseAssignment.findFirst.mockResolvedValue({ id: 'ass-1', isActive: true });
 
       await expect(
-        authService.assertActiveWarehouseClientAssignment('wh-1', 'client-1'),
+        authService.assertActiveWarehouseProjectAssignment('wh-1', 'project-1'),
       ).resolves.toBeUndefined();
     });
 
     it('blocks dispatch when assignment does not exist or is inactive', async () => {
-      mockPrisma.clientWarehouseAssignment.findFirst.mockResolvedValue(null);
+      mockPrisma.projectWarehouseAssignment.findFirst.mockResolvedValue(null);
 
       await expect(
-        authService.assertActiveWarehouseClientAssignment('wh-1', 'client-unassigned'),
+        authService.assertActiveWarehouseProjectAssignment('wh-1', 'project-unassigned'),
       ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('Inbound Shipment Privacy (sanitizeShipmentPayload)', () => {
-    it('redacts source warehouse identity for Client Admin', () => {
+    it('redacts source warehouse identity for Project Admin', () => {
       const rawShipment = {
         id: 'shipment-001',
         trackingNumber: 'TRK-987',

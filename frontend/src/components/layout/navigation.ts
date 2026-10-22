@@ -43,13 +43,13 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Operations',
     defaultHref: '/',
     iconName: 'overview',
-    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/', '/inventory', '/shipments'],
     subItems: [
       { href: '/', label: 'Overview', exact: true },
       { href: '/inventory', label: 'Stock & Inventory' },
-      { href: '/shipments', label: 'Client Dispatches', roles: ['STORE_ADMIN'] },
-      { href: '/shipments', label: 'Incoming Deliveries', roles: ['CLIENT_ADMIN'] },
+      { href: '/shipments', label: 'Project Dispatches', roles: ['STORE_ADMIN'] },
+      { href: '/shipments', label: 'Incoming Deliveries', roles: ['PROJECT_ADMIN'] },
       { href: '/shipments', label: 'Shipments & Deliveries', roles: ['SUPER_ADMIN'] },
     ],
   },
@@ -58,12 +58,12 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Stock Requests',
     defaultHref: '/requests',
     iconName: 'requests',
-    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/requests', '/approvals'],
     subItems: [
       { href: '/requests', label: 'Stock Requests', exact: true },
       { href: '/requests/new', label: 'New Stock Movement', roles: ['SUPER_ADMIN', 'STORE_ADMIN'] },
-      { href: '/departments?tab=ISSUES', label: 'Stock Out to Departments', roles: ['CLIENT_ADMIN'] },
+      { href: '/departments?tab=ISSUES', label: 'Stock Out to Departments', roles: ['PROJECT_ADMIN'] },
       { href: '/approvals', label: 'Approvals Queue', roles: ['SUPER_ADMIN'] },
     ],
   },
@@ -72,12 +72,12 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Manufacturing',
     defaultHref: '/manufacturing',
     iconName: 'manufacturing',
-    roles: ['CLIENT_ADMIN'],
+    roles: ['PROJECT_ADMIN'],
     matchPaths: ['/manufacturing', '/departments'],
     subItems: [
       { href: '/manufacturing', label: 'Production Runs & Cycles' },
-      { href: '/departments', label: 'Departments & Returns', roles: ['CLIENT_ADMIN'] },
-      { href: '/staff', label: 'Staff & Work Logs', roles: ['CLIENT_ADMIN'] },
+      { href: '/departments', label: 'Departments & Returns', roles: ['PROJECT_ADMIN'] },
+      { href: '/staff', label: 'Staff & Work Logs', roles: ['PROJECT_ADMIN'] },
     ],
   },
   {
@@ -85,7 +85,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Staff & HR',
     defaultHref: '/staff',
     iconName: 'users',
-    roles: ['CLIENT_ADMIN'],
+    roles: ['PROJECT_ADMIN'],
     matchPaths: ['/staff'],
     subItems: [
       { href: '/staff', label: 'Staff Directory & Daily Logs', exact: true },
@@ -96,7 +96,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Items & Documents',
     defaultHref: '/catalog',
     iconName: 'catalog',
-    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/catalog', '/imports'],
     subItems: [
       { href: '/catalog', label: 'Items Catalog' },
@@ -108,7 +108,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     label: 'Reports',
     defaultHref: '/reports',
     iconName: 'reports',
-    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'],
+    roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/reports'],
     subItems: [
       { href: '/reports', label: 'Stock Reports & Downloads' },
@@ -117,12 +117,12 @@ export const MAIN_DOMAINS: MainDomain[] = [
   {
     id: 'admin',
     label: 'Administration',
-    defaultHref: '/admin/clients',
+    defaultHref: '/admin/projects',
     iconName: 'settings',
     roles: ['SUPER_ADMIN'],
     matchPaths: ['/admin', '/backups'],
     subItems: [
-      { href: '/admin/clients', label: 'Clients' },
+      { href: '/admin/projects', label: 'Projects' },
       { href: '/admin/warehouses', label: 'Warehouses' },
       { href: '/admin/users', label: 'User Accounts' },
       { href: '/admin/settings', label: 'System Settings' },
@@ -135,7 +135,7 @@ export const HELP_NAV_ITEM = {
   href: '/help',
   label: 'How to use this system',
   iconName: 'help' as NavIconName,
-  roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'CLIENT_ADMIN'] as UserRole[],
+  roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'] as UserRole[],
 };
 
 /**

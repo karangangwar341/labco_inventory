@@ -4,7 +4,7 @@
 ## 1. Release-blocking invariants
 - No negative usable stock.
 - No stock change from upload, draft or pending request.
-- No unauthorized approval or cross-client/warehouse data access.
+- No unauthorized approval or cross-project/warehouse data access.
 - No duplicate ledger posting on retries or repeated clicks.
 - No silent modification/deletion of posted ledger entries.
 - Reservation and balance changes are atomic.
@@ -14,21 +14,30 @@
 1. Super Admin creates and disables a user; disabled user cannot log in and active sessions are revoked.
 2. Password reset revokes all sessions for the account.
 3. Store Admin cannot create products/categories, even through direct API calls.
-4. Client Admin cannot see another client's data or source warehouse identity for inbound shipments.
-5. Client-to-warehouse assignment blocks unassigned dispatch; removing assignment does not cancel existing in-transit shipments.
-6. Pending client product cannot be used in inventory transactions.
+4. Project Admin cannot see another project's data or source warehouse identity for inbound shipments.
+5. Project-to-warehouse assignment blocks unassigned dispatch; removing assignment does not cancel existing in-transit shipments.
+6. Receipt discrepancy resolution: 20 dispatched / 18 received credits 18 to destination; `MISSING` records 2 as reportable loss without balance credit; `CALCULATION_MISTAKE` credits 2 back to source exactly once.
+7. Only Super Admin can resolve discrepancies or generate `MISSING_STOCK`; resolution is immutable, shipment date filtering uses resolution date, and totals aggregate using historical base-unit conversion snapshots.
+6. Pending project product cannot be used in inventory transactions.
 7. Unit conversion 1 box = 12 pieces; 10 boxes converts to 120 pieces and the conversion snapshot is retained.
 8. Whole-unit product rejects 1.5; decimal-enabled product accepts only configured precision up to two decimals.
 9. Product threshold changes flag low stock but do not alter quantity.
-10. Batch/expiry fields are required only when tracking is enabled.
-11. Expired stock is excluded from usable stock and blocked from routine issue/dispatch.
-12. Damaged/expired stock is excluded from usable quantity; write-off requires approval.
+10. No product lot, batch, or expiry fields, endpoints, alerts, or balance buckets exist.
+11. A DAMAGED stock-out requires approval by default, reduces usable quantity once, and records DAMAGED and the reason in the immutable ledger.
 13. Physical count adjustment and historical correction follow separate workflows.
 14. Linked manufacturing posts all inputs/outputs atomically; simulated failure posts none.
-15. Department issue reduces central client stock only after approval; no department balance is created.
-16. Usable return restores central stock after approval; damaged/expired return remains unavailable.
+14a. A manufacturing draft can be reopened and edited by its original Project Admin; edits do not change stock, other projects cannot edit it, and non-draft runs are locked.
+14b. A production run cannot be submitted until actual output is recorded; submission rechecks available raw materials and leaves all balances unchanged pending Super Admin approval.
+15. Department issue reduces central project stock only after approval; no department balance is created.
+16. Usable return restores central stock after approval; damaged items use the flagged stock-out workflow.
 17. Low-stock alert triggers on downward crossing, persists while low, and triggers again only after recovery and a new crossing.
 18. Backup failure retries, alerts Super Admin and clears persistent warning only after successful backup.
+19. Approval policy defaults to required for all supported workflows; partial settings preserve unspecified defaults and reject malformed values.
+20. A Project Admin can maintain one project-scoped daily issue draft with multiple lines; other tenants and Store Admins cannot read or edit it.
+21. Daily issue submission reserves all lines or none; concurrent submissions cannot over-reserve available stock.
+22. Batch approval/rejection is atomic across all lines, and rejection releases every reservation.
+23. With department-issue approval disabled, submit posts all lines, marks `POSTED`, emits an audit event, and retries cannot duplicate ledger posting.
+24. Changing approval settings does not alter already-pending submissions.
 
 ## 3. Reservation and concurrency tests
 1. 100 available; submit request for 90 → reserved 90, available 10.

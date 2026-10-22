@@ -36,7 +36,7 @@ const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'MANUFACTURING', 'DE
 
 const QUICK_REJECTION_REASONS = [
   'Insufficient available stock at facility',
-  'Lot number or batch expiry discrepancy',
+  'Quantity or product discrepancy',
   'Duplicate requisition submission',
   'Incomplete department allocation details',
 ];
@@ -74,8 +74,8 @@ export function ApprovalsQueue() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Clientwise & Time-Series Date Filters
-  const [selectedClientId, setSelectedClientId] = useState('');
+  // Projectwise & Time-Series Date Filters
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [dateFilter, setDateFilter] = useState<DateQuickFilter>(() => {
     if (dateParam && VALID_DATE_FILTERS.includes(dateParam)) return dateParam;
     return 'TODAY';
@@ -96,10 +96,10 @@ export function ApprovalsQueue() {
     window.history.replaceState(null, '', `${window.location.pathname}${newQuery}`);
   }, [activeTab, dateFilter, priorityFilter]);
 
-  // Query: Clients for clientwise filtering
-  const { data: clients = [] } = useQuery({
-    queryKey: ['administration', 'clients'],
-    queryFn: () => administrationService.getClients(),
+  // Query: Projects for project-based filtering
+  const { data: projects = [] } = useQuery({
+    queryKey: ['administration', 'projects'],
+    queryFn: () => administrationService.getProjects(),
     enabled: isAuthorized,
     staleTime: 5 * 60 * 1000,
   });
@@ -198,20 +198,20 @@ export function ApprovalsQueue() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
-  // Clear selections when switching tab, client, or date
+  // Clear selections when switching tab, project, or date
   useEffect(() => {
     setSelectedIds([]);
-  }, [activeTab, selectedClientId, dateFilter]);
+  }, [activeTab, selectedProjectId, dateFilter]);
 
   const allCurrentTabList = items[activeTab] || [];
 
   // Count items from earlier days to show in the hint pill when TODAY is selected
   const olderItemsCount = useMemo(() => {
     return allCurrentTabList.filter((i) => {
-      if (selectedClientId && i.clientId !== selectedClientId) return false;
+      if (selectedProjectId && i.projectId !== selectedProjectId) return false;
       return !isDateInRange(i.createdAtRaw || i.createdAt, 'TODAY');
     }).length;
-  }, [allCurrentTabList, selectedClientId]);
+  }, [allCurrentTabList, selectedProjectId]);
 
   const currentTabItems = useMemo(() => {
     return allCurrentTabList.filter((i) => {
@@ -222,13 +222,13 @@ export function ApprovalsQueue() {
         i.requester.toLowerCase().includes(requesterSearch.toLowerCase()) ||
         i.id.toLowerCase().includes(requesterSearch.toLowerCase()) ||
         (i.location && i.location.toLowerCase().includes(requesterSearch.toLowerCase())) ||
-        (i.clientName && i.clientName.toLowerCase().includes(requesterSearch.toLowerCase()));
-      const matchesClient =
-        !selectedClientId ||
-        i.clientId === selectedClientId ||
+        (i.projectName && i.projectName.toLowerCase().includes(requesterSearch.toLowerCase()));
+      const matchesProject =
+        !selectedProjectId ||
+        i.projectId === selectedProjectId ||
         (i.location &&
           i.location.toLowerCase().includes(
-            clients.find((c: any) => c.id === selectedClientId)?.name?.toLowerCase() || '',
+            projects.find((c: any) => c.id === selectedProjectId)?.name?.toLowerCase() || '',
           ));
       const matchesDate = isDateInRange(
         i.createdAtRaw || i.createdAt,
@@ -236,23 +236,23 @@ export function ApprovalsQueue() {
         customStart,
         customEnd,
       );
-      return matchesPriority && matchesRequester && matchesClient && matchesDate;
+      return matchesPriority && matchesRequester && matchesProject && matchesDate;
     });
   }, [
     allCurrentTabList,
     priorityFilter,
     requesterSearch,
-    selectedClientId,
+    selectedProjectId,
     dateFilter,
     customStart,
     customEnd,
-    clients,
+    projects,
   ]);
 
   const tabs: { key: ApprovalTab; label: string; count: number }[] = [
     { key: 'REQUESTS', label: 'Stock Requests', count: items.REQUESTS?.length || 0 },
     { key: 'SHIPMENTS', label: 'Shipments & Receipts', count: items.SHIPMENTS?.length || 0 },
-    { key: 'MANUFACTURING', label: 'Client Manufacturing', count: items.MANUFACTURING?.length || 0 },
+    { key: 'MANUFACTURING', label: 'Project Manufacturing', count: items.MANUFACTURING?.length || 0 },
     { key: 'DEPARTMENTS', label: 'Department Issues', count: items.DEPARTMENTS?.length || 0 },
     { key: 'CORRECTIONS', label: 'Ledger Corrections', count: items.CORRECTIONS?.length || 0 },
   ];
@@ -630,17 +630,17 @@ export function ApprovalsQueue() {
               </div>
             </div>
 
-            {/* Client Filter (Super Admin / Authorized) */}
+            {/* Project Filter (Super Admin / Authorized) */}
             {isAuthorized && (
               <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-slate-500 font-medium shrink-0">Client:</span>
+                <span className="text-slate-500 font-medium shrink-0">Project:</span>
                 <select
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
                   className="w-full sm:w-auto px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-600 focus:bg-white text-xs"
                 >
-                  <option value="">All Clients</option>
-                  {clients.map((c: any) => (
+                  <option value="">All Projects</option>
+                  {projects.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
@@ -808,13 +808,6 @@ export function ApprovalsQueue() {
                         <div>
                           {line.label && <span className="mr-1 text-slate-400 font-medium">{line.label}:</span>}
                           <span className="font-semibold text-slate-900">{line.productName}</span>
-                          {(line.batchNumber || line.expiryDate) && (
-                            <div className="mt-0.5 text-[11px] text-slate-400">
-                              {line.batchNumber ? `Lot ${line.batchNumber}` : ''}
-                              {line.batchNumber && line.expiryDate ? ' · ' : ''}
-                              {line.expiryDate ? `Expires ${new Date(line.expiryDate).toLocaleDateString()}` : ''}
-                            </div>
-                          )}
                         </div>
                         <span className="font-semibold text-slate-900">{line.quantity}{line.unitName ? ` ${line.unitName}` : ''}</span>
                       </div>
@@ -903,7 +896,7 @@ export function ApprovalsQueue() {
               rows={3}
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
-              placeholder="Explain why this request is rejected (e.g. incorrect lot specified, invalid requisition quota)..."
+              placeholder="Explain why this request is rejected (e.g. incorrect quantity or invalid requisition quota)..."
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-600 focus:bg-white focus:ring-1 focus:ring-red-600 transition-all"
             />
           </div>

@@ -2,7 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { OrganizationStatus } from '@prisma/client';
 
-export class UpdateClientDto {
+export class UpdateProjectDto {
   @ApiPropertyOptional({ example: 'Apex Manufacturing Ltd' })
   @IsOptional()
   @IsString()

@@ -49,7 +49,7 @@ export class ManufacturingService {
   private async processInputs(
     inputs: ProductionInputDto[],
     tx: Prisma.TransactionClient,
-    clientId: string,
+    projectId: string,
   ) {
     if (!inputs || inputs.length === 0) {
       throw new BadRequestException(
@@ -57,12 +57,12 @@ export class ManufacturingService {
       );
     }
 
-    const clientLocation = await tx.stockLocation.findUnique({
-      where: { clientId },
+    const projectLocation = await tx.stockLocation.findUnique({
+      where: { projectId },
     });
-    if (!clientLocation) {
+    if (!projectLocation) {
       throw new BadRequestException(
-        'This client has no stock location configured',
+        'This project has no stock location configured',
       );
     }
     const inputProductIds = [
@@ -71,7 +71,7 @@ export class ManufacturingService {
     const [balances, ledgerEntries] = await Promise.all([
       tx.inventoryBalance.findMany({
         where: {
-          locationId: clientLocation.id,
+          locationId: projectLocation.id,
           productId: { in: inputProductIds },
         },
         select: { productId: true },
@@ -79,7 +79,7 @@ export class ManufacturingService {
       }),
       tx.ledgerEntry.findMany({
         where: {
-          locationId: clientLocation.id,
+          locationId: projectLocation.id,
           productId: { in: inputProductIds },
         },
         select: { productId: true },
@@ -111,14 +111,14 @@ export class ManufacturingService {
           `Manufacturing input "${product.name}" must be a raw material`,
         );
       }
-      if (product.ownerScope === 'CLIENT' && product.clientId !== clientId) {
+      if (product.ownerScope === 'PROJECT' && product.projectId !== projectId) {
         throw new ForbiddenException(
-          'Cannot use another client’s raw material',
+          'Cannot use another project’s raw material',
         );
       }
       if (!stockedProductIds.has(product.id)) {
         throw new BadRequestException(
-          `Raw material "${product.name}" has never been stocked at this client`,
+          `Raw material "${product.name}" has never been stocked at this project`,
         );
       }
 
@@ -143,7 +143,6 @@ export class ManufacturingService {
 
       processed.push({
         productId: input.productId,
-        batchId: input.batchId || null,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
@@ -161,7 +160,7 @@ export class ManufacturingService {
   private async processOutputs(
     outputs: ProductionOutputDto[],
     tx: Prisma.TransactionClient,
-    clientId: string,
+    projectId: string,
   ) {
     if (!outputs || outputs.length === 0) {
       throw new BadRequestException(
@@ -191,20 +190,9 @@ export class ManufacturingService {
           `Manufacturing output "${product.name}" must be a manufactured product`,
         );
       }
-      if (product.ownerScope !== 'CLIENT' || product.clientId !== clientId) {
+      if (product.ownerScope !== 'PROJECT' || product.projectId !== projectId) {
         throw new ForbiddenException(
-          'Manufacturing outputs must belong to this client’s catalog',
-        );
-      }
-
-      // Tracking mode validation
-      if (
-        (product.trackingMode === 'BATCH_ONLY' ||
-          product.trackingMode === 'BOTH') &&
-        !output.batchNumber
-      ) {
-        throw new BadRequestException(
-          `Finished product "${product.name}" requires batchNumber`,
+          'Manufacturing outputs must belong to this project’s catalog',
         );
       }
 
@@ -229,8 +217,6 @@ export class ManufacturingService {
 
       processed.push({
         productId: output.productId,
-        batchNumber: output.batchNumber || null,
-        expiryDate: output.expiryDate ? new Date(output.expiryDate) : null,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
@@ -249,32 +235,32 @@ export class ManufacturingService {
     user: AuthenticatedUser,
     dto: CreateProductionRunDto,
   ) {
-    let resolvedClientId = dto.clientId;
+    let resolvedProjectId = dto.projectId;
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (!dbUser?.clientId) {
+      if (!dbUser?.projectId) {
         throw new ForbiddenException(
-          'Client Admin is not assigned to any client',
+          'Project Admin is not assigned to any project',
         );
       }
-      resolvedClientId = dbUser.clientId;
+      resolvedProjectId = dbUser.projectId;
     } else if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException(
-        'Store Admin cannot create client production runs',
+        'Store Admin cannot create project production runs',
       );
     } else if (user.role === UserRole.SUPER_ADMIN) {
-      if (!resolvedClientId) {
-        const firstClient = await this.prisma.client.findFirst({
+      if (!resolvedProjectId) {
+        const firstProject = await this.prisma.project.findFirst({
           where: { status: 'ACTIVE' },
           orderBy: { createdAt: 'asc' },
         });
-        resolvedClientId = firstClient?.id;
-        if (!resolvedClientId) {
+        resolvedProjectId = firstProject?.id;
+        if (!resolvedProjectId) {
           throw new BadRequestException(
-            'No active client found. Super Admin must specify clientId',
+            'No active project found. Super Admin must specify projectId',
           );
         }
       }
@@ -284,17 +270,17 @@ export class ManufacturingService {
       const processedInputs = await this.processInputs(
         dto.inputs,
         tx,
-        resolvedClientId!,
+        resolvedProjectId!,
       );
       const processedOutputs = await this.processOutputs(
         dto.outputs,
         tx,
-        resolvedClientId!,
+        resolvedProjectId!,
       );
 
       return tx.productionRun.create({
         data: {
-          clientId: resolvedClientId!,
+          projectId: resolvedProjectId!,
           mode: dto.mode || ProductionMode.LINKED,
           status: ProductionStatus.DRAFT,
           productionReference: dto.productionReference || null,
@@ -327,17 +313,17 @@ export class ManufacturingService {
     runId: string,
     dto: CreateProductionRunDto,
   ) {
-    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException(
-        'Only Client Admins or Super Admin can edit production drafts',
+        'Only Project Admins or Super Admin can edit production drafts',
       );
     }
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
-    if (user.role === UserRole.CLIENT_ADMIN && !dbUser?.clientId) {
+    if (user.role === UserRole.PROJECT_ADMIN && !dbUser?.projectId) {
       throw new ForbiddenException(
-        'Client Admin is not assigned to any client',
+        'Project Admin is not assigned to any project',
       );
     }
 
@@ -348,7 +334,7 @@ export class ManufacturingService {
       });
       if (!run)
         throw new NotFoundException(`Production run ${runId} not found`);
-      if (user.role === UserRole.CLIENT_ADMIN && (run.clientId !== dbUser?.clientId || run.submittedById !== user.id)) {
+      if (user.role === UserRole.PROJECT_ADMIN && (run.projectId !== dbUser?.projectId || run.submittedById !== user.id)) {
         throw new ForbiddenException(
           'You can only edit your own production drafts',
         );
@@ -359,14 +345,14 @@ export class ManufacturingService {
         );
       }
 
-      const inputs = await this.processInputs(dto.inputs, tx, run.clientId);
-      const outputs = await this.processOutputs(dto.outputs, tx, run.clientId);
+      const inputs = await this.processInputs(dto.inputs, tx, run.projectId);
+      const outputs = await this.processOutputs(dto.outputs, tx, run.projectId);
       const updateWhere: Prisma.ProductionRunWhereInput = {
         id: runId,
         status: ProductionStatus.DRAFT,
       };
-      if (user.role === UserRole.CLIENT_ADMIN) {
-        updateWhere.clientId = dbUser!.clientId!;
+      if (user.role === UserRole.PROJECT_ADMIN) {
+        updateWhere.projectId = dbUser!.projectId!;
         updateWhere.submittedById = user.id;
       }
       const claimed = await tx.productionRun.updateMany({
@@ -414,17 +400,17 @@ export class ManufacturingService {
 
   /** Delete an owned draft. Drafts have no inventory or ledger effect. */
   async deleteProductionRun(user: AuthenticatedUser, runId: string) {
-    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException(
-        'Only Client Admins or Super Admin can delete production drafts',
+        'Only Project Admins or Super Admin can delete production drafts',
       );
     }
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.id },
     });
-    if (user.role === UserRole.CLIENT_ADMIN && !dbUser?.clientId) {
+    if (user.role === UserRole.PROJECT_ADMIN && !dbUser?.projectId) {
       throw new ForbiddenException(
-        'Client Admin is not assigned to any client',
+        'Project Admin is not assigned to any project',
       );
     }
 
@@ -433,7 +419,7 @@ export class ManufacturingService {
       const run = await tx.productionRun.findUnique({ where: { id: runId } });
       if (!run)
         throw new NotFoundException(`Production run ${runId} not found`);
-      if (user.role === UserRole.CLIENT_ADMIN && (run.clientId !== dbUser?.clientId || run.submittedById !== user.id)) {
+      if (user.role === UserRole.PROJECT_ADMIN && (run.projectId !== dbUser?.projectId || run.submittedById !== user.id)) {
         throw new ForbiddenException(
           'You can only delete your own production drafts',
         );
@@ -501,54 +487,20 @@ export class ManufacturingService {
         );
       }
 
-      const clientLocation = await tx.stockLocation.findUnique({
-        where: { clientId: run.clientId },
+      const projectLocation = await tx.stockLocation.findUnique({
+        where: { projectId: run.projectId },
       });
-      if (!clientLocation) {
+      if (!projectLocation) {
         throw new BadRequestException(
-          `No stock location configured for client ${run.clientId}`,
+          `No stock location configured for project ${run.projectId}`,
         );
       }
       for (const input of run.inputs) {
         let available = new Prisma.Decimal(0);
-        if (input.batchId) {
-          const balance = await tx.inventoryBalance.findFirst({
-            where: {
-              locationId: clientLocation.id,
-              productId: input.productId,
-              batchId: input.batchId,
-            },
-          });
-          available = balance
-            ? balance.usableQty.minus(balance.reservedQty)
-            : new Prisma.Decimal(0);
-        } else {
-          // Check aggregate available usable stock across all batches at this location
-          const balances = await tx.inventoryBalance.findMany({
-            where: {
-              locationId: clientLocation.id,
-              productId: input.productId,
-            },
-          });
-          if (balances && balances.length > 0) {
-            for (const b of balances) {
-              const availInBatch = b.usableQty.minus(b.reservedQty);
-              if (availInBatch.greaterThan(0)) {
-                available = available.plus(availInBatch);
-              }
-            }
-          } else {
-            const fallback = await tx.inventoryBalance.findFirst({
-              where: {
-                locationId: clientLocation.id,
-                productId: input.productId,
-              },
-            });
-            available = fallback
-              ? fallback.usableQty.minus(fallback.reservedQty)
-              : new Prisma.Decimal(0);
-          }
-        }
+        const balance = await tx.inventoryBalance.findFirst({
+          where: { locationId: projectLocation.id, productId: input.productId },
+        });
+        available = balance ? balance.usableQty.minus(balance.reservedQty) : new Prisma.Decimal(0);
 
         if (available.lessThan(input.baseQuantity)) {
           throw new BadRequestException(
@@ -577,7 +529,7 @@ export class ManufacturingService {
 
   /**
    * Submit single production run for Super Admin approval.
-   * Validates raw material stock availability at the client's location.
+   * Validates raw material stock availability at the project's location.
    */
   async submitProductionRun(user: AuthenticatedUser, runId: string) {
     const settings = await this.notificationsService.getSettings?.();
@@ -586,7 +538,7 @@ export class ManufacturingService {
     if (!requiresApproval) return this.approveProductionRun(user, runId, {}, true);
     await this.notificationsService.notifySuperAdmins(
       'Production run awaiting approval',
-      'A client submitted a manufacturing run for review.',
+      'A project submitted a manufacturing run for review.',
       'PRODUCTION_RUN',
       runId,
     );
@@ -634,7 +586,7 @@ export class ManufacturingService {
 
     await this.notificationsService.notifySuperAdmins(
       'Day-End production batch awaiting approval',
-      `Client submitted ${submittedRuns.length} continuous production runs for single day-end approval.`,
+      `Project submitted ${submittedRuns.length} continuous production runs for single day-end approval.`,
       'PRODUCTION_RUN',
       submittedRuns[0]?.id || '',
     );
@@ -754,13 +706,13 @@ export class ManufacturingService {
       );
     }
 
-    const clientLocation = await this.prisma.stockLocation.findUnique({
-      where: { clientId: run.clientId },
+    const projectLocation = await this.prisma.stockLocation.findUnique({
+      where: { projectId: run.projectId },
     });
 
-    if (!clientLocation) {
+    if (!projectLocation) {
       throw new BadRequestException(
-        `No stock location exists for client ${run.clientId}`,
+        `No stock location exists for project ${run.projectId}`,
       );
     }
 
@@ -779,7 +731,7 @@ export class ManufacturingService {
           kind: true,
           status: true,
           ownerScope: true,
-          clientId: true,
+          projectId: true,
         },
       });
       const productsById = new Map(
@@ -791,7 +743,7 @@ export class ManufacturingService {
           !product ||
           product.kind !== ProductKind.RAW_MATERIAL ||
           product.status !== ProductStatus.APPROVED ||
-          (product.ownerScope === 'CLIENT' && product.clientId !== run.clientId)
+          (product.ownerScope === 'PROJECT' && product.projectId !== run.projectId)
         ) {
           throw new BadRequestException(
             `Manufacturing input "${product?.name || 'Selected product'}" must be an approved raw material`,
@@ -804,8 +756,8 @@ export class ManufacturingService {
           !product ||
           product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
           product.status !== ProductStatus.APPROVED ||
-          product.ownerScope !== 'CLIENT' ||
-          product.clientId !== run.clientId
+          product.ownerScope !== 'PROJECT' ||
+          product.projectId !== run.projectId
         ) {
           throw new BadRequestException(
             `Manufacturing output "${product?.name || 'Selected product'}" must be an approved manufactured product`,
@@ -816,90 +768,14 @@ export class ManufacturingService {
       // 1. Post raw material deductions (MANUFACTURING_INPUT) in shared atomic transaction
       const inputPostingLines = [];
       for (const input of run.inputs) {
-        if (input.batchId) {
-          inputPostingLines.push({
-            locationId: clientLocation.id,
-            productId: input.productId,
-            batchId: input.batchId,
-            condition: StockCondition.USABLE,
-            quantity: input.quantity.toNumber(),
-            unitName: input.unitNameSnapshot,
-            direction: 'OUT' as const,
-          });
-        } else {
-          // If no specific batch was pre-selected, resolve available batches at location (FEFO)
-          const balances = await tx.inventoryBalance.findMany({
-            where: {
-              locationId: clientLocation.id,
-              productId: input.productId,
-            },
-            include: { batch: true },
-          });
-
-          const usableBalances = (balances || []).filter((b) =>
-            b.usableQty.minus(b.reservedQty).greaterThan(0),
-          );
-
-          if (usableBalances.length > 0) {
-            usableBalances.sort((a, b) => {
-              if (a.batch?.expiryDate && b.batch?.expiryDate) {
-                return a.batch.expiryDate.getTime() - b.batch.expiryDate.getTime();
-              }
-              if (a.batch?.expiryDate) return -1;
-              if (b.batch?.expiryDate) return 1;
-              return 0;
-            });
-
-            let remainingToDeduct = input.baseQuantity;
-            const conv =
-              input.conversionToBaseSnapshot && !input.conversionToBaseSnapshot.isZero()
-                ? input.conversionToBaseSnapshot
-                : new Prisma.Decimal(1);
-
-            for (const b of usableBalances) {
-              const avail = b.usableQty.minus(b.reservedQty);
-              if (avail.greaterThan(0) && remainingToDeduct.greaterThan(0)) {
-                const deductBase = avail.greaterThanOrEqualTo(remainingToDeduct)
-                  ? remainingToDeduct
-                  : avail;
-                const deductInOriginalUnit = deductBase.dividedBy(conv);
-                inputPostingLines.push({
-                  locationId: clientLocation.id,
-                  productId: input.productId,
-                  batchId: b.batchId || undefined,
-                  condition: StockCondition.USABLE,
-                  quantity: deductInOriginalUnit.toNumber(),
-                  unitName: input.unitNameSnapshot,
-                  direction: 'OUT' as const,
-                });
-                remainingToDeduct = remainingToDeduct.minus(deductBase);
-              }
-            }
-
-            if (remainingToDeduct.greaterThan(0)) {
-              const deductInOriginalUnit = remainingToDeduct.dividedBy(conv);
-              inputPostingLines.push({
-                locationId: clientLocation.id,
-                productId: input.productId,
-                batchId: undefined,
-                condition: StockCondition.USABLE,
-                quantity: deductInOriginalUnit.toNumber(),
-                unitName: input.unitNameSnapshot,
-                direction: 'OUT' as const,
-              });
-            }
-          } else {
-            inputPostingLines.push({
-              locationId: clientLocation.id,
-              productId: input.productId,
-              batchId: undefined,
-              condition: StockCondition.USABLE,
-              quantity: input.quantity.toNumber(),
-              unitName: input.unitNameSnapshot,
-              direction: 'OUT' as const,
-            });
-          }
-        }
+        inputPostingLines.push({
+          locationId: projectLocation.id,
+          productId: input.productId,
+          condition: StockCondition.USABLE,
+          quantity: input.quantity.toNumber(),
+          unitName: input.unitNameSnapshot,
+          direction: 'OUT' as const,
+        });
       }
 
       await this.ledgerService.postTransaction(
@@ -916,37 +792,12 @@ export class ManufacturingService {
         tx,
       );
 
-      // 2. Resolve or create batches for outputs if batchNumber specified
+      // 2. Prepare output postings without stock-lot metadata
       const outputLinesForPosting = [];
       for (const output of run.outputs) {
-        let batchId: string | undefined = undefined;
-
-        if (output.batchNumber) {
-          let batch = await tx.stockBatch.findUnique({
-            where: {
-              productId_batchNumber: {
-                productId: output.productId,
-                batchNumber: output.batchNumber.trim(),
-              },
-            },
-          });
-
-          if (!batch) {
-            batch = await tx.stockBatch.create({
-              data: {
-                productId: output.productId,
-                batchNumber: output.batchNumber.trim(),
-                expiryDate: output.expiryDate,
-              },
-            });
-          }
-          batchId = batch.id;
-        }
-
         outputLinesForPosting.push({
-          locationId: clientLocation.id,
+          locationId: projectLocation.id,
           productId: output.productId,
-          batchId,
           condition: StockCondition.USABLE,
           quantity: output.quantity.toNumber(),
           unitName: output.unitNameSnapshot,
@@ -993,8 +844,8 @@ export class ManufacturingService {
         },
       });
     });
-    await this.notificationsService.notifyClientAdmins(
-      run.clientId,
+    await this.notificationsService.notifyProjectAdmins(
+      run.projectId,
       'Production run approved',
       'Your production run was approved and inventory was updated.',
       'PRODUCTION_RUN',
@@ -1064,23 +915,23 @@ export class ManufacturingService {
   async getProductionRuns(
     user: AuthenticatedUser,
     status?: ProductionStatus,
-    clientId?: string,
+    projectId?: string,
   ) {
     const where: Prisma.ProductionRunWhereInput = {};
     if (status) {
       where.status = status;
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (!dbUser?.clientId) return [];
-      where.clientId = dbUser.clientId;
+      if (!dbUser?.projectId) return [];
+      where.projectId = dbUser.projectId;
     } else if (user.role === UserRole.STORE_ADMIN) {
-      return []; // Manufacturing is client-scoped
-    } else if (user.role === UserRole.SUPER_ADMIN && clientId) {
-      where.clientId = clientId;
+      return []; // Manufacturing is project-scoped
+    } else if (user.role === UserRole.SUPER_ADMIN && projectId) {
+      where.projectId = projectId;
     }
 
     const runs = await this.prisma.productionRun.findMany({
@@ -1093,7 +944,7 @@ export class ManufacturingService {
         outputs: {
           include: { product: { select: { id: true, name: true } } },
         },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         submittedBy: { select: { id: true, username: true } },
       },
     });
@@ -1106,7 +957,7 @@ export class ManufacturingService {
     const runNumber =
       run.runNumber ||
       (run.id ? `RUN-${run.id.substring(0, 8).toUpperCase()}` : 'RUN-UNKNOWN');
-    const clientName = run.client?.name || 'Client Facility';
+    const projectName = run.project?.name || 'Project Facility';
     const inputs = (run.inputs || []).map((i: any) => ({
       ...i,
       unit: i.unitNameSnapshot,
@@ -1123,7 +974,7 @@ export class ManufacturingService {
     return {
       ...run,
       runNumber,
-      clientName,
+      projectName,
       plannedQuantity:
         run.plannedOutput?.toNumber?.() ?? run.plannedOutput ?? 0,
       actualQuantity:
@@ -1150,7 +1001,7 @@ export class ManufacturingService {
         outputs: {
           include: { product: { select: { id: true, name: true } } },
         },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         submittedBy: { select: { id: true, username: true } },
         approvedBy: { select: { id: true, username: true } },
       },
@@ -1160,18 +1011,18 @@ export class ManufacturingService {
       throw new NotFoundException(`Production run ${runId} not found`);
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (run.clientId !== dbUser?.clientId) {
+      if (run.projectId !== dbUser?.projectId) {
         throw new ForbiddenException(
-          'Cannot view production run for another client',
+          'Cannot view production run for another project',
         );
       }
     } else if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException(
-        'Store Admin cannot view client production runs',
+        'Store Admin cannot view project production runs',
       );
     }
 
@@ -1183,21 +1034,21 @@ export class ManufacturingService {
    * replenishment alert status, and formula readiness.
    */
   async getProductionCycles(user: AuthenticatedUser) {
-    let clientId: string | undefined;
+    let projectId: string | undefined;
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (!dbUser?.clientId) return [];
-      clientId = dbUser.clientId;
+      if (!dbUser?.projectId) return [];
+      projectId = dbUser.projectId;
     } else if (user.role === UserRole.STORE_ADMIN) {
       return [];
     }
 
     const where: Prisma.ProductionRunWhereInput = {};
-    if (clientId) {
-      where.clientId = clientId;
+    if (projectId) {
+      where.projectId = projectId;
     }
 
     const runs = await this.prisma.productionRun.findMany({
@@ -1222,7 +1073,7 @@ export class ManufacturingService {
             unit: { select: { id: true, unitName: true } },
           },
         },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 
@@ -1230,14 +1081,14 @@ export class ManufacturingService {
       return [];
     }
 
-    const clientIds = [...new Set(runs.map((r) => r.clientId))];
-    const clientLocations = await this.prisma.stockLocation.findMany({
-      where: { clientId: { in: clientIds } },
-      select: { id: true, clientId: true },
+    const projectIds = [...new Set(runs.map((r) => r.projectId))];
+    const projectLocations = await this.prisma.stockLocation.findMany({
+      where: { projectId: { in: projectIds } },
+      select: { id: true, projectId: true },
     });
-    const locationMap = new Map(clientLocations.map((l) => [l.clientId, l.id]));
+    const locationMap = new Map(projectLocations.map((l) => [l.projectId, l.id]));
 
-    const allLocationIds = clientLocations.map((l) => l.id);
+    const allLocationIds = projectLocations.map((l) => l.id);
     const balances = await this.prisma.inventoryBalance.findMany({
       where: { locationId: { in: allLocationIds } },
       select: {
@@ -1265,10 +1116,10 @@ export class ManufacturingService {
       const output = run.outputs[0];
       const outputProduct = output?.product;
       const ref = run.productionReference || outputProduct?.name || 'Standard Cycle';
-      const key = `${run.clientId}_${outputProduct?.id || ref}`;
+      const key = `${run.projectId}_${outputProduct?.id || ref}`;
 
       if (!cyclesMap.has(key)) {
-        const locId = locationMap.get(run.clientId);
+        const locId = locationMap.get(run.projectId);
         const currentStockDecimal = outputProduct
           ? getAvailableStock(locId, outputProduct.id)
           : new Prisma.Decimal(0);
@@ -1302,8 +1153,8 @@ export class ManufacturingService {
         cyclesMap.set(key, {
           cycleKey: key,
           cycleReference: ref,
-          clientId: run.clientId,
-          clientName: run.client?.name || 'Client',
+          projectId: run.projectId,
+          projectName: run.project?.name || 'Project',
           outputProductId: outputProduct?.id || null,
           outputProductName: outputProduct?.name || 'Finished Product',
           outputProductSku: null,
@@ -1349,7 +1200,7 @@ export class ManufacturingService {
       include: {
         inputs: { include: { unit: true, product: true } },
         outputs: { include: { unit: true, product: true } },
-        client: true,
+        project: true,
       },
     });
 
@@ -1357,18 +1208,18 @@ export class ManufacturingService {
       throw new NotFoundException(`Production run ${runId} not found`);
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (original.clientId !== dbUser?.clientId) {
+      if (original.projectId !== dbUser?.projectId) {
         throw new ForbiddenException(
-          'Cannot re-run a production run belonging to another client',
+          'Cannot re-run a production run belonging to another project',
         );
       }
     } else if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException(
-        'Store Admin cannot execute client production cycles',
+        'Store Admin cannot execute project production cycles',
       );
     }
 
@@ -1391,13 +1242,8 @@ export class ManufacturingService {
         productId: inp.productId,
         unitId: inp.unitId,
         quantity: Math.round(scaledQty * 10000) / 10000,
-        batchId: inp.batchId || undefined,
       };
     });
-
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const batchNumber = dto?.batchNumber || `BATCH-${dateStr}-${randSuffix}`;
 
     const processedOutputs: ProductionOutputDto[] = original.outputs.map((out) => {
       const outQty = newPlanned !== null ? newPlanned : Number(out.quantity);
@@ -1405,15 +1251,13 @@ export class ManufacturingService {
         productId: out.productId,
         unitId: out.unitId,
         quantity: Math.round(outQty * 10000) / 10000,
-        batchNumber,
-        expiryDate: dto?.expiryDate || (out.expiryDate ? out.expiryDate.toISOString() : undefined),
       };
     });
 
     const ref = original.productionReference || `CYCLE-${original.outputs[0]?.product?.name || 'PROD'}`;
 
     return this.createProductionRun(user, {
-      clientId: original.clientId,
+      projectId: original.projectId,
       mode: original.mode,
       productionReference: ref,
       plannedOutput: newPlanned !== null ? newPlanned : undefined,
@@ -1425,19 +1269,19 @@ export class ManufacturingService {
 
   /**
    * Comprehensive analytics and reporting for production cycles and execution history.
-   * Scoped for Client Admin, enterprise-wide for Super Admin.
+   * Scoped for Project Admin, enterprise-wide for Super Admin.
    */
   async getManufacturingAnalytics(
     user: AuthenticatedUser,
     query?: QueryManufacturingAnalyticsDto,
   ) {
-    let resolvedClientId = query?.clientId;
+    let resolvedProjectId = query?.projectId;
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
         where: { id: user.id },
       });
-      if (!dbUser?.clientId) {
+      if (!dbUser?.projectId) {
         return {
           summary: {
             totalCycles: 0,
@@ -1458,7 +1302,7 @@ export class ManufacturingService {
           executionHistory: [],
         };
       }
-      resolvedClientId = dbUser.clientId;
+      resolvedProjectId = dbUser.projectId;
     } else if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException(
         'Store Admin cannot access manufacturing analytics',
@@ -1466,8 +1310,8 @@ export class ManufacturingService {
     }
 
     const where: Prisma.ProductionRunWhereInput = {};
-    if (resolvedClientId) {
-      where.clientId = resolvedClientId;
+    if (resolvedProjectId) {
+      where.projectId = resolvedProjectId;
     }
     if (query?.status) {
       where.status = query.status;
@@ -1500,7 +1344,7 @@ export class ManufacturingService {
             unit: { select: { id: true, unitName: true } },
           },
         },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         submittedBy: { select: { id: true, username: true } },
         approvedBy: { select: { id: true, username: true } },
       },
@@ -1558,13 +1402,13 @@ export class ManufacturingService {
 
       const outputProd = run.outputs[0]?.product;
       const cycleRef = run.productionReference || outputProd?.name || 'Standard Cycle';
-      const cycleKey = `${run.clientId}_${outputProd?.id || cycleRef}`;
+      const cycleKey = `${run.projectId}_${outputProd?.id || cycleRef}`;
 
       if (!cycleStatsMap.has(cycleKey)) {
         cycleStatsMap.set(cycleKey, {
           cycleReference: cycleRef,
-          clientId: run.clientId,
-          clientName: run.client?.name || 'Client',
+          projectId: run.projectId,
+          projectName: run.project?.name || 'Project',
           outputProductName: outputProd?.name || 'Finished Good',
           outputProductSku: null,
           runsCount: 1,
@@ -1613,10 +1457,9 @@ export class ManufacturingService {
         id: run.id,
         runNumber: `RUN-${run.id.substring(0, 8).toUpperCase()}`,
         cycleReference: run.productionReference || 'Standard Cycle',
-        clientId: run.clientId,
-        clientName: run.client?.name || 'Client',
+        projectId: run.projectId,
+        projectName: run.project?.name || 'Project',
         outputProductName: run.outputs[0]?.product?.name || 'Finished Product',
-        batchNumber: run.outputs[0]?.batchNumber || null,
         plannedOutput: planned,
         actualOutput: actual,
         yieldEfficiency,
@@ -1666,16 +1509,16 @@ export class ManufacturingService {
 
   /**
    * Check for low-stock manufactured products that have production cycles,
-   * and trigger in-app notification alerts for Client Admins.
+   * and trigger in-app notification alerts for Project Admins.
    */
   async checkLowStockCycles(user: AuthenticatedUser) {
     const cycles = await this.getProductionCycles(user);
     const lowStockCycles = cycles.filter((c: any) => c.isLowStock || c.isOutOfStock);
 
     for (const cycle of lowStockCycles) {
-      if (cycle.clientId && cycle.outputProductName) {
-        await this.notificationsService.notifyClientAdmins(
-          cycle.clientId,
+      if (cycle.projectId && cycle.outputProductName) {
+        await this.notificationsService.notifyProjectAdmins(
+          cycle.projectId,
           `Production Replenishment Needed: ${cycle.outputProductName}`,
           `Stock is low (${cycle.currentStock} remaining, min: ${cycle.minQuantity}). Production Cycle "${cycle.cycleReference}" is ready to re-run.`,
           'PRODUCTION_RUN',

@@ -15,7 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ProductKind, TrackingMode } from '@prisma/client';
+import { ProductKind } from '@prisma/client';
 
 export class ProductAttributeDto {
   @ApiProperty({ example: 'Volume' })
@@ -90,10 +90,6 @@ export class CreateProductDto {
   @IsBoolean()
   allowFractional!: boolean;
 
-  @ApiProperty({ enum: TrackingMode, example: TrackingMode.NONE })
-  @IsEnum(TrackingMode)
-  trackingMode!: TrackingMode;
-
   @ApiPropertyOptional({ example: 10, description: 'Low-stock alert threshold' })
   @IsOptional()
   @IsNumber()
@@ -119,10 +115,10 @@ export class CreateProductDto {
   @Type(() => ProductUnitDto)
   units!: ProductUnitDto[];
 
-  @ApiPropertyOptional({ description: 'Client UUID for client-scoped products (Super Admin only)' })
+  @ApiPropertyOptional({ description: 'Project UUID for project-scoped products (Super Admin only)' })
   @IsOptional()
-  @IsUUID('4', { message: 'clientId must be a valid UUID' })
-  clientId?: string;
+  @IsUUID('4', { message: 'projectId must be a valid UUID' })
+  projectId?: string;
 }
 
 export class ProposeProductVersionDto extends CreateProductDto {

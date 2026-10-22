@@ -7,7 +7,7 @@ export const metadata = {
 
 export default function DepartmentsPage() {
   return (
-    <RoleGuard allowedRoles={['CLIENT_ADMIN', 'SUPER_ADMIN']}>
+    <RoleGuard allowedRoles={['PROJECT_ADMIN', 'SUPER_ADMIN']}>
       <DepartmentsView />
     </RoleGuard>
   );

@@ -24,8 +24,8 @@ export interface CycleRecipeInput {
 export interface ProductionCycle {
   cycleKey: string;
   cycleReference: string;
-  clientId: string;
-  clientName: string;
+  projectId: string;
+  projectName: string;
   outputProductId: string | null;
   outputProductName: string;
   outputProductSku: string | null;
@@ -47,8 +47,6 @@ export interface ProductionCycle {
 
 export interface ReRunCyclePayload {
   plannedOutput?: number;
-  batchNumber?: string;
-  expiryDate?: string;
   notes?: string;
 }
 
@@ -56,10 +54,9 @@ export interface CycleExecutionHistoryItem {
   id: string;
   runNumber: string;
   cycleReference: string;
-  clientId: string;
-  clientName: string;
+  projectId: string;
+  projectName: string;
   outputProductName: string;
-  batchNumber: string | null;
   plannedOutput: number | null;
   actualOutput: number | null;
   yieldEfficiency: number | null;
@@ -81,8 +78,8 @@ export interface MaterialConsumptionItem {
 
 export interface CycleBreakdownItem {
   cycleReference: string;
-  clientId: string;
-  clientName: string;
+  projectId: string;
+  projectName: string;
   outputProductName: string;
   outputProductSku: string | null;
   runsCount: number;

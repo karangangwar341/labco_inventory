@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Warehouse and Client Inventory API
+  title: Warehouse and Project Inventory API
   version: 0.1.0
   description: Draft endpoint inventory only. Request/response schemas must be completed before implementation.
 servers:
@@ -51,15 +51,15 @@ paths:
       summary: Refresh the current user's minimal role-scoped workspace bootstrap data.
       responses:
         "200": { description: Current user profile and bounded product, category, and permitted location references }
-  /clients:
+  /projects:
     get:
-      summary: List clients within caller scope.
+      summary: List projects within caller scope.
       responses:
-        "200": { description: Client list }
+        "200": { description: Project list }
     post:
-      summary: Create a client; Super Admin only.
+      summary: Create a project; Super Admin only.
       responses:
-        "201": { description: Client created }
+        "201": { description: Project created }
   /warehouses:
     get:
       summary: List warehouses within caller scope.
@@ -72,7 +72,7 @@ paths:
   /products:
     get:
       summary: List catalog products within caller scope.
-      description: Store Admin receives approved company raw materials only; Client Admin receives shared approved company products and products owned by that client; Super Admin can inspect all products.
+      description: Store Admin receives approved company raw materials only; Project Admin receives shared approved company products and products owned by that project; Super Admin can inspect all products.
       responses:
         "200": { description: Product list }
     post:
@@ -84,7 +84,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name, kind, categoryId, quantityPrecision, allowFractional, trackingMode, units]
+              required: [name, kind, categoryId, quantityPrecision, allowFractional, units]
               properties:
                 kind:
                   type: string
@@ -93,11 +93,11 @@ paths:
         "201": { description: Product draft created }
   /products/manufacturing-options:
     get:
-      summary: List the current client’s manufacturing choices.
-      description: Client Admin only. Returns approved raw materials with a current balance or ledger history at the client, and approved manufactured products owned by the client.
+      summary: List the current project’s manufacturing choices.
+      description: Project Admin only. Returns approved raw materials with a current balance or ledger history at the project, and approved manufactured products owned by the project.
       responses:
         "200": { description: Scoped rawMaterials and manufacturedProducts lists }
-        "403": { description: Client Admin only }
+        "403": { description: Project Admin only }
   /production-runs:
     get:
       summary: List production runs in the caller's authorized scope.
@@ -109,7 +109,7 @@ paths:
         "201": { description: Production draft created }
   /production-runs/{id}:
     delete:
-      summary: Delete the Client Admin caller’s own production draft.
+      summary: Delete the Project Admin caller’s own production draft.
       description: Only DRAFT runs can be deleted; submitted or approved runs are retained for review and inventory traceability.
       parameters:
         - in: path
@@ -118,11 +118,11 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: Draft deleted; no inventory was changed }
-        "403": { description: Run is outside caller’s client or submitter scope }
+        "403": { description: Run is outside caller’s project or submitter scope }
         "409": { description: Run is no longer a draft }
     patch:
       summary: Replace the inputs and outputs of the caller's own draft.
-      description: Client Admin only; only DRAFT runs can be edited. The update is atomic and has no inventory effect.
+      description: Project Admin only; only DRAFT runs can be edited. The update is atomic and has no inventory effect.
       parameters:
         - in: path
           name: id
@@ -130,7 +130,7 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: Draft updated }
-        "403": { description: Run is outside caller's client or submitter scope }
+        "403": { description: Run is outside caller's project or submitter scope }
         "409": { description: Run is no longer a draft }
   /production-runs/{id}/submit:
     post:
@@ -208,7 +208,7 @@ paths:
   /inventory/locations:
     get:
       summary: List stock locations available within the caller's authorized scope.
-      description: Client Admin responses contain only their own client location.
+      description: Project Admin responses contain only their own project location.
       responses:
         "200": { description: Authorized stock locations }
   /stock-requests:
@@ -265,15 +265,15 @@ paths:
     get:
       summary: List department returns within caller scope.
       responses:
-        "200": { description: Client Admin receives own-client returns; Super Admin may filter by client, department, condition, or status }
+        "200": { description: Project Admin receives own-project returns; Super Admin may filter by project, department, or status }
     post:
       summary: Submit a department return for Super Admin approval; submission does not change inventory.
       responses:
         "201": { description: Return request created in PENDING_APPROVAL }
-        "403": { description: Caller is outside client scope or is a Store Admin }
+        "403": { description: Caller is outside project scope or is a Store Admin }
   /departments/returns/{returnId}/approve:
     post:
-      summary: Super Admin approves a return and atomically posts it to the matching condition balance.
+      summary: Super Admin approves a usable return and atomically restores usable stock.
       parameters:
         - in: path
           name: returnId
@@ -298,28 +298,16 @@ paths:
       responses:
         "200": { description: Rejected; inventory unchanged }
         "403": { description: Super Admin only }
-  /departments/write-offs:
-    post:
-      summary: Super Admin posts a reasoned, idempotent write-off from a client's damaged or expired balance.
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: false
-          schema: { type: string }
-      responses:
-        "201": { description: Write-off adjustment posted }
-        "403": { description: Super Admin only }
-        "409": { description: Insufficient damaged or expired stock }
   /departments/issues/draft:
     post:
-      summary: Get or create the Client Admin's single open daily department issue draft for their client.
+      summary: Get or create the Project Admin's single open daily department issue draft for their project.
       responses:
         "200": { description: Existing editable draft }
         "201": { description: New editable draft }
-        "403": { description: Client Admin only }
+        "403": { description: Project Admin only }
   /departments/issues/batches:
     get:
-      summary: List client stock-out batches, scoped to the caller's client where applicable.
+      summary: List project stock-out batches, scoped to the caller's project where applicable.
       parameters:
         - in: query
           name: status
@@ -329,7 +317,7 @@ paths:
         "200": { description: Scoped issue batches }
   /departments/issues/batches/{id}/lines:
     patch:
-      summary: Replace a Client Admin's draft stock-out lines. Each line names an active department and an approved product available to that client. Revalidates all lines; no stock is changed.
+      summary: Replace a Project Admin's draft stock-out lines. Each line names an active department and an approved product available to that project. Revalidates all lines; no stock is changed.
       parameters:
         - in: path
           name: id
@@ -386,28 +374,52 @@ paths:
           schema: { type: string }
       responses:
         "200": { description: Validation results }
+  /shipments/{id}/resolve-discrepancy:
+    post:
+      summary: Super Admin resolves every shortage line on a held shipment with one final decision.
+      description: MISSING records an audited loss; CALCULATION_MISTAKE posts the quantity back to the source warehouse. The decision is one-time and idempotent.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [resolution]
+              properties:
+                resolution: { type: string, enum: [MISSING, CALCULATION_MISTAKE] }
+                note: { type: string, maxLength: 500 }
+      responses:
+        "200": { description: Shipment discrepancy resolved and audited }
+        "403": { description: Super Admin only }
+        "409": { description: Shipment is not held or was already resolved }
   /reports/{reportType}:
     get:
-      summary: Generate an authorized report; Super Admin may scope client reports with clientId.
+      summary: Generate an authorized report; Super Admin may scope project reports with projectId. MISSING_STOCK is Super Admin only and groups missing quantities by product in base units.
       parameters:
         - in: path
           name: reportType
           required: true
-          schema: { type: string }
+          schema: { type: string, enum: [STOCK_BALANCE, INVENTORY_LEDGER, PROJECT_CONSUMPTION, PRODUCTION_RUNS, SHIPMENTS, MISSING_STOCK] }
       responses:
         "200":
           description: >-
             Report output. STOCK_BALANCE rows include the product baseUnit. PRODUCTION_RUNS rows include plannedOutput, actualOutput,
             wastage, and inputs and outputs arrays containing product name, quantity,
-            and unit snapshots. Client-scoped report data remains restricted to the
-            requested client by server-side location and ownership filters.
+            and unit snapshots. Project-scoped report data remains restricted to the
+            requested project by server-side location and ownership filters.
   /notifications/settings:
     get:
       summary: Read notification and approval settings; approval requirements default to true when unset.
       responses:
         "200": { description: Current global system settings including per-workflow approval requirements }
     patch:
-      summary: Super Admin updates global notification, expiry, receipt, and approval settings. Only new submissions use changed approval rules.
+      summary: Super Admin updates global notification, receipt, and approval settings. Only new submissions use changed approval rules.
       requestBody:
         required: true
         content:

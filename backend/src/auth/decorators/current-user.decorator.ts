@@ -7,7 +7,7 @@ export interface AuthenticatedUser {
   status: string;
   sessionId: string;
   warehouseId?: string | null;
-  clientId?: string | null;
+  projectId?: string | null;
 }
 
 export const CurrentUser = createParamDecorator(

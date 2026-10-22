@@ -21,7 +21,7 @@ export function UsersManagement() {
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('STORE_ADMIN');
-  const [clientId, setClientId] = useState('');
+  const [projectId, setProjectId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [resetTarget, setResetTarget] = useState<{ id: string; username: string } | null>(null);
   const [resetPassword, setResetPassword] = useState('');
@@ -32,9 +32,9 @@ export function UsersManagement() {
     queryKey: queryKeys.administration.users(),
     queryFn: administrationService.getUsers,
   });
-  const clientsQuery = useQuery({
-    queryKey: queryKeys.administration.clients(),
-    queryFn: administrationService.getClients,
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.administration.projects(),
+    queryFn: administrationService.getProjects,
   });
   const warehousesQuery = useQuery({
     queryKey: queryKeys.administration.warehouses(),
@@ -49,7 +49,7 @@ export function UsersManagement() {
       setShowCreateModal(false);
       setNewUsername('');
       setNewPassword('');
-      setClientId('');
+      setProjectId('');
       setWarehouseId('');
       setNotice('User account created.');
       setActionError(null);
@@ -85,7 +85,7 @@ export function UsersManagement() {
       password: newPassword,
       role: newRole,
       ...(newRole === 'STORE_ADMIN' ? { warehouseId } : {}),
-      ...(newRole === 'CLIENT_ADMIN' ? { clientId } : {}),
+      ...(newRole === 'PROJECT_ADMIN' ? { projectId } : {}),
     });
   };
 
@@ -96,7 +96,7 @@ export function UsersManagement() {
   };
 
   const users = usersQuery.data ?? [];
-  const organizationsLoading = clientsQuery.isLoading || warehousesQuery.isLoading;
+  const organizationsLoading = projectsQuery.isLoading || warehousesQuery.isLoading;
 
   return (
     <div className="space-y-4">
@@ -111,7 +111,7 @@ export function UsersManagement() {
       {usersQuery.error && <ErrorState message={usersQuery.error instanceof Error ? usersQuery.error.message : 'Could not load user accounts.'} onRetry={() => usersQuery.refetch()} />}
 
       {usersQuery.isLoading ? <LoadingState message="Loading user accounts..." /> : users.length === 0 ? (
-        <EmptyState title="No user accounts" description="Add an account for a warehouse operator, client administrator, or Super Admin." action={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Add first user</Button>} />
+        <EmptyState title="No user accounts" description="Add an account for a warehouse operator, project administrator, or Super Admin." action={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Add first user</Button>} />
       ) : (
         <Table>
           <TableHeader sticky><tr><TableHead>Username</TableHead><TableHead>Role</TableHead><TableHead>Organization</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead></tr></TableHeader>
@@ -120,7 +120,7 @@ export function UsersManagement() {
               <TableRow key={user.id}>
                 <TableCell className="font-medium text-[#172033]">{user.username}</TableCell>
                 <TableCell><Badge variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}>{user.role.replaceAll('_', ' ')}</Badge></TableCell>
-                <TableCell className="text-[#5b6678]">{user.warehouse?.name ?? user.client?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}</TableCell>
+                <TableCell className="text-[#5b6678]">{user.warehouse?.name ?? user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}</TableCell>
                 <TableCell><Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>{user.status.replaceAll('_', ' ')}</Badge></TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
@@ -140,7 +140,7 @@ export function UsersManagement() {
           <Input label="Temporary password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
           <label className="block space-y-1 text-sm font-medium text-[#172033]">Role
             <select value={newRole} onChange={(event) => setNewRole(event.target.value as UserRole)} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
-              <option value="STORE_ADMIN">Store Admin</option><option value="CLIENT_ADMIN">Client Admin</option><option value="SUPER_ADMIN">Super Admin</option>
+              <option value="STORE_ADMIN">Store Admin</option><option value="PROJECT_ADMIN">Project Admin</option><option value="SUPER_ADMIN">Super Admin</option>
             </select>
           </label>
           {newRole === 'STORE_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Warehouse
@@ -148,12 +148,12 @@ export function UsersManagement() {
               <option value="">Choose a warehouse</option>{(warehousesQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>}
-          {newRole === 'CLIENT_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Client
-            <select value={clientId} onChange={(event) => setClientId(event.target.value)} required disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
-              <option value="">Choose a client</option>{(clientsQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {newRole === 'PROJECT_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Project
+            <select value={projectId} onChange={(event) => setProjectId(event.target.value)} required disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
+              <option value="">Choose a project</option>{(projectsQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>}
-          {(clientsQuery.error || warehousesQuery.error) && <p role="alert" className="text-sm text-[#b42318]">Could not load clients or warehouses. Close and try again.</p>}
+          {(projectsQuery.error || warehousesQuery.error) && <p role="alert" className="text-sm text-[#b42318]">Could not load projects or warehouses. Close and try again.</p>}
           <div className="flex justify-end gap-2 border-t border-[#dbe3ee] pt-4">
             <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Cancel</Button>
             <Button variant="primary" type="submit" disabled={createMutation.isPending || organizationsLoading}>{createMutation.isPending ? 'Saving...' : 'Create account'}</Button>

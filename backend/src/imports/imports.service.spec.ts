@@ -41,10 +41,10 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
     sessionId: 'sess-2',
   };
 
-  const clientAdminUser: any = {
+  const projectAdminUser: any = {
     id: 'ca-1',
-    username: 'clientadmin',
-    role: UserRole.CLIENT_ADMIN,
+    username: 'projectadmin',
+    role: UserRole.PROJECT_ADMIN,
     status: 'ACTIVE',
     sessionId: 'sess-3',
   };
@@ -54,7 +54,6 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
     name: 'Diagnostic Cartridge A',
     status: ProductStatus.APPROVED,
     quantityPrecision: 0,
-    trackingMode: 'BATCH_ONLY',
     units: [
       {
         id: 'unit-piece',
@@ -139,8 +138,8 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
     it('successfully ingests and extracts from Excel (.xlsx) workbook draft', async () => {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([
-        ['productName', 'quantity', 'unitName', 'batchNumber', 'locationId'],
-        ['Diagnostic Cartridge A', 50, 'PIECE', 'LOT-EXCEL-01', 'loc-wh-1'],
+        ['productName', 'quantity', 'unitName', 'locationId'],
+        ['Diagnostic Cartridge A', 50, 'PIECE', 'loc-wh-1'],
       ]);
       XLSX.utils.book_append_sheet(wb, ws, 'Stock');
       const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
@@ -164,7 +163,6 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
               productName: 'Diagnostic Cartridge A',
               quantity: 50,
               unitName: 'PIECE',
-              batchNumber: 'LOT-EXCEL-01',
               locationId: 'loc-wh-1',
             },
             validationStatus: ImportRowStatus.PENDING,
@@ -205,7 +203,7 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
     });
 
     it('creates draft import batch without posting inventory or changing balances', async () => {
-      const csvData = 'productName,quantity,unitName,batchNumber,locationId\nDiagnostic Cartridge A,100,PIECE,BATCH-01,loc-wh-1';
+      const csvData = 'productName,quantity,unitName,locationId\nDiagnostic Cartridge A,100,PIECE,loc-wh-1';
 
       mockPrisma.importBatch.create.mockResolvedValue({
         id: 'batch-1',
@@ -226,7 +224,6 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
               productName: 'Diagnostic Cartridge A',
               quantity: 100,
               unitName: 'PIECE',
-              batchNumber: 'BATCH-01',
               locationId: 'loc-wh-1',
             },
             validationStatus: ImportRowStatus.PENDING,
@@ -255,9 +252,9 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
   describe('2. Duplicate Detection (REQ-016: Duplicate rows flagged, never silently merged)', () => {
     it('flags duplicate rows in batch and requires user choice without silently merging', async () => {
       const csvData =
-        'productName,quantity,unitName,batchNumber,locationId\n' +
-        'Diagnostic Cartridge A,50,PIECE,BATCH-01,loc-wh-1\n' +
-        'Diagnostic Cartridge A,50,PIECE,BATCH-01,loc-wh-1';
+        'productName,quantity,unitName,locationId\n' +
+        'Diagnostic Cartridge A,50,PIECE,loc-wh-1\n' +
+        'Diagnostic Cartridge A,50,PIECE,loc-wh-1';
 
       mockPrisma.importBatch.create.mockResolvedValue({
         id: 'batch-dup',

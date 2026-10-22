@@ -19,11 +19,6 @@ export class CreateDepartmentIssueDto {
   @IsNotEmpty()
   productId!: string;
 
-  @ApiPropertyOptional({ description: 'Batch UUID if lot-tracked' })
-  @IsOptional()
-  @IsUUID('4')
-  batchId?: string;
-
   @ApiProperty({ example: 10, description: 'Quantity to issue' })
   @IsNumber()
   @IsPositive()

@@ -10,7 +10,6 @@ import {
   UserRole,
   UserStatus,
   NotificationEventType,
-  BatchStatus,
   Prisma,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
@@ -134,16 +133,16 @@ export class NotificationsService {
     await this.notifyRoleUsers(UserRole.SUPER_ADMIN, title, message, entityType, entityId);
   }
 
-  async notifyClientAdmins(clientId: string | null | undefined, title: string, message: string, entityType: string, entityId: string) {
-    if (!clientId) return;
+  async notifyProjectAdmins(projectId: string | null | undefined, title: string, message: string, entityType: string, entityId: string) {
+    if (!projectId) return;
     try {
       const recipients = await this.prisma.user.findMany({
-        where: { role: UserRole.CLIENT_ADMIN, status: UserStatus.ACTIVE, clientId },
+        where: { role: UserRole.PROJECT_ADMIN, status: UserStatus.ACTIVE, projectId },
         select: { id: true },
       });
       await this.notifyRecipients(recipients.map(({ id }) => id), title, message, entityType, entityId);
     } catch (error) {
-      this.logger.error(`Could not notify client admins about ${entityType} ${entityId}`, error);
+      this.logger.error(`Could not notify project admins about ${entityType} ${entityId}`, error);
     }
   }
 
@@ -236,23 +235,23 @@ export class NotificationsService {
         },
       });
 
-      // Find eligible recipients: Super Admins + applicable Client Admins (Store Admins strictly excluded!)
+      // Find eligible recipients: Super Admins + applicable Project Admins (Store Admins strictly excluded!)
       const superAdmins = await this.prisma.user.findMany({
         where: { role: UserRole.SUPER_ADMIN, status: 'ACTIVE' },
       });
 
-      let clientAdmins: any[] = [];
-      if (product.clientId) {
-        clientAdmins = await this.prisma.user.findMany({
+      let projectAdmins: any[] = [];
+      if (product.projectId) {
+        projectAdmins = await this.prisma.user.findMany({
           where: {
-            role: UserRole.CLIENT_ADMIN,
-            clientId: product.clientId,
+            role: UserRole.PROJECT_ADMIN,
+            projectId: product.projectId,
             status: 'ACTIVE',
           },
         });
       }
 
-      const recipients = [...superAdmins, ...clientAdmins];
+      const recipients = [...superAdmins, ...projectAdmins];
       const title = `Low Stock Alert: ${product.name}`;
       const message = `Product "${product.name}" has crossed below minimum threshold. Available: ${totalAvailable}, Min Threshold: ${product.minQuantity}.`;
 
@@ -300,18 +299,18 @@ export class NotificationsService {
         where: { role: UserRole.SUPER_ADMIN, status: 'ACTIVE' },
       });
 
-      let clientAdmins: any[] = [];
-      if (product.clientId) {
-        clientAdmins = await this.prisma.user.findMany({
+      let projectAdmins: any[] = [];
+      if (product.projectId) {
+        projectAdmins = await this.prisma.user.findMany({
           where: {
-            role: UserRole.CLIENT_ADMIN,
-            clientId: product.clientId,
+            role: UserRole.PROJECT_ADMIN,
+            projectId: product.projectId,
             status: 'ACTIVE',
           },
         });
       }
 
-      const recipients = [...superAdmins, ...clientAdmins];
+      const recipients = [...superAdmins, ...projectAdmins];
       const title = `Stock Recovered: ${product.name}`;
       const message = `Product "${product.name}" stock has recovered above minimum threshold. Available: ${totalAvailable}, Threshold: ${product.minQuantity}.`;
 
@@ -343,93 +342,6 @@ export class NotificationsService {
   }
 
   // ==========================================
-  // EXPIRY WARNING ENGINE
-  // (REQ-019 & Test Plan 11)
-  // ==========================================
-
-  async checkExpiryWarnings(referenceDate?: Date) {
-    const now = referenceDate || new Date();
-    const settings = await this.getSettings();
-    const intervals: number[] = settings.expiryWarningIntervals || [90, 30, 7];
-
-    const activeBatches = await this.prisma.stockBatch.findMany({
-      where: {
-        expiryDate: { not: null },
-        status: BatchStatus.ACTIVE,
-      },
-      include: {
-        product: true,
-      },
-    });
-
-    const superAdmins = await this.prisma.user.findMany({
-      where: { role: UserRole.SUPER_ADMIN, status: 'ACTIVE' },
-    });
-
-    const warningsIssued = [];
-
-    for (const batch of activeBatches) {
-      if (!batch.expiryDate) continue;
-
-      const msDiff = batch.expiryDate.getTime() - now.getTime();
-      const daysRemaining = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
-
-      // 1. Expired batch handling
-      if (daysRemaining <= 0) {
-        await this.prisma.stockBatch.update({
-          where: { id: batch.id },
-          data: { status: BatchStatus.EXPIRED },
-        });
-
-        // Notify Super Admins
-        const title = `Batch Expired: ${batch.product.name}`;
-        const message = `Batch ${batch.batchNumber || batch.id} of "${batch.product.name}" has expired. Expired stock is isolated and blocked from routine dispatch.`;
-
-        for (const sa of superAdmins) {
-          await this.createNotification(
-            sa.id,
-            NotificationEventType.BATCH_EXPIRED,
-            title,
-            message,
-            'StockBatch',
-            batch.id,
-          );
-        }
-
-        warningsIssued.push({ batchId: batch.id, type: 'EXPIRED', daysRemaining });
-        continue;
-      }
-
-      // 2. Expiry interval alerts
-      for (const interval of intervals) {
-        if (daysRemaining <= interval) {
-          const title = `Expiry Warning (${interval} Days): ${batch.product.name}`;
-          const message = `Batch ${batch.batchNumber || batch.id} expires in ${daysRemaining} day(s) on ${batch.expiryDate.toISOString().slice(0, 10)}.`;
-
-          for (const sa of superAdmins) {
-            await this.createNotification(
-              sa.id,
-              NotificationEventType.EXPIRY_WARNING,
-              title,
-              message,
-              'StockBatch',
-              batch.id,
-            );
-          }
-
-          warningsIssued.push({ batchId: batch.id, type: 'WARNING', interval, daysRemaining });
-          break; // Avoid multi-alerting for the same batch in one check cycle
-        }
-      }
-    }
-
-    return {
-      batchesChecked: activeBatches.length,
-      warningsIssued,
-    };
-  }
-
-  // ==========================================
   // SETTINGS & CONFIGURATION
   // ==========================================
 
@@ -438,10 +350,9 @@ export class NotificationsService {
       this.prisma.systemSetting.findUnique({ where: { key: 'notification_settings' } }),
       this.prisma.systemSetting.findUnique({ where: { key: 'RECEIPT_CONFIRMATION_ENABLED' } }),
     ]);
-    const notificationSettings = setting?.valueJson as { expiryWarningIntervals?: number[]; soundEnabled?: boolean; approvalRequirements?: unknown } | undefined;
+    const notificationSettings = setting?.valueJson as { soundEnabled?: boolean; approvalRequirements?: unknown } | undefined;
 
     return {
-      expiryWarningIntervals: notificationSettings?.expiryWarningIntervals ?? [90, 30, 7],
       soundEnabled: notificationSettings?.soundEnabled ?? false,
       receiptConfirmationEnabled: receiptSetting?.valueJson === undefined
         ? true
@@ -457,7 +368,6 @@ export class NotificationsService {
 
     const current = await this.getSettings();
     const updated = {
-      expiryWarningIntervals: dto.expiryWarningIntervals ?? current.expiryWarningIntervals,
       soundEnabled: dto.soundEnabled ?? current.soundEnabled,
       receiptConfirmationEnabled: dto.receiptConfirmationEnabled ?? current.receiptConfirmationEnabled,
       approvalRequirements: dto.approvalRequirements === undefined
@@ -465,22 +375,12 @@ export class NotificationsService {
         : this.validateApprovalRequirements(dto.approvalRequirements, current.approvalRequirements),
     };
 
-    const intervals = updated.expiryWarningIntervals;
-    if (
-      !Array.isArray(intervals) ||
-      intervals.length === 0 ||
-      intervals.some((v, idx) => v <= 0 || (idx > 0 && v >= intervals[idx - 1]))
-    ) {
-      throw new BadRequestException('Expiry warning intervals must contain positive, descending day values');
-    }
-
     await this.prisma.$transaction(async (tx) => {
       await Promise.all([
         tx.systemSetting.upsert({
           where: { key: 'notification_settings' },
           update: {
             valueJson: JSON.parse(JSON.stringify({
-              expiryWarningIntervals: updated.expiryWarningIntervals,
               soundEnabled: updated.soundEnabled,
               approvalRequirements: updated.approvalRequirements,
             })) as Prisma.InputJsonValue,
@@ -489,7 +389,6 @@ export class NotificationsService {
           create: {
             key: 'notification_settings',
             valueJson: JSON.parse(JSON.stringify({
-              expiryWarningIntervals: updated.expiryWarningIntervals,
               soundEnabled: updated.soundEnabled,
               approvalRequirements: updated.approvalRequirements,
             })) as Prisma.InputJsonValue,

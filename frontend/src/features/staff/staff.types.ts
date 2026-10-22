@@ -1,16 +1,16 @@
 export type StaffStatus = 'ACTIVE' | 'DISABLED' | 'LOCKED';
 
-export interface ClientStaffWorkLog {
+export interface ProjectStaffWorkLog {
   id: string;
   staffMemberId: string;
-  clientId: string;
+  projectId: string;
   logDate: string;
   shiftType?: string | null;
   hoursWorked?: number | string | null;
   tasksCompleted: string;
   notes?: string | null;
   createdAt: string;
-  clientName?: string | null;
+  projectName?: string | null;
   staffMember?: {
     id: string;
     staffNumber: string;
@@ -19,10 +19,10 @@ export interface ClientStaffWorkLog {
   };
 }
 
-export interface ClientStaffMember {
+export interface ProjectStaffMember {
   id: string;
-  clientId: string;
-  clientName?: string | null;
+  projectId: string;
+  projectName?: string | null;
   staffNumber: string;
   fullName: string;
   roleTitle?: string | null;
@@ -31,7 +31,7 @@ export interface ClientStaffMember {
   createdAt: string;
   updatedAt: string;
   totalLogsCount?: number;
-  latestLog?: ClientStaffWorkLog | null;
+  latestLog?: ProjectStaffWorkLog | null;
 }
 
 export interface CreateStaffMemberPayload {
@@ -39,7 +39,7 @@ export interface CreateStaffMemberPayload {
   fullName: string;
   roleTitle?: string;
   contact?: string;
-  clientId?: string;
+  projectId?: string;
 }
 
 export interface UpdateStaffMemberPayload {

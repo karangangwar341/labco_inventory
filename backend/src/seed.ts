@@ -6,7 +6,6 @@ import {
   CatalogScope,
   ProductStatus,
   ProductKind,
-  TrackingMode,
   LocationType,
   RequestType,
   RequestStatus,
@@ -16,7 +15,6 @@ import {
   ShipmentStatus,
   ProductVersionStatus,
   UnitStatus,
-  BatchStatus,
 } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcrypt';
@@ -78,24 +76,24 @@ async function main() {
   }
 
   // =========================================================================
-  // 2. CLIENT ORGANIZATIONS & STOCK LOCATIONS (8 Clients)
+  // 2. PROJECT ORGANIZATIONS & STOCK LOCATIONS (8 Projects)
   // =========================================================================
-  console.log('Seeding 8 healthcare & pathology lab clients...');
-  const clientDefs = [
-    { name: 'Apollo Diagnostics Lab', username: 'clientadmin_apollo' },
-    { name: 'Max Healthcare Pathology', username: 'clientadmin_max' },
-    { name: 'Fortis Clinical Laboratories', username: 'clientadmin_fortis' },
-    { name: 'Metropolis Diagnostics Center', username: 'clientadmin_metropolis' },
-    { name: 'Dr. Lal PathLabs Network', username: 'clientadmin_lalpath' },
-    { name: 'SRL Diagnostic Center', username: 'clientadmin_srl' },
-    { name: 'Medanta Diagnostic Services', username: 'clientadmin_medanta' },
-    { name: 'Care Diagnostics & Hospitals', username: 'clientadmin_care' },
+  console.log('Seeding 8 healthcare & pathology lab projects...');
+  const projectDefs = [
+    { name: 'Apollo Diagnostics Lab', username: 'projectadmin_apollo' },
+    { name: 'Max Healthcare Pathology', username: 'projectadmin_max' },
+    { name: 'Fortis Clinical Laboratories', username: 'projectadmin_fortis' },
+    { name: 'Metropolis Diagnostics Center', username: 'projectadmin_metropolis' },
+    { name: 'Dr. Lal PathLabs Network', username: 'projectadmin_lalpath' },
+    { name: 'SRL Diagnostic Center', username: 'projectadmin_srl' },
+    { name: 'Medanta Diagnostic Services', username: 'projectadmin_medanta' },
+    { name: 'Care Diagnostics & Hospitals', username: 'projectadmin_care' },
   ];
 
-  const clients: Record<string, { id: string; locationId: string; name: string; username: string }> = {};
+  const projects: Record<string, { id: string; locationId: string; name: string; username: string }> = {};
 
-  for (const cDef of clientDefs) {
-    const c = await prisma.client.upsert({
+  for (const cDef of projectDefs) {
+    const c = await prisma.project.upsert({
       where: { name: cDef.name },
       update: { status: OrganizationStatus.ACTIVE },
       create: {
@@ -105,17 +103,17 @@ async function main() {
     });
 
     const cLoc = await prisma.stockLocation.upsert({
-      where: { clientId: c.id },
+      where: { projectId: c.id },
       update: {},
       create: {
-        clientId: c.id,
-        locationType: LocationType.CLIENT,
+        projectId: c.id,
+        locationType: LocationType.PROJECT,
       },
     });
 
-    clients[cDef.name] = { id: c.id, locationId: cLoc.id, name: c.name, username: cDef.username };
+    projects[cDef.name] = { id: c.id, locationId: cLoc.id, name: c.name, username: cDef.username };
 
-    // Link client to Central Warehouse + Regional Warehouse
+    // Link project to Central Warehouse + Regional Warehouse
     const assignedWh = [warehouses['Central Warehouse Hub'].id];
     if (cDef.name.includes('Delhi') || cDef.name.includes('Max') || cDef.name.includes('Fortis') || cDef.name.includes('Lal')) {
       assignedWh.push(warehouses['Northern Regional Depot'].id);
@@ -124,12 +122,12 @@ async function main() {
     }
 
     for (const whId of assignedWh) {
-      await prisma.clientWarehouseAssignment.upsert({
+      await prisma.projectWarehouseAssignment.upsert({
         where: { id: `assign-${c.id}-${whId}` },
         update: { isActive: true },
         create: {
           id: `assign-${c.id}-${whId}`,
-          clientId: c.id,
+          projectId: c.id,
           warehouseId: whId,
           isActive: true,
         },
@@ -138,7 +136,7 @@ async function main() {
   }
 
   // =========================================================================
-  // 3. USERS (Super Admin, 3 Store Admins, 8 Client Admins + Alias)
+  // 3. USERS (Super Admin, 3 Store Admins, 8 Project Admins + Alias)
   // =========================================================================
   console.log('Seeding enterprise user accounts...');
   // 3.1 Super Admin
@@ -174,46 +172,46 @@ async function main() {
     });
   }
 
-  // 3.3 Client Admins
-  const clientAdminUsers: Record<string, { id: string; username: string }> = {};
+  // 3.3 Project Admins
+  const projectAdminUsers: Record<string, { id: string; username: string }> = {};
 
-  for (const cDef of clientDefs) {
-    const c = clients[cDef.name];
+  for (const cDef of projectDefs) {
+    const c = projects[cDef.name];
     const user = await prisma.user.upsert({
       where: { username: cDef.username },
       update: {
         passwordHash: defaultPasswordHash,
         status: UserStatus.ACTIVE,
-        clientId: c.id,
-        role: UserRole.CLIENT_ADMIN,
+        projectId: c.id,
+        role: UserRole.PROJECT_ADMIN,
       },
       create: {
         username: cDef.username,
         passwordHash: defaultPasswordHash,
-        role: UserRole.CLIENT_ADMIN,
+        role: UserRole.PROJECT_ADMIN,
         status: UserStatus.ACTIVE,
-        clientId: c.id,
+        projectId: c.id,
       },
     });
-    clientAdminUsers[cDef.username] = { id: user.id, username: user.username };
+    projectAdminUsers[cDef.username] = { id: user.id, username: user.username };
   }
 
-  // Ensure default demo user 'clientadmin' aliases to Apollo Diagnostics
-  const apollo = clients['Apollo Diagnostics Lab'];
+  // Ensure default demo user 'projectadmin' aliases to Apollo Diagnostics
+  const apollo = projects['Apollo Diagnostics Lab'];
   await prisma.user.upsert({
-    where: { username: 'clientadmin' },
+    where: { username: 'projectadmin' },
     update: {
       passwordHash: defaultPasswordHash,
       status: UserStatus.ACTIVE,
-      clientId: apollo.id,
-      role: UserRole.CLIENT_ADMIN,
+      projectId: apollo.id,
+      role: UserRole.PROJECT_ADMIN,
     },
     create: {
-      username: 'clientadmin',
+      username: 'projectadmin',
       passwordHash: defaultPasswordHash,
-      role: UserRole.CLIENT_ADMIN,
+      role: UserRole.PROJECT_ADMIN,
       status: UserStatus.ACTIVE,
-      clientId: apollo.id,
+      projectId: apollo.id,
     },
   });
 
@@ -265,8 +263,6 @@ async function main() {
     unit: string;
     desc: string;
     minQty: number;
-    batchNumber: string;
-    trackingMode?: TrackingMode;
   }) {
     const slug = def.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const dupKey = `prod-${slug}`;
@@ -281,7 +277,6 @@ async function main() {
         categoryId: category.id,
         kind: def.kind,
         status: ProductStatus.APPROVED,
-        trackingMode: def.trackingMode || TrackingMode.BATCH_ONLY,
         minQuantity: def.minQty,
         ownerScope: CatalogScope.COMPANY,
       },
@@ -293,7 +288,6 @@ async function main() {
         categoryId: category.id,
         kind: def.kind,
         status: ProductStatus.APPROVED,
-        trackingMode: def.trackingMode || TrackingMode.BATCH_ONLY,
         minQuantity: def.minQty,
         ownerScope: CatalogScope.COMPANY,
       },
@@ -311,21 +305,6 @@ async function main() {
           isBaseUnit: true,
           conversionToBase: 1,
           status: UnitStatus.ACTIVE,
-        },
-      });
-    }
-
-    // Default Batch with future expiry
-    let batch = await prisma.stockBatch.findFirst({
-      where: { productId: product.id, batchNumber: def.batchNumber },
-    });
-    if (!batch) {
-      batch = await prisma.stockBatch.create({
-        data: {
-          productId: product.id,
-          batchNumber: def.batchNumber,
-          expiryDate: new Date('2028-06-30T00:00:00.000Z'),
-          status: BatchStatus.ACTIVE,
         },
       });
     }
@@ -357,7 +336,7 @@ async function main() {
       });
     }
 
-    return { product, unit, batch };
+    return { product, unit };
   }
 
   // =========================================================================
@@ -366,62 +345,62 @@ async function main() {
   console.log('Seeding 45 raw materials and consumable diagnostic products...');
   const rawProductDefs = [
     // Clinical Chemistry & Reagents (10 items)
-    { name: 'Glucose Hexokinase Reagent R1/R2', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Quantitative in vitro determination of glucose in human serum', minQty: 25, batchNumber: 'LOT-GLU-2026A' },
-    { name: 'Creatinine Enzymatic Assay Kit', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Liquid-stable enzymatic reagent for creatinine clearance testing', minQty: 20, batchNumber: 'LOT-CREAT-2026B' },
-    { name: 'Urea Nitrogen (BUN) UV Reagent', brand: 'Roche Diagnostics Partner', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kinetic UV test for serum and plasma urea measurement', minQty: 20, batchNumber: 'LOT-BUN-2026A' },
-    { name: 'ALT / SGPT Liquid Reagent 4x100ml', brand: 'Beckman Coulter Equivalent', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Alanine Aminotransferase measurement reagent formulation', minQty: 30, batchNumber: 'LOT-ALT-2026C' },
-    { name: 'AST / SGOT Liquid Reagent 4x100ml', brand: 'Beckman Coulter Equivalent', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Aspartate Aminotransferase diagnostic enzymatic solution', minQty: 30, batchNumber: 'LOT-AST-2026C' },
-    { name: 'Total Cholesterol CHOD-PAP Reagent', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Enzymatic colorimetric method for total cholesterol quantification', minQty: 25, batchNumber: 'LOT-CHOL-2026D' },
-    { name: 'Triglycerides GPO-PAP Reagent Solution', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Colorimetric enzymatic reagent for triglycerides profile', minQty: 20, batchNumber: 'LOT-TRIG-2026A' },
-    { name: 'Alkaline Phosphatase (ALP) DEA Buffer', brand: 'Siemens Healthineers Line', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kinetic photometric assay with diethanolamine buffer', minQty: 15, batchNumber: 'LOT-ALP-2026B' },
-    { name: 'Total Bilirubin DMSO Reagent Kit', brand: 'Abbott Diagnostics Partner', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Direct and total bilirubin photometric analysis reagent', minQty: 15, batchNumber: 'LOT-BILI-2026A' },
-    { name: 'ISE Electrolyte Reference Solution 1L', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Bottle', desc: 'Calibrated reference electrolyte solution for Na+/K+/Cl- electrodes', minQty: 40, batchNumber: 'LOT-ISE-2026E' },
+    { name: 'Glucose Hexokinase Reagent R1/R2', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Quantitative in vitro determination of glucose in human serum', minQty: 25 },
+    { name: 'Creatinine Enzymatic Assay Kit', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Liquid-stable enzymatic reagent for creatinine clearance testing', minQty: 20 },
+    { name: 'Urea Nitrogen (BUN) UV Reagent', brand: 'Roche Diagnostics Partner', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kinetic UV test for serum and plasma urea measurement', minQty: 20 },
+    { name: 'ALT / SGPT Liquid Reagent 4x100ml', brand: 'Beckman Coulter Equivalent', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Alanine Aminotransferase measurement reagent formulation', minQty: 30 },
+    { name: 'AST / SGOT Liquid Reagent 4x100ml', brand: 'Beckman Coulter Equivalent', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Aspartate Aminotransferase diagnostic enzymatic solution', minQty: 30 },
+    { name: 'Total Cholesterol CHOD-PAP Reagent', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Enzymatic colorimetric method for total cholesterol quantification', minQty: 25 },
+    { name: 'Triglycerides GPO-PAP Reagent Solution', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Colorimetric enzymatic reagent for triglycerides profile', minQty: 20 },
+    { name: 'Alkaline Phosphatase (ALP) DEA Buffer', brand: 'Siemens Healthineers Line', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kinetic photometric assay with diethanolamine buffer', minQty: 15 },
+    { name: 'Total Bilirubin DMSO Reagent Kit', brand: 'Abbott Diagnostics Partner', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Direct and total bilirubin photometric analysis reagent', minQty: 15 },
+    { name: 'ISE Electrolyte Reference Solution 1L', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Bottle', desc: 'Calibrated reference electrolyte solution for Na+/K+/Cl- electrodes', minQty: 40 },
 
     // Hematology & Coagulation (9 items)
-    { name: 'Hematology Diluent Solution 20L', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Canister', desc: 'Isotonic diluent buffer for automated blood cell counter', minQty: 50, batchNumber: 'LOT-DIL-2026A' },
-    { name: 'Cyanide-Free Lyse Reagent 5L', brand: 'Labco Precision', category: 'Hematology & Coagulation', unit: 'Canister', desc: 'Environmentally safe RBC lytic reagent for hemoglobin determination', minQty: 35, batchNumber: 'LOT-LYS-2026B' },
-    { name: 'Enzymatic Probe Cleaner 1L', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Bottle', desc: 'Proteolytic cleaning solution for analyzer fluidic line flushing', minQty: 30, batchNumber: 'LOT-CLN-2026C' },
-    { name: 'Prothrombin Time (PT) Rabbit Brain Reagent', brand: 'Roche Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Lyophilized thromboplastin reagent with calcium for INR assays', minQty: 25, batchNumber: 'LOT-PT-2026A' },
-    { name: 'Activated Partial Thromboplastin Time (aPTT)', brand: 'Roche Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Ellagic acid activator reagent for coagulation pathway analysis', minQty: 25, batchNumber: 'LOT-APTT-2026A' },
-    { name: 'Fibrinogen Clauss Quantitative Reagent', brand: 'Siemens Healthineers Line', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Bovine thrombin reagent for fibrinogen determination in plasma', minQty: 15, batchNumber: 'LOT-FIB-2026B' },
-    { name: 'D-Dimer Latex Immunoturbidimetric Reagent', brand: 'Abbott Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Quantitative latex agglutination reagent for thrombosis screening', minQty: 20, batchNumber: 'LOT-DDIM-2026A' },
-    { name: 'Hematology Tri-Level Control Blood 3x3ml', brand: 'Labco Precision', category: 'Hematology & Coagulation', unit: 'Pack', desc: 'Low, normal, and high hematology reference controls', minQty: 15, batchNumber: 'LOT-HCTL-2026D' },
-    { name: 'Coagulation Normal Control Plasma 10x1ml', brand: 'Siemens Healthineers Line', category: 'Hematology & Coagulation', unit: 'Box', desc: 'Standard human plasma pool for PT and aPTT precision verification', minQty: 15, batchNumber: 'LOT-CCTL-2026A' },
+    { name: 'Hematology Diluent Solution 20L', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Canister', desc: 'Isotonic diluent buffer for automated blood cell counter', minQty: 50 },
+    { name: 'Cyanide-Free Lyse Reagent 5L', brand: 'Labco Precision', category: 'Hematology & Coagulation', unit: 'Canister', desc: 'Environmentally safe RBC lytic reagent for hemoglobin determination', minQty: 35 },
+    { name: 'Enzymatic Probe Cleaner 1L', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Bottle', desc: 'Proteolytic cleaning solution for analyzer fluidic line flushing', minQty: 30 },
+    { name: 'Prothrombin Time (PT) Rabbit Brain Reagent', brand: 'Roche Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Lyophilized thromboplastin reagent with calcium for INR assays', minQty: 25 },
+    { name: 'Activated Partial Thromboplastin Time (aPTT)', brand: 'Roche Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Ellagic acid activator reagent for coagulation pathway analysis', minQty: 25 },
+    { name: 'Fibrinogen Clauss Quantitative Reagent', brand: 'Siemens Healthineers Line', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Bovine thrombin reagent for fibrinogen determination in plasma', minQty: 15 },
+    { name: 'D-Dimer Latex Immunoturbidimetric Reagent', brand: 'Abbott Diagnostics Partner', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Quantitative latex agglutination reagent for thrombosis screening', minQty: 20 },
+    { name: 'Hematology Tri-Level Control Blood 3x3ml', brand: 'Labco Precision', category: 'Hematology & Coagulation', unit: 'Pack', desc: 'Low, normal, and high hematology reference controls', minQty: 15 },
+    { name: 'Coagulation Normal Control Plasma 10x1ml', brand: 'Siemens Healthineers Line', category: 'Hematology & Coagulation', unit: 'Box', desc: 'Standard human plasma pool for PT and aPTT precision verification', minQty: 15 },
 
     // Molecular Diagnostics & PCR (9 items)
-    { name: 'Taq DNA Polymerase Master Mix 2X (5ml)', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'High-fidelity hot-start PCR master mix with dNTPs and MgCl2', minQty: 30, batchNumber: 'LOT-TAQ-2026A' },
-    { name: 'Magnetic Bead Viral RNA/DNA Extraction Kit', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Kit', desc: 'Superparamagnetic nanoparticle-based high-purity nucleic acid isolation', minQty: 40, batchNumber: 'LOT-MAG-2026B' },
-    { name: 'Proteinase K Solution (20mg/ml, 10ml)', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Broad-spectrum serine protease for nucleic acid sample prep', minQty: 25, batchNumber: 'LOT-PROTK-2026A' },
-    { name: 'Nuclease-Free Molecular Grade Water 500ml', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Bottle', desc: 'DEPC-treated, sterile deionized water verified free of DNase/RNase', minQty: 60, batchNumber: 'LOT-NFW-2026C' },
-    { name: 'One-Step RT-qPCR Probe Buffer 4X', brand: 'Roche Diagnostics Partner', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Fluorogenic probe-based reverse transcription PCR reagent blend', minQty: 20, batchNumber: 'LOT-RTQ-2026A' },
-    { name: 'PCR Clean-Up Spin Column Cartridge Pack', brand: 'Beckman Coulter Equivalent', category: 'Molecular Diagnostics & PCR', unit: 'Box', desc: 'Silica membrane spin columns for PCR product purification (250 tests)', minQty: 20, batchNumber: 'LOT-SPIN-2026B' },
-    { name: 'SYBR Green qPCR Master Formulation 5ml', brand: 'Abbott Diagnostics Partner', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Intercalating dye master mix for quantitative gene expression', minQty: 15, batchNumber: 'LOT-SYBR-2026A' },
-    { name: 'Agarose Multi-Purpose Molecular Grade 500g', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Bottle', desc: 'Low EEO agarose for high-resolution analytical electrophoresis gels', minQty: 20, batchNumber: 'LOT-AGAR-2026D' },
-    { name: '100bp DNA Ladder Molecular Marker 500ul', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Pre-stained molecular weight marker ranging from 100bp to 1500bp', minQty: 15, batchNumber: 'LOT-LAD-2026A' },
+    { name: 'Taq DNA Polymerase Master Mix 2X (5ml)', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'High-fidelity hot-start PCR master mix with dNTPs and MgCl2', minQty: 30 },
+    { name: 'Magnetic Bead Viral RNA/DNA Extraction Kit', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Kit', desc: 'Superparamagnetic nanoparticle-based high-purity nucleic acid isolation', minQty: 40 },
+    { name: 'Proteinase K Solution (20mg/ml, 10ml)', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Broad-spectrum serine protease for nucleic acid sample prep', minQty: 25 },
+    { name: 'Nuclease-Free Molecular Grade Water 500ml', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Bottle', desc: 'DEPC-treated, sterile deionized water verified free of DNase/RNase', minQty: 60 },
+    { name: 'One-Step RT-qPCR Probe Buffer 4X', brand: 'Roche Diagnostics Partner', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Fluorogenic probe-based reverse transcription PCR reagent blend', minQty: 20 },
+    { name: 'PCR Clean-Up Spin Column Cartridge Pack', brand: 'Beckman Coulter Equivalent', category: 'Molecular Diagnostics & PCR', unit: 'Box', desc: 'Silica membrane spin columns for PCR product purification (250 tests)', minQty: 20 },
+    { name: 'SYBR Green qPCR Master Formulation 5ml', brand: 'Abbott Diagnostics Partner', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Intercalating dye master mix for quantitative gene expression', minQty: 15 },
+    { name: 'Agarose Multi-Purpose Molecular Grade 500g', brand: 'Labco Precision', category: 'Molecular Diagnostics & PCR', unit: 'Bottle', desc: 'Low EEO agarose for high-resolution analytical electrophoresis gels', minQty: 20 },
+    { name: '100bp DNA Ladder Molecular Marker 500ul', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Vial', desc: 'Pre-stained molecular weight marker ranging from 100bp to 1500bp', minQty: 15 },
 
     // Immunology & Serology Kits (8 items)
-    { name: 'High-Sensitivity CRP Latex Reagent 100T', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Immunoturbidimetric assay for C-Reactive Protein inflammatory detection', minQty: 30, batchNumber: 'LOT-CRP-2026A' },
-    { name: 'Troponin-I Rapid Quantitative Test Cartridges', brand: 'Roche Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Fluorescence immunoassay test cartridges for acute cardiac assessment', minQty: 40, batchNumber: 'LOT-TROP-2026B' },
-    { name: 'HbA1c Direct Enzymatic Lyophilized Reagent', brand: 'Abbott Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Direct enzymatic glycated hemoglobin determination without sample pre-treatment', minQty: 25, batchNumber: 'LOT-HBA-2026A' },
-    { name: 'Ferritin Chemiluminescence Reagent Kit', brand: 'Beckman Coulter Equivalent', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Paramagnetic microparticle assay for iron storage quantification', minQty: 20, batchNumber: 'LOT-FER-2026C' },
-    { name: 'Thyroid Stimulating Hormone (TSH) CLIA Kit', brand: 'Siemens Healthineers Line', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Ultra-sensitive 3rd generation TSH chemiluminescent assay', minQty: 25, batchNumber: 'LOT-TSH-2026A' },
-    { name: 'Dengue NS1 Antigen Rapid Screen Cassettes', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Immunochromatographic test cassettes for early dengue fever detection (50T)', minQty: 50, batchNumber: 'LOT-DENG-2026D' },
-    { name: 'HBsAg Surface Antigen ELISA Microplate Kit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Enzyme immunoassay for qualitative detection of Hepatitis B virus antigen', minQty: 20, batchNumber: 'LOT-HBS-2026A' },
-    { name: 'Procalcitonin (PCT) Immunoassay Cartridge', brand: 'Roche Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Biomarker cartridge for systemic bacterial infection and sepsis stratification', minQty: 20, batchNumber: 'LOT-PCT-2026B' },
+    { name: 'High-Sensitivity CRP Latex Reagent 100T', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Immunoturbidimetric assay for C-Reactive Protein inflammatory detection', minQty: 30 },
+    { name: 'Troponin-I Rapid Quantitative Test Cartridges', brand: 'Roche Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Fluorescence immunoassay test cartridges for acute cardiac assessment', minQty: 40 },
+    { name: 'HbA1c Direct Enzymatic Lyophilized Reagent', brand: 'Abbott Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Direct enzymatic glycated hemoglobin determination without sample pre-treatment', minQty: 25 },
+    { name: 'Ferritin Chemiluminescence Reagent Kit', brand: 'Beckman Coulter Equivalent', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Paramagnetic microparticle assay for iron storage quantification', minQty: 20 },
+    { name: 'Thyroid Stimulating Hormone (TSH) CLIA Kit', brand: 'Siemens Healthineers Line', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Ultra-sensitive 3rd generation TSH chemiluminescent assay', minQty: 25 },
+    { name: 'Dengue NS1 Antigen Rapid Screen Cassettes', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Immunochromatographic test cassettes for early dengue fever detection (50T)', minQty: 50 },
+    { name: 'HBsAg Surface Antigen ELISA Microplate Kit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Enzyme immunoassay for qualitative detection of Hepatitis B virus antigen', minQty: 20 },
+    { name: 'Procalcitonin (PCT) Immunoassay Cartridge', brand: 'Roche Diagnostics Partner', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Biomarker cartridge for systemic bacterial infection and sepsis stratification', minQty: 20 },
 
     // General Lab Consumables & Plasticware (9 items)
-    { name: 'K2-EDTA Blood Collection Tubes 4ml (100s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Vacuum blood collection tubes with dipotassium EDTA anticoagulant', minQty: 100, batchNumber: 'LOT-EDTA-2026A' },
-    { name: 'Serum Clot Activator Tubes 5ml (100s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Silica-coated evacuated tubes with gel separator for clinical chemistry', minQty: 100, batchNumber: 'LOT-CLOT-2026B' },
-    { name: 'Sodium Citrate 3.2% Coagulation Tubes 2ml', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Precise 9:1 blood-to-anticoagulant ratio tubes for coagulation profiles', minQty: 80, batchNumber: 'LOT-CITR-2026A' },
-    { name: 'Filtered Pipette Tips 200ul Racked (960s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Aerosol barrier filter tips, RNase/DNase and endotoxin free (10 racks)', minQty: 40, batchNumber: 'LOT-TIP-2026C' },
-    { name: 'Filtered Pipette Tips 1000ul Racked (960s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Extended length barrier tips for contamination-free sample handling', minQty: 35, batchNumber: 'LOT-TIP1K-2026A' },
-    { name: 'Microcentrifuge Tubes 1.5ml RNase-Free (500s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Boil-proof polypropylene centrifuge tubes with frosted writing surface', minQty: 50, batchNumber: 'LOT-MCT-2026D' },
-    { name: 'Nitrile Examination Gloves Powder-Free (Medium)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Medical grade ambidextrous nitrile gloves (Box of 100, Medium)', minQty: 120, batchNumber: 'LOT-GLV-2026M' },
-    { name: 'Conical Centrifuge Tubes 50ml Sterile (25s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Gamma-irradiated sterile polypropylene screw-cap graduated centrifuge tubes', minQty: 60, batchNumber: 'LOT-CNT-2026A' },
-    { name: 'Optical Grade Reaction Cuvettes (1000s)', brand: 'Beckman Coulter Equivalent', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Disposable precision polymethyl methacrylate cuvettes for spectrophotometers', minQty: 30, batchNumber: 'LOT-CUV-2026B' },
+    { name: 'K2-EDTA Blood Collection Tubes 4ml (100s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Vacuum blood collection tubes with dipotassium EDTA anticoagulant', minQty: 100 },
+    { name: 'Serum Clot Activator Tubes 5ml (100s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Silica-coated evacuated tubes with gel separator for clinical chemistry', minQty: 100 },
+    { name: 'Sodium Citrate 3.2% Coagulation Tubes 2ml', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Precise 9:1 blood-to-anticoagulant ratio tubes for coagulation profiles', minQty: 80 },
+    { name: 'Filtered Pipette Tips 200ul Racked (960s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Aerosol barrier filter tips, RNase/DNase and endotoxin free (10 racks)', minQty: 40 },
+    { name: 'Filtered Pipette Tips 1000ul Racked (960s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Extended length barrier tips for contamination-free sample handling', minQty: 35 },
+    { name: 'Microcentrifuge Tubes 1.5ml RNase-Free (500s)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Boil-proof polypropylene centrifuge tubes with frosted writing surface', minQty: 50 },
+    { name: 'Nitrile Examination Gloves Powder-Free (Medium)', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Box', desc: 'Medical grade ambidextrous nitrile gloves (Box of 100, Medium)', minQty: 120 },
+    { name: 'Conical Centrifuge Tubes 50ml Sterile (25s)', brand: 'Labco BioAssay', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Gamma-irradiated sterile polypropylene screw-cap graduated centrifuge tubes', minQty: 60 },
+    { name: 'Optical Grade Reaction Cuvettes (1000s)', brand: 'Beckman Coulter Equivalent', category: 'General Lab Consumables & Plasticware', unit: 'Case', desc: 'Disposable precision polymethyl methacrylate cuvettes for spectrophotometers', minQty: 30 },
   ];
 
-  const rawProducts: Record<string, { product: any; unit: any; batch: any }> = {};
+  const rawProducts: Record<string, { product: any; unit: any }> = {};
 
   for (const def of rawProductDefs) {
     const res = await seedProduct({
@@ -436,29 +415,29 @@ async function main() {
   // =========================================================================
   console.log('Seeding 20 manufactured diagnostic assay kits and assemblies...');
   const mfgProductDefs = [
-    { name: 'Labco Multi-Analyte Chemistry Analyzer Kit 500T', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Integrated multi-parameter clinical chemistry formulation pack', minQty: 15, batchNumber: 'LOT-MFG-CHEM-01' },
-    { name: 'Labco Complete Blood Count (CBC) Pack 3-Diff', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Calibrated diluent, lyse, and rinse reagent assembly for 3-part diff', minQty: 20, batchNumber: 'LOT-MFG-CBC-02' },
-    { name: 'Labco Comprehensive Metabolic Panel Kit (CMP-14)', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Pre-measured 14-parameter clinical chemistry metabolic panel', minQty: 15, batchNumber: 'LOT-MFG-CMP-03' },
-    { name: 'Labco Cardiac Biomarker Tri-Pack (Trop-I / CK-MB / Myo)', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Emergency department triage cardiac panel diagnostic cassette pack', minQty: 25, batchNumber: 'LOT-MFG-CARD-04' },
-    { name: 'Labco Coagulation Profiler Assay Duo (PT / aPTT)', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Paired screening reagents for extrinsic and intrinsic clotting paths', minQty: 20, batchNumber: 'LOT-MFG-COAG-05' },
-    { name: 'Labco COVID/Flu Multiplex RT-PCR Diagnostic Kit', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Kit', desc: '4-target real-time RT-PCR diagnostic kit for SARS-CoV-2 and Influenza A/B', minQty: 30, batchNumber: 'LOT-MFG-PCR-06' },
-    { name: 'Labco High-Sensitivity CRP Automated Assay Pack', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Ready-to-use liquid-stable hs-CRP reagent cartridge for auto-analyzers', minQty: 20, batchNumber: 'LOT-MFG-CRP-07' },
-    { name: 'Labco Renal Function Assay Assembly (Urea / Creat / eGFR)', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kidney profile diagnostic reagent pack with automated eGFR reporting', minQty: 15, batchNumber: 'LOT-MFG-REN-08' },
-    { name: 'Labco Electrolyte 4-Parameter Calibrated Pack', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Formulated Na/K/Cl/iCa liquid calibrators and reference solutions', minQty: 25, batchNumber: 'LOT-MFG-ELE-09' },
-    { name: 'Labco Glycated Hemoglobin (HbA1c) Column Assembly', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'NGSP and IFCC certified ion-exchange microcolumn pack for diabetic monitoring', minQty: 15, batchNumber: 'LOT-MFG-HBA-10' },
-    { name: 'Labco Thyroid Panel Reagent Set (T3 / T4 / TSH)', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Chemiluminescent endocrine diagnostic reagent assembly', minQty: 20, batchNumber: 'LOT-MFG-THY-11' },
-    { name: 'Labco Autoimmune Screen IFA Multi-Well Slides', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'HEp-2 substrate immunofluorescence slides with conjugate buffer', minQty: 10, batchNumber: 'LOT-MFG-AUTO-12' },
-    { name: 'Labco Clinical Chemistry Calibration Multipack', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Multi-constituent lyophilized human serum calibrators (Level 1 & Level 2)', minQty: 20, batchNumber: 'LOT-MFG-CAL-13' },
-    { name: 'Labco Routine Urinalysis Test Strips 10-Parameter 100s', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Bottle', desc: 'Colorimetric dry reagent test strips for urine chemistry analyzer', minQty: 40, batchNumber: 'LOT-MFG-URN-14' },
-    { name: 'Labco Ferritin & Anemia Screening Kit', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Enhanced microparticle immunoassay for serum ferritin assessment', minQty: 15, batchNumber: 'LOT-MFG-FER-15' },
-    { name: 'Labco Infectious Mononucleosis Rapid Diagnostic Unit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Direct heterophile antibody lateral flow test units (25 tests)', minQty: 20, batchNumber: 'LOT-MFG-MONO-16' },
-    { name: 'Labco Direct Antiglobulin Test (DAT) Reagent Assembly', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Polyspecific Coombs reagent assembly for hemolytic anemia screening', minQty: 15, batchNumber: 'LOT-MFG-DAT-17' },
-    { name: 'Labco Blood Gas & pH Sensor Module Replacement Pack', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Precision cartridge-integrated sensor module for critical care analyzers', minQty: 10, batchNumber: 'LOT-MFG-BGAS-18' },
-    { name: 'Labco Vitamin D (25-OH) Quantitative Chemiluminescent Kit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Direct competitive chemiluminescence assay for 25-hydroxyvitamin D', minQty: 20, batchNumber: 'LOT-MFG-VITD-19' },
-    { name: 'Labco Total Protein & Albumin Dual Assay Formulation', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Biuret method total protein and BCG albumin reagent duo', minQty: 25, batchNumber: 'LOT-MFG-PROT-20' },
+    { name: 'Labco Multi-Analyte Chemistry Analyzer Kit 500T', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Integrated multi-parameter clinical chemistry formulation pack', minQty: 15 },
+    { name: 'Labco Complete Blood Count (CBC) Pack 3-Diff', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Calibrated diluent, lyse, and rinse reagent assembly for 3-part diff', minQty: 20 },
+    { name: 'Labco Comprehensive Metabolic Panel Kit (CMP-14)', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Pre-measured 14-parameter clinical chemistry metabolic panel', minQty: 15 },
+    { name: 'Labco Cardiac Biomarker Tri-Pack (Trop-I / CK-MB / Myo)', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Emergency department triage cardiac panel diagnostic cassette pack', minQty: 25 },
+    { name: 'Labco Coagulation Profiler Assay Duo (PT / aPTT)', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Paired screening reagents for extrinsic and intrinsic clotting paths', minQty: 20 },
+    { name: 'Labco COVID/Flu Multiplex RT-PCR Diagnostic Kit', brand: 'Labco BioAssay', category: 'Molecular Diagnostics & PCR', unit: 'Kit', desc: '4-target real-time RT-PCR diagnostic kit for SARS-CoV-2 and Influenza A/B', minQty: 30 },
+    { name: 'Labco High-Sensitivity CRP Automated Assay Pack', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Ready-to-use liquid-stable hs-CRP reagent cartridge for auto-analyzers', minQty: 20 },
+    { name: 'Labco Renal Function Assay Assembly (Urea / Creat / eGFR)', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Kidney profile diagnostic reagent pack with automated eGFR reporting', minQty: 15 },
+    { name: 'Labco Electrolyte 4-Parameter Calibrated Pack', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Formulated Na/K/Cl/iCa liquid calibrators and reference solutions', minQty: 25 },
+    { name: 'Labco Glycated Hemoglobin (HbA1c) Column Assembly', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'NGSP and IFCC certified ion-exchange microcolumn pack for diabetic monitoring', minQty: 15 },
+    { name: 'Labco Thyroid Panel Reagent Set (T3 / T4 / TSH)', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Chemiluminescent endocrine diagnostic reagent assembly', minQty: 20 },
+    { name: 'Labco Autoimmune Screen IFA Multi-Well Slides', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'HEp-2 substrate immunofluorescence slides with conjugate buffer', minQty: 10 },
+    { name: 'Labco Clinical Chemistry Calibration Multipack', brand: 'Labco Precision', category: 'Clinical Chemistry & Reagents', unit: 'Pack', desc: 'Multi-constituent lyophilized human serum calibrators (Level 1 & Level 2)', minQty: 20 },
+    { name: 'Labco Routine Urinalysis Test Strips 10-Parameter 100s', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Bottle', desc: 'Colorimetric dry reagent test strips for urine chemistry analyzer', minQty: 40 },
+    { name: 'Labco Ferritin & Anemia Screening Kit', brand: 'Labco BioAssay', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Enhanced microparticle immunoassay for serum ferritin assessment', minQty: 15 },
+    { name: 'Labco Infectious Mononucleosis Rapid Diagnostic Unit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Box', desc: 'Direct heterophile antibody lateral flow test units (25 tests)', minQty: 20 },
+    { name: 'Labco Direct Antiglobulin Test (DAT) Reagent Assembly', brand: 'Labco BioAssay', category: 'Hematology & Coagulation', unit: 'Kit', desc: 'Polyspecific Coombs reagent assembly for hemolytic anemia screening', minQty: 15 },
+    { name: 'Labco Blood Gas & pH Sensor Module Replacement Pack', brand: 'Labco Precision', category: 'General Lab Consumables & Plasticware', unit: 'Pack', desc: 'Precision cartridge-integrated sensor module for critical care analyzers', minQty: 10 },
+    { name: 'Labco Vitamin D (25-OH) Quantitative Chemiluminescent Kit', brand: 'Labco Precision', category: 'Immunology & Serology Kits', unit: 'Kit', desc: 'Direct competitive chemiluminescence assay for 25-hydroxyvitamin D', minQty: 20 },
+    { name: 'Labco Total Protein & Albumin Dual Assay Formulation', brand: 'Labco BioAssay', category: 'Clinical Chemistry & Reagents', unit: 'Kit', desc: 'Biuret method total protein and BCG albumin reagent duo', minQty: 25 },
   ];
 
-  const mfgProducts: Record<string, { product: any; unit: any; batch: any }> = {};
+  const mfgProducts: Record<string, { product: any; unit: any }> = {};
 
   for (const def of mfgProductDefs) {
     const res = await seedProduct({
@@ -471,13 +450,13 @@ async function main() {
   const allProductList = [...Object.values(rawProducts), ...Object.values(mfgProducts)];
 
   // =========================================================================
-  // 7. INVENTORY BALANCES (Warehouses & Client Locations)
+  // 7. INVENTORY BALANCES (Warehouses & Project Locations)
   // =========================================================================
-  console.log('Seeding warehouse stock balances and client on-hand inventories...');
+  console.log('Seeding warehouse stock balances and project on-hand inventories...');
   // Helper to upsert balance
-  async function setBalance(locId: string, prodId: string, batchId: string, usable: number, reserved: number = 0) {
+  async function setBalance(locId: string, prodId: string, usable: number, reserved: number = 0) {
     const existing = await prisma.inventoryBalance.findFirst({
-      where: { locationId: locId, productId: prodId, batchId: batchId },
+      where: { locationId: locId, productId: prodId},
     });
     if (existing) {
       await prisma.inventoryBalance.update({
@@ -489,7 +468,6 @@ async function main() {
         data: {
           locationId: locId,
           productId: prodId,
-          batchId: batchId,
           usableQty: usable,
           reservedQty: reserved,
         },
@@ -500,7 +478,7 @@ async function main() {
   // 7.1 Central Warehouse Hub (High stock across all items)
   const centralWhLoc = warehouses['Central Warehouse Hub'].locationId;
   for (const item of allProductList) {
-    await setBalance(centralWhLoc, item.product.id, item.batch.id, 450, 0);
+    await setBalance(centralWhLoc, item.product.id, 450, 0);
   }
 
   // 7.2 Northern & Southern Regional Depots (Selected stock)
@@ -510,35 +488,35 @@ async function main() {
   for (let i = 0; i < allProductList.length; i++) {
     const item = allProductList[i];
     if (i % 2 === 0) {
-      await setBalance(northWhLoc, item.product.id, item.batch.id, 200, 0);
+      await setBalance(northWhLoc, item.product.id, 200, 0);
     }
     if (i % 2 === 1) {
-      await setBalance(southWhLoc, item.product.id, item.batch.id, 180, 0);
+      await setBalance(southWhLoc, item.product.id, 180, 0);
     }
   }
 
-  // 7.3 Client Facilities (On-hand stock for everyday diagnostic tests)
-  const clientList = Object.values(clients);
+  // 7.3 Project Facilities (On-hand stock for everyday diagnostic tests)
+  const projectList = Object.values(projects);
 
-  for (let cIdx = 0; cIdx < clientList.length; cIdx++) {
-    const c = clientList[cIdx];
-    // Give each client 12-15 distinct products with realistic usable quantity
+  for (let cIdx = 0; cIdx < projectList.length; cIdx++) {
+    const c = projectList[cIdx];
+    // Give each project 12-15 distinct products with realistic usable quantity
     for (let pIdx = 0; pIdx < 14; pIdx++) {
       const itemIdx = (cIdx * 4 + pIdx) % allProductList.length;
       const item = allProductList[itemIdx];
       const usableQty = 30 + ((cIdx + pIdx) * 5) % 45;
-      await setBalance(c.locationId, item.product.id, item.batch.id, usableQty, 0);
+      await setBalance(c.locationId, item.product.id, usableQty, 0);
     }
   }
 
   // =========================================================================
-  // 8. STOCK REQUESTS & IN-TRANSIT SHIPMENTS FOR CLIENTS
+  // 8. STOCK REQUESTS & IN-TRANSIT SHIPMENTS FOR PROJECTS
   // =========================================================================
   console.log('Seeding stock requests and in-transit delivery shipments...');
 
-  for (let i = 0; i < clientList.length; i++) {
-    const c = clientList[i];
-    const clientUser = clientAdminUsers[c.username] || { id: superAdmin.id };
+  for (let i = 0; i < projectList.length; i++) {
+    const c = projectList[i];
+    const projectUser = projectAdminUsers[c.username] || { id: superAdmin.id };
     const sourceWh = i % 2 === 0 ? warehouses['Central Warehouse Hub'] : warehouses['Northern Regional Depot'];
 
     // Pick 3 products for testing transactions
@@ -546,7 +524,7 @@ async function main() {
     const p2 = allProductList[(i * 3 + 1) % allProductList.length];
     const p3 = allProductList[(i * 3 + 2) % allProductList.length];
 
-    // 8.1 Active IN_TRANSIT Shipment for clients (clients 0 to 5)
+    // 8.1 Active IN_TRANSIT Shipment for projects (projects 0 to 5)
     if (i < 6) {
       const reqId = `seed-req-transit-${c.id.substring(0, 8)}`;
       const shipId = `seed-ship-transit-${c.id.substring(0, 8)}`;
@@ -560,18 +538,16 @@ async function main() {
           requestType: RequestType.DISPATCH,
           status: RequestStatus.APPROVED,
           priority: RequestPriority.NORMAL,
-          requesterId: clientUser.id,
+          requesterId: projectUser.id,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
-          clientId: c.id,
+          projectId: c.id,
           reason: `Scheduled diagnostic reagents replenishment for ${c.name}`,
           submittedAt: new Date(Date.now() - 24 * 3600 * 1000),
           lines: {
             create: [
               {
                 productId: p1.product.id,
-                batchId: p1.batch.id,
-                batchNumber: p1.batch.batchNumber,
                 quantity: 20,
                 unitId: p1.unit.id,
                 unitNameSnapshot: p1.unit.unitName,
@@ -580,8 +556,6 @@ async function main() {
               },
               {
                 productId: p2.product.id,
-                batchId: p2.batch.id,
-                batchNumber: p2.batch.batchNumber,
                 quantity: 15,
                 unitId: p2.unit.id,
                 unitNameSnapshot: p2.unit.unitName,
@@ -600,7 +574,7 @@ async function main() {
         create: {
           id: shipId,
           requestId: reqId,
-          shipmentType: ShipmentType.DISPATCH_TO_CLIENT,
+          shipmentType: ShipmentType.DISPATCH_TO_PROJECT,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
           status: ShipmentStatus.IN_TRANSIT,
@@ -610,13 +584,11 @@ async function main() {
             create: [
               {
                 productId: p1.product.id,
-                batchId: p1.batch.id,
                 unitName: p1.unit.unitName,
                 dispatchedQty: 20,
               },
               {
                 productId: p2.product.id,
-                batchId: p2.batch.id,
                 unitName: p2.unit.unitName,
                 dispatchedQty: 15,
               },
@@ -626,7 +598,7 @@ async function main() {
       });
     }
 
-    // 8.2 Past COMPLETED Delivered Shipment (clients 6 and 7)
+    // 8.2 Past COMPLETED Delivered Shipment (projects 6 and 7)
     if (i >= 6) {
       const pastReqId = `seed-req-past-${c.id.substring(0, 8)}`;
       const pastShipId = `seed-ship-past-${c.id.substring(0, 8)}`;
@@ -639,18 +611,16 @@ async function main() {
           requestType: RequestType.DISPATCH,
           status: RequestStatus.APPROVED,
           priority: RequestPriority.NORMAL,
-          requesterId: clientUser.id,
+          requesterId: projectUser.id,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
-          clientId: c.id,
+          projectId: c.id,
           reason: `Routine quarterly consumables delivery`,
           submittedAt: new Date(Date.now() - 7 * 24 * 3600 * 1000),
           lines: {
             create: [
               {
                 productId: p1.product.id,
-                batchId: p1.batch.id,
-                batchNumber: p1.batch.batchNumber,
                 quantity: 40,
                 unitId: p1.unit.id,
                 unitNameSnapshot: p1.unit.unitName,
@@ -668,7 +638,7 @@ async function main() {
         create: {
           id: pastShipId,
           requestId: pastReqId,
-          shipmentType: ShipmentType.DISPATCH_TO_CLIENT,
+          shipmentType: ShipmentType.DISPATCH_TO_PROJECT,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
           status: ShipmentStatus.COMPLETED,
@@ -679,7 +649,6 @@ async function main() {
             create: [
               {
                 productId: p1.product.id,
-                batchId: p1.batch.id,
                 unitName: p1.unit.unitName,
                 dispatchedQty: 40,
                 receivedQty: 40,
@@ -691,7 +660,7 @@ async function main() {
       });
     }
 
-    // 8.3 Pending Approval Stock Request (for clients 0, 1, 2, 3) to test Super Admin Approvals
+    // 8.3 Pending Approval Stock Request (for projects 0, 1, 2, 3) to test Super Admin Approvals
     if (i < 4) {
       const pendingReqId = `seed-req-pending-${c.id.substring(0, 8)}`;
       const reqLineId = `line-pending-${c.id.substring(0, 8)}`;
@@ -699,7 +668,7 @@ async function main() {
       // Update warehouse balance to reflect reserved quantity for non-negative available stock
       const pQty = 12;
       const whBal = await prisma.inventoryBalance.findFirst({
-        where: { locationId: sourceWh.locationId, productId: p3.product.id, batchId: p3.batch.id },
+        where: { locationId: sourceWh.locationId, productId: p3.product.id},
       });
       if (whBal) {
         await prisma.inventoryBalance.update({
@@ -716,10 +685,10 @@ async function main() {
           requestType: RequestType.STOCK_OUT,
           status: RequestStatus.PENDING_APPROVAL,
           priority: i === 0 ? RequestPriority.URGENT : RequestPriority.HIGH,
-          requesterId: clientUser.id,
+          requesterId: projectUser.id,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
-          clientId: c.id,
+          projectId: c.id,
           reason: `Urgent restocking required for high volume testing: ${p3.product.name}`,
           submittedAt: new Date(Date.now() - 3600 * 1000 * (i + 1)),
           lines: {
@@ -727,8 +696,6 @@ async function main() {
               {
                 id: reqLineId,
                 productId: p3.product.id,
-                batchId: p3.batch.id,
-                batchNumber: p3.batch.batchNumber,
                 quantity: pQty,
                 unitId: p3.unit.id,
                 unitNameSnapshot: p3.unit.unitName,
@@ -739,7 +706,6 @@ async function main() {
                     {
                       locationId: sourceWh.locationId,
                       productId: p3.product.id,
-                      batchId: p3.batch.id,
                       quantityBase: pQty,
                       status: ReservationStatus.ACTIVE,
                     },
@@ -752,7 +718,7 @@ async function main() {
       });
     }
 
-    // 8.4 Draft Requests for client self-service testing (clients 4, 5)
+    // 8.4 Draft Requests for project self-service testing (projects 4, 5)
     if (i === 4 || i === 5) {
       const draftReqId = `seed-req-draft-${c.id.substring(0, 8)}`;
       await prisma.stockRequest.upsert({
@@ -763,17 +729,15 @@ async function main() {
           requestType: RequestType.STOCK_OUT,
           status: RequestStatus.DRAFT,
           priority: RequestPriority.NORMAL,
-          requesterId: clientUser.id,
+          requesterId: projectUser.id,
           sourceLocationId: sourceWh.locationId,
           destinationLocationId: c.locationId,
-          clientId: c.id,
+          projectId: c.id,
           reason: `Draft requisition awaiting clinical team review`,
           lines: {
             create: [
               {
                 productId: p2.product.id,
-                batchId: p2.batch.id,
-                batchNumber: p2.batch.batchNumber,
                 quantity: 10,
                 unitId: p2.unit.id,
                 unitNameSnapshot: p2.unit.unitName,
@@ -792,21 +756,21 @@ async function main() {
   console.log('==================================================');
   console.log('Summary of Seeded Data:');
   console.log('  • 3 Warehouses (Central Hub, Northern Regional, Southern Distribution)');
-  console.log('  • 8 Healthcare Client Organizations with Stock Locations & Warehouse Assignments');
+  console.log('  • 8 Healthcare Project Organizations with Stock Locations & Warehouse Assignments');
   console.log('  • 5 Master Categories & 6 Accredited Brands');
   console.log('  • 45 Raw Materials / Diagnostic Consumables (Approved, Batch-Tracked)');
   console.log('  • 20 Manufactured Diagnostic Assay Formulations (Approved with ProductVersion)');
-  console.log('  • Warehouse Stock Balances & Client On-Hand Inventories');
+  console.log('  • Warehouse Stock Balances & Project On-Hand Inventories');
   console.log('  • 6 Active IN_TRANSIT Shipments with Delivery Notes & Lines');
   console.log('  • 2 Delivered/Completed Past Shipments');
   console.log('  • 4 Pending Stock Requests in Approvals Queue with Active Held Reservations');
-  console.log('  • 2 Draft Requests for Client Testing');
+  console.log('  • 2 Draft Requests for Project Testing');
   // =========================================================================
-  // 12. CLIENT STAFF & WORK LOGS (Mini HR Portal)
+  // 12. PROJECT STAFF & WORK LOGS (Mini HR Portal)
   // =========================================================================
-  console.log('Seeding client staff members and sample daily work logs...');
-  const apolloClient = clients['Apollo Diagnostics Lab'];
-  if (apolloClient) {
+  console.log('Seeding project staff members and sample daily work logs...');
+  const apolloProject = projects['Apollo Diagnostics Lab'];
+  if (apolloProject) {
     const staffMembers = [
       {
         staffNumber: 'EMP-001',
@@ -829,10 +793,10 @@ async function main() {
     ];
 
     for (const sm of staffMembers) {
-      const createdStaff = await prisma.clientStaffMember.upsert({
+      const createdStaff = await prisma.projectStaffMember.upsert({
         where: {
-          clientId_staffNumber: {
-            clientId: apolloClient.id,
+          projectId_staffNumber: {
+            projectId: apolloProject.id,
             staffNumber: sm.staffNumber,
           },
         },
@@ -842,7 +806,7 @@ async function main() {
           contact: sm.contact,
         },
         create: {
-          clientId: apolloClient.id,
+          projectId: apolloProject.id,
           staffNumber: sm.staffNumber,
           fullName: sm.fullName,
           roleTitle: sm.roleTitle,
@@ -850,13 +814,13 @@ async function main() {
         },
       });
 
-      const existingLogs = await prisma.clientStaffWorkLog.findFirst({
+      const existingLogs = await prisma.projectStaffWorkLog.findFirst({
         where: { staffMemberId: createdStaff.id },
       });
       if (!existingLogs) {
-        await prisma.clientStaffWorkLog.create({
+        await prisma.projectStaffWorkLog.create({
           data: {
-            clientId: apolloClient.id,
+            projectId: apolloProject.id,
             staffMemberId: createdStaff.id,
             logDate: new Date(),
             shiftType: 'MORNING',
@@ -876,16 +840,16 @@ async function main() {
   console.log('     • storeadmin (Central Warehouse Hub)');
   console.log('     • storeadmin_north (Northern Regional Depot)');
   console.log('     • storeadmin_south (Southern Distribution Center)');
-  console.log('  3. Client Admins:');
-  console.log('     • clientadmin (Apollo Diagnostics Lab default demo)');
-  console.log('     • clientadmin_apollo (Apollo Diagnostics Lab)');
-  console.log('     • clientadmin_max (Max Healthcare Pathology)');
-  console.log('     • clientadmin_fortis (Fortis Clinical Laboratories)');
-  console.log('     • clientadmin_metropolis (Metropolis Diagnostics Center)');
-  console.log('     • clientadmin_lalpath (Dr. Lal PathLabs Network)');
-  console.log('     • clientadmin_srl (SRL Diagnostic Center)');
-  console.log('     • clientadmin_medanta (Medanta Diagnostic Services)');
-  console.log('     • clientadmin_care (Care Diagnostics & Hospitals)');
+  console.log('  3. Project Admins:');
+  console.log('     • projectadmin (Apollo Diagnostics Lab default demo)');
+  console.log('     • projectadmin_apollo (Apollo Diagnostics Lab)');
+  console.log('     • projectadmin_max (Max Healthcare Pathology)');
+  console.log('     • projectadmin_fortis (Fortis Clinical Laboratories)');
+  console.log('     • projectadmin_metropolis (Metropolis Diagnostics Center)');
+  console.log('     • projectadmin_lalpath (Dr. Lal PathLabs Network)');
+  console.log('     • projectadmin_srl (SRL Diagnostic Center)');
+  console.log('     • projectadmin_medanta (Medanta Diagnostic Services)');
+  console.log('     • projectadmin_care (Care Diagnostics & Hospitals)');
   console.log('==================================================\n');
 }
 

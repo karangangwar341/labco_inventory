@@ -70,7 +70,7 @@ export function StoreAdminDashboard() {
     <div className="space-y-6">
       <PageHeader
         title="Warehouse stock"
-        description="Record incoming stock or send stock to an assigned client."
+        description="Record incoming stock or send stock to an assigned project."
         actions={
           <div className="flex flex-wrap gap-2.5">
             <Link href="/requests/new?type=STOCK_IN">
@@ -115,10 +115,10 @@ export function StoreAdminDashboard() {
           <p className="mt-1 text-[11px] text-slate-400">View good, reserved, and damaged units</p>
         </Link>
 
-        {/* 2. Outbound Dispatches to Clients */}
+        {/* 2. Outbound Dispatches to Projects */}
         <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
           <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Dispatches to Clients</span>
+            <span>Dispatches to Projects</span>
             <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -127,7 +127,7 @@ export function StoreAdminDashboard() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 tracking-tight">{activeDispatches.length}</span>
-            <span className="text-xs text-slate-500">in transit to clients</span>
+            <span className="text-xs text-slate-500">in transit to projects</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
             <span className="font-medium text-blue-600">Track Dispatched Orders →</span>
@@ -154,12 +154,12 @@ export function StoreAdminDashboard() {
         </Link>
       </div>
 
-      {/* Section 1: Recent Dispatches to Clients */}
+      {/* Section 1: Recent Dispatches to Projects */}
       <section aria-labelledby="dispatches-heading" className="saas-card overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
             <h2 id="dispatches-heading" className="text-sm font-semibold text-slate-900">
-              Recent Dispatches to Clients
+              Recent Dispatches to Projects
             </h2>
             {activeDispatches.length > 0 && (
               <Badge variant="primary" size="sm" withDot>
@@ -180,15 +180,15 @@ export function StoreAdminDashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-xs font-semibold text-slate-800">No client dispatches yet</p>
+              <p className="text-xs font-semibold text-slate-800">No project dispatches yet</p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                When you dispatch approved goods to a client clinic or hospital, tracking will appear here.
+                When you dispatch approved goods to a project clinic or hospital, tracking will appear here.
               </p>
             </div>
           ) : (
             <ul className="divide-y divide-slate-100">
               {recentShipments.map((shipment) => {
-                const destination = shipment.destinationName || shipment.destinationLocation?.client?.name || 'Client Facility';
+                const destination = shipment.destinationName || shipment.destinationLocation?.project?.name || 'Project Facility';
                 const itemsCount = shipment.lines?.length ?? 0;
                 const isTransit = shipment.status === 'IN_TRANSIT';
 
@@ -254,7 +254,7 @@ export function StoreAdminDashboard() {
               </div>
               <p className="text-xs font-semibold text-slate-800">No stock requests submitted yet</p>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Use the buttons at the top to record incoming supplier stock or prepare a client dispatch.
+                Use the buttons at the top to record incoming supplier stock or prepare a project dispatch.
               </p>
             </div>
           ) : (
@@ -265,7 +265,7 @@ export function StoreAdminDashboard() {
                   reqType === 'STOCK_IN'
                     ? '📥 Stock Arrival (Supplier)'
                     : reqType === 'STOCK_OUT' || reqType === 'DISPATCH'
-                    ? '📤 Client Dispatch'
+                    ? '📤 Project Dispatch'
                     : reqType;
 
                 const itemsCount = request.lines?.length ?? 0;

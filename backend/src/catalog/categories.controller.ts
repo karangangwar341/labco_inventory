@@ -16,10 +16,10 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.CLIENT_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
   @ApiOperation({
     summary: 'Create a product category',
-    description: 'Super Admin creates company categories; Client Admin creates client-scoped categories. Store Admin forbidden.',
+    description: 'Super Admin creates company categories; Project Admin creates project-scoped categories. Store Admin forbidden.',
   })
   @ApiResponse({ status: 201, description: 'Category created' })
   create(@Body() dto: CreateCategoryDto, @CurrentUser() user: AuthenticatedUser) {

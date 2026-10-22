@@ -60,19 +60,19 @@ export class RequestsService {
     let fromText = 'Central Warehouse';
     if (request.sourceLocation?.warehouse?.name) {
       fromText = request.sourceLocation.warehouse.name;
-    } else if (request.sourceLocation?.client?.name) {
-      fromText = request.sourceLocation.client.name;
+    } else if (request.sourceLocation?.project?.name) {
+      fromText = request.sourceLocation.project.name;
     } else if (request.sourceType) {
       fromText = request.sourceType;
     }
 
-    let toText = 'Client Facility';
-    if (request.destinationLocation?.client?.name) {
-      toText = request.destinationLocation.client.name;
+    let toText = 'Project Facility';
+    if (request.destinationLocation?.project?.name) {
+      toText = request.destinationLocation.project.name;
     } else if (request.destinationLocation?.warehouse?.name) {
       toText = request.destinationLocation.warehouse.name;
-    } else if (request.client?.name) {
-      toText = request.client.name;
+    } else if (request.project?.name) {
+      toText = request.project.name;
     }
 
     const reqCode = request.requestNumber || `REQ-${request.id.slice(0, 8).toUpperCase()}`;
@@ -80,16 +80,16 @@ export class RequestsService {
     return { whatText, fromText, toText, reqCode };
   }
 
-  private isClientLocation(
-    loc: { locationType?: LocationType; clientId?: string | null; warehouseId?: string | null } | null | undefined,
+  private isProjectLocation(
+    loc: { locationType?: LocationType; projectId?: string | null; warehouseId?: string | null } | null | undefined,
   ): boolean {
-    return Boolean(loc && (loc.locationType === LocationType.CLIENT || (!loc.warehouseId && Boolean(loc.clientId))));
+    return Boolean(loc && (loc.locationType === LocationType.PROJECT || (!loc.warehouseId && Boolean(loc.projectId))));
   }
 
   private isWarehouseLocation(
-    loc: { locationType?: LocationType; clientId?: string | null; warehouseId?: string | null } | null | undefined,
+    loc: { locationType?: LocationType; projectId?: string | null; warehouseId?: string | null } | null | undefined,
   ): boolean {
-    return Boolean(loc && (loc.locationType === LocationType.WAREHOUSE || (!loc.clientId && Boolean(loc.warehouseId))));
+    return Boolean(loc && (loc.locationType === LocationType.WAREHOUSE || (!loc.projectId && Boolean(loc.warehouseId))));
   }
 
   /**
@@ -127,37 +127,6 @@ export class RequestsService {
         product.kind !== ProductKind.RAW_MATERIAL || product.ownerScope !== CatalogScope.COMPANY
       )) {
         throw new ForbiddenException('Store Admins can only request company raw materials');
-      }
-
-      // Batch and expiry details are optional on stock requests. When supplied,
-      // they are retained for traceability; their absence must not block stock movement.
-      let batchId = line.batchId || null;
-      let batchNumber = line.batchNumber || null;
-      let expiryDate = line.expiryDate ? new Date(line.expiryDate) : null;
-
-      if (line.batchNumber) {
-        let batch = await tx.stockBatch.findUnique({
-          where: {
-            productId_batchNumber: {
-              productId: product.id,
-              batchNumber: line.batchNumber.trim(),
-            },
-          },
-        });
-        if (!batch) {
-          batch = await tx.stockBatch.create({
-            data: {
-              productId: product.id,
-              batchNumber: line.batchNumber.trim(),
-              expiryDate,
-            },
-          });
-        }
-        batchId = batch.id;
-        batchNumber = batch.batchNumber;
-        if (batch.expiryDate && !expiryDate) {
-          expiryDate = batch.expiryDate;
-        }
       }
 
       const unit = product.units.find(
@@ -198,7 +167,6 @@ export class RequestsService {
           where: {
             locationId,
             productId: product.id,
-            batchId: batchId || null,
           },
         });
 
@@ -206,9 +174,7 @@ export class RequestsService {
           systemQuantitySnapshot =
             condition === StockCondition.USABLE
               ? balance.usableQty
-              : condition === StockCondition.DAMAGED
-                ? balance.damagedQty
-                : balance.expiredQty;
+              : new Prisma.Decimal(0);
         } else {
           systemQuantitySnapshot = new Prisma.Decimal(0);
         }
@@ -218,9 +184,6 @@ export class RequestsService {
 
       processed.push({
         productId: line.productId,
-        batchId,
-        batchNumber,
-        expiryDate,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
@@ -240,6 +203,13 @@ export class RequestsService {
    * Create a new draft request without altering inventory or reservations.
    */
   async createDraft(user: AuthenticatedUser, dto: CreateStockRequestDto) {
+    const damagedLines = dto.lines.filter((line) => line.condition === StockCondition.DAMAGED);
+    if (damagedLines.length && dto.requestType !== RequestType.STOCK_OUT) {
+      throw new BadRequestException('Damaged inventory must be reported as a stock-out request');
+    }
+    if (damagedLines.length && !dto.reason?.trim()) {
+      throw new BadRequestException('A reason is required for damaged stock-out requests');
+    }
     // Fetch locations to enforce domain invariants across all roles (including SUPER_ADMIN)
     const sourceLoc = dto.sourceLocationId
       ? await this.prisma.stockLocation.findUnique({
@@ -260,20 +230,20 @@ export class RequestsService {
       throw new BadRequestException(`Destination stock location ${dto.destinationLocationId} not found`);
     }
 
-    // Invariant 1: Client-to-client transfer/dispatch is strictly prohibited across all roles
-    if (this.isClientLocation(sourceLoc) && this.isClientLocation(destLoc)) {
+    // Invariant 1: Project-to-project transfer/dispatch is strictly prohibited across all roles
+    if (this.isProjectLocation(sourceLoc) && this.isProjectLocation(destLoc)) {
       throw new BadRequestException(
-        'Client-to-client transfer is strictly prohibited. Clients are consumer endpoints, not distribution hubs.',
+        'Project-to-project transfer is strictly prohibited. Projects are consumer endpoints, not distribution hubs.',
       );
     }
 
-    // Invariant 2: Dispatch must originate from a Warehouse and target a Client
+    // Invariant 2: Dispatch must originate from a Warehouse and target a Project
     if (dto.requestType === RequestType.DISPATCH) {
       if (!this.isWarehouseLocation(sourceLoc)) {
         throw new BadRequestException('Dispatch requests must originate from a warehouse stock location');
       }
-      if (!this.isClientLocation(destLoc)) {
-        throw new BadRequestException('Dispatch requests must target a client stock location');
+      if (!this.isProjectLocation(destLoc)) {
+        throw new BadRequestException('Dispatch requests must target a project stock location');
       }
     }
 
@@ -290,11 +260,11 @@ export class RequestsService {
       }
     }
 
-    // Invariant 4: Client stock-out is an internal consumption or write-off, not a transfer
-    if (dto.requestType === RequestType.STOCK_OUT && this.isClientLocation(sourceLoc)) {
+    // Invariant 4: Project stock-out is an internal consumption or write-off, not a transfer
+    if (dto.requestType === RequestType.STOCK_OUT && this.isProjectLocation(sourceLoc)) {
       if (dto.destinationLocationId && dto.destinationLocationId !== sourceLoc?.id) {
         throw new BadRequestException(
-          'Client stock-out is strictly an internal deduction. A destination location cannot be specified.',
+          'Project stock-out is strictly an internal deduction. A destination location cannot be specified.',
         );
       }
     }
@@ -332,18 +302,18 @@ export class RequestsService {
         const destination = dto.destinationLocationId
           ? await this.prisma.stockLocation.findUnique({ where: { id: dto.destinationLocationId } })
           : null;
-        if (!destination?.clientId) {
-          throw new ForbiddenException('Dispatch must be sent to an assigned client');
+        if (!destination?.projectId) {
+          throw new ForbiddenException('Dispatch must be sent to an assigned project');
         }
-        const assignment = await this.prisma.clientWarehouseAssignment.findFirst({
+        const assignment = await this.prisma.projectWarehouseAssignment.findFirst({
           where: {
             warehouseId,
-            clientId: destination.clientId,
+            projectId: destination.projectId,
             isActive: true,
           },
         });
         if (!assignment) {
-          throw new ForbiddenException('Warehouse is not assigned to this client');
+          throw new ForbiddenException('Warehouse is not assigned to this project');
         }
       }
       if (dto.requestType === RequestType.TRANSFER) {
@@ -362,31 +332,31 @@ export class RequestsService {
         dto.destinationLocationId !== warehouseLocation.id) {
         throw new ForbiddenException('Stock adjustment must use your assigned warehouse');
       }
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
-      if (!clientId) {
-        throw new ForbiddenException('Client Admin is not assigned to any client');
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.projectId;
+      if (!projectId) {
+        throw new ForbiddenException('Project Admin is not assigned to any project');
       }
-      if (dto.clientId && dto.clientId !== clientId) {
-        throw new ForbiddenException('Cannot create request for another client');
+      if (dto.projectId && dto.projectId !== projectId) {
+        throw new ForbiddenException('Cannot create request for another project');
       }
-      const clientLocation = await this.prisma.stockLocation.findUnique({
-        where: { clientId },
+      const projectLocation = await this.prisma.stockLocation.findUnique({
+        where: { projectId },
       });
       if (dto.requestType === RequestType.DISPATCH || dto.requestType === RequestType.TRANSFER) {
-        throw new ForbiddenException('Client Admins can request stock-in and stock-out only');
+        throw new ForbiddenException('Project Admins can request stock-in and stock-out only');
       }
-      if (!clientLocation ||
-        (dto.sourceLocationId && dto.sourceLocationId !== clientLocation.id) ||
-        (dto.destinationLocationId && dto.destinationLocationId !== clientLocation.id) ||
-        (dto.requestType === RequestType.STOCK_IN && dto.destinationLocationId !== clientLocation.id) ||
-        (dto.requestType === RequestType.STOCK_OUT && dto.sourceLocationId !== clientLocation.id) ||
+      if (!projectLocation ||
+        (dto.sourceLocationId && dto.sourceLocationId !== projectLocation.id) ||
+        (dto.destinationLocationId && dto.destinationLocationId !== projectLocation.id) ||
+        (dto.requestType === RequestType.STOCK_IN && dto.destinationLocationId !== projectLocation.id) ||
+        (dto.requestType === RequestType.STOCK_OUT && dto.sourceLocationId !== projectLocation.id) ||
         (dto.requestType === RequestType.ADJUSTMENT &&
-          dto.sourceLocationId !== clientLocation.id &&
-          dto.destinationLocationId !== clientLocation.id)) {
-        throw new ForbiddenException('Stock requests must use your client location');
+          dto.sourceLocationId !== projectLocation.id &&
+          dto.destinationLocationId !== projectLocation.id)) {
+        throw new ForbiddenException('Stock requests must use your project location');
       }
     }
 
@@ -402,7 +372,7 @@ export class RequestsService {
           requesterId: user.id,
           sourceLocationId: dto.sourceLocationId || null,
           destinationLocationId: dto.destinationLocationId || null,
-          clientId: dto.clientId || null,
+          projectId: dto.projectId || null,
           reason: dto.reason || null,
           idempotencyKey: dto.idempotencyKey || null,
           status: RequestStatus.DRAFT,
@@ -432,16 +402,16 @@ export class RequestsService {
         sourceLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
         destinationLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
-        client: { select: { name: true } },
+        project: { select: { name: true } },
       },
     });
 
@@ -464,8 +434,8 @@ export class RequestsService {
       throw new ForbiddenException('Store Admins can only submit requests for company raw materials');
     }
 
-    if (this.isClientLocation(request.sourceLocation) && this.isClientLocation(request.destinationLocation)) {
-      throw new BadRequestException('Client-to-client transfer is strictly prohibited.');
+    if (this.isProjectLocation(request.sourceLocation) && this.isProjectLocation(request.destinationLocation)) {
+      throw new BadRequestException('Project-to-project transfer is strictly prohibited.');
     }
     if (request.requestType === RequestType.DISPATCH && request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) {
       throw new BadRequestException('Dispatch must originate from a warehouse.');
@@ -686,16 +656,16 @@ export class RequestsService {
         sourceLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
         destinationLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
-        client: { select: { name: true } },
+        project: { select: { name: true } },
       },
     });
 
@@ -767,16 +737,16 @@ export class RequestsService {
         sourceLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
         destinationLocation: {
           include: {
             warehouse: { select: { name: true } },
-            client: { select: { name: true } },
+            project: { select: { name: true } },
           },
         },
-        client: { select: { name: true } },
+        project: { select: { name: true } },
         approvals: true,
       },
     });
@@ -802,8 +772,8 @@ export class RequestsService {
       throw new BadRequestException('Warehouse stock requests can only contain company raw materials');
     }
 
-    if (this.isClientLocation(request.sourceLocation) && this.isClientLocation(request.destinationLocation)) {
-      throw new BadRequestException('Client-to-client transfer is strictly prohibited.');
+    if (this.isProjectLocation(request.sourceLocation) && this.isProjectLocation(request.destinationLocation)) {
+      throw new BadRequestException('Project-to-project transfer is strictly prohibited.');
     }
     if (request.requestType === RequestType.DISPATCH && request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) {
       throw new BadRequestException('Dispatch must originate from a warehouse.');
@@ -842,10 +812,10 @@ export class RequestsService {
               idempotencyKey: dto.idempotencyKey || `req-approve-${request.id}`,
               sourceRefType: 'STOCK_REQUEST',
               sourceRefId: request.id,
+              reason: request.reason || undefined,
               lines: request.lines.map((l) => ({
                 locationId: request.sourceLocationId!,
                 productId: l.productId,
-                batchId: l.batchId || undefined,
                 condition: l.condition,
                 quantity: l.quantity.toNumber(),
                 unitName: l.unitNameSnapshot,
@@ -864,10 +834,10 @@ export class RequestsService {
             idempotencyKey: dto.idempotencyKey || `req-approve-${request.id}`,
             sourceRefType: 'STOCK_REQUEST',
             sourceRefId: request.id,
+            reason: request.reason || undefined,
             lines: request.lines.map((l) => ({
               locationId: (request.destinationLocationId || request.sourceLocationId)!,
               productId: l.productId,
-              batchId: l.batchId || undefined,
               condition: l.condition,
               quantity: l.quantity.toNumber(),
               unitName: l.unitNameSnapshot,
@@ -889,7 +859,6 @@ export class RequestsService {
             adjustmentLines.push({
               locationId: (request.sourceLocationId || request.destinationLocationId)!,
               productId: l.productId,
-              batchId: l.batchId || undefined,
               condition: l.condition,
               quantity: delta,
               unitName: l.unitNameSnapshot,
@@ -899,7 +868,6 @@ export class RequestsService {
             adjustmentLines.push({
               locationId: (request.sourceLocationId || request.destinationLocationId)!,
               productId: l.productId,
-              batchId: l.batchId || undefined,
               condition: l.condition,
               quantity: Math.abs(delta),
               unitName: l.unitNameSnapshot,
@@ -966,8 +934,8 @@ export class RequestsService {
       request.id,
     );
     if (request.requestType === RequestType.DISPATCH || request.requestType === RequestType.TRANSFER) {
-      await this.notificationsService.notifyClientAdmins(
-        request.clientId,
+      await this.notificationsService.notifyProjectAdmins(
+        request.projectId,
         'Stock shipment dispatched',
         `[${reqCode}] Dispatch on the way: ${whatText} to ${toText}. Confirm receipt upon arrival.`,
         'STOCK_REQUEST',
@@ -987,7 +955,7 @@ export class RequestsService {
       | {
           status?: RequestStatus;
           requestType?: RequestType;
-          clientId?: string;
+          projectId?: string;
           warehouseId?: string;
         },
     pagination?: { limit?: number; page?: number },
@@ -995,7 +963,7 @@ export class RequestsService {
     const where: Prisma.StockRequestWhereInput = {};
     let status: RequestStatus | undefined;
     let requestType: RequestType | undefined;
-    let filterClientId: string | undefined;
+    let filterProjectId: string | undefined;
     let filterWarehouseId: string | undefined;
 
     if (typeof statusOrFilters === 'string') {
@@ -1003,7 +971,7 @@ export class RequestsService {
     } else if (statusOrFilters && typeof statusOrFilters === 'object') {
       status = statusOrFilters.status;
       requestType = statusOrFilters.requestType;
-      filterClientId = statusOrFilters.clientId;
+      filterProjectId = statusOrFilters.projectId;
       filterWarehouseId = statusOrFilters.warehouseId;
     }
 
@@ -1023,15 +991,15 @@ export class RequestsService {
         { sourceLocation: { warehouseId } },
         { destinationLocation: { warehouseId } },
       ];
-      if (filterClientId) {
-        where.clientId = filterClientId;
+      if (filterProjectId) {
+        where.projectId = filterProjectId;
       }
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
-      if (!clientId) return [];
-      where.clientId = clientId;
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.projectId;
+      if (!projectId) return [];
+      where.projectId = projectId;
       if (filterWarehouseId) {
         where.OR = [
           { sourceLocation: { warehouseId: filterWarehouseId } },
@@ -1039,8 +1007,8 @@ export class RequestsService {
         ];
       }
     } else if (user.role === UserRole.SUPER_ADMIN) {
-      if (filterClientId) {
-        where.clientId = filterClientId;
+      if (filterProjectId) {
+        where.projectId = filterProjectId;
       }
       if (filterWarehouseId) {
         where.OR = [
@@ -1064,17 +1032,17 @@ export class RequestsService {
         },
         approvals: true,
         requester: { select: { id: true, username: true } },
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         sourceLocation: {
           include: {
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
         destinationLocation: {
           include: {
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
       },
@@ -1083,13 +1051,12 @@ export class RequestsService {
     if (user.role === UserRole.SUPER_ADMIN && requests.some((r) => r.status === RequestStatus.PENDING_APPROVAL)) {
       for (const req of requests) {
         if (req.status !== RequestStatus.PENDING_APPROVAL || !req.sourceLocationId) continue;
-        const sourceLocName = req.sourceLocation?.warehouse?.name || req.sourceLocation?.client?.name || 'Selected Location';
+        const sourceLocName = req.sourceLocation?.warehouse?.name || req.sourceLocation?.project?.name || 'Selected Location';
         for (const line of req.lines) {
           const bal = await this.prisma.inventoryBalance.findFirst({
             where: {
               locationId: req.sourceLocationId,
               productId: line.productId,
-              batchId: line.batchId || null,
             },
           });
           const availAtSource = bal ? bal.usableQty.minus(bal.reservedQty) : new Prisma.Decimal(0);
@@ -1152,13 +1119,13 @@ export class RequestsService {
         sourceLocation: {
           include: {
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
         destinationLocation: {
           include: {
             warehouse: { select: { id: true, name: true } },
-            client: { select: { id: true, name: true } },
+            project: { select: { id: true, name: true } },
           },
         },
       },
@@ -1169,13 +1136,12 @@ export class RequestsService {
     }
 
     if (user.role === UserRole.SUPER_ADMIN && request.status === RequestStatus.PENDING_APPROVAL && request.sourceLocationId) {
-      const sourceLocName = request.sourceLocation?.warehouse?.name || request.sourceLocation?.client?.name || 'Selected Location';
+      const sourceLocName = request.sourceLocation?.warehouse?.name || request.sourceLocation?.project?.name || 'Selected Location';
       for (const line of request.lines) {
         const bal = await this.prisma.inventoryBalance.findFirst({
           where: {
             locationId: request.sourceLocationId,
             productId: line.productId,
-            batchId: line.batchId || null,
           },
         });
         const availAtSource = bal ? bal.usableQty.minus(bal.reservedQty) : new Prisma.Decimal(0);
@@ -1223,12 +1189,12 @@ export class RequestsService {
       if (!isSourceMatch && !isDestMatch) {
         throw new ForbiddenException('Access denied to requests from another warehouse');
       }
-    } else if (user.role === UserRole.CLIENT_ADMIN) {
-      const clientId = user.clientId !== undefined
-        ? user.clientId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.clientId;
-      if (request.clientId && request.clientId !== clientId) {
-        throw new ForbiddenException('Access denied to requests from another client');
+    } else if (user.role === UserRole.PROJECT_ADMIN) {
+      const projectId = user.projectId !== undefined
+        ? user.projectId
+        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.projectId;
+      if (request.projectId && request.projectId !== projectId) {
+        throw new ForbiddenException('Access denied to requests from another project');
       }
     }
 

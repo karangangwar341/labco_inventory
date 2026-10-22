@@ -33,7 +33,7 @@ export class CreateImportBatchDto {
   sourceFilename!: string;
 
   @ApiProperty({
-    example: 'productName,quantity,unitName,batchNumber\nCartridge A,100,PIECE,BATCH-001',
+    example: 'productName,quantity,unitName\nCartridge A,100,PIECE',
     description: 'File content (CSV/JSON text or Base64 payload)',
   })
   @IsString()

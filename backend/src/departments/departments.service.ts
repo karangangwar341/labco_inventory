@@ -35,7 +35,6 @@ import {
   ApproveDepartmentActionDto,
   RejectDepartmentActionDto,
 } from './dto/decide-department-request.dto.js';
-import { WriteOffStockDto } from './dto/write-off-stock.dto.js';
 import { SaveDepartmentIssueBatchDto } from './dto/save-department-issue-batch.dto.js';
 import { ReservationsService } from '../requests/reservations.service.js';
 
@@ -49,10 +48,10 @@ export class DepartmentsService {
     private readonly reservationsService: ReservationsService,
   ) {}
 
-  private async getClientForUser(user: AuthenticatedUser): Promise<string | null> {
-    if (user.role === UserRole.CLIENT_ADMIN) {
+  private async getProjectForUser(user: AuthenticatedUser): Promise<string | null> {
+    if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      return dbUser?.clientId ?? null;
+      return dbUser?.projectId ?? null;
     }
     return null;
   }
@@ -66,42 +65,42 @@ export class DepartmentsService {
       throw new ForbiddenException('Store Admin is not authorized to manage departments');
     }
 
-    const userClientId = await this.getClientForUser(user);
-    const clientId = user.role === UserRole.CLIENT_ADMIN ? userClientId : dto.clientId;
+    const userProjectId = await this.getProjectForUser(user);
+    const projectId = user.role === UserRole.PROJECT_ADMIN ? userProjectId : dto.projectId;
 
-    if (!clientId) {
-      throw new BadRequestException('clientId is required');
+    if (!projectId) {
+      throw new BadRequestException('projectId is required');
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN && clientId !== userClientId) {
-      throw new ForbiddenException('Client Admin can only manage departments for their own organization');
+    if (user.role === UserRole.PROJECT_ADMIN && projectId !== userProjectId) {
+      throw new ForbiddenException('Project Admin can only manage departments for their own organization');
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
     });
-    if (!client) {
-      throw new NotFoundException(`Client ${clientId} not found`);
+    if (!project) {
+      throw new NotFoundException(`Project ${projectId} not found`);
     }
 
     const existing = await this.prisma.department.findUnique({
       where: {
-        clientId_name: {
-          clientId,
+        projectId_name: {
+          projectId,
           name: dto.name.trim(),
         },
       },
     });
 
     if (existing) {
-      throw new ConflictException(`Department "${dto.name}" already exists for this client`);
+      throw new ConflictException(`Department "${dto.name}" already exists for this project`);
     }
 
     const isSuperAdmin = user.role === UserRole.SUPER_ADMIN;
 
     const created = await this.prisma.department.create({
       data: {
-        clientId,
+        projectId,
         name: dto.name.trim(),
         status: isSuperAdmin ? DepartmentStatus.ACTIVE : DepartmentStatus.PENDING_APPROVAL,
         createdById: user.id,
@@ -112,7 +111,7 @@ export class DepartmentsService {
     if (!isSuperAdmin) {
       await this.notificationsService.notifySuperAdmins(
         'Department awaiting approval',
-        'A client proposed a new department for review.',
+        'A project proposed a new department for review.',
         'DEPARTMENT',
         created.id,
       );
@@ -120,20 +119,20 @@ export class DepartmentsService {
     return created;
   }
 
-  async getDepartments(clientId?: string, user?: AuthenticatedUser) {
+  async getDepartments(projectId?: string, user?: AuthenticatedUser) {
     if (user?.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException('Store Admin is not authorized to view departments');
     }
 
-    const userClientId = user ? await this.getClientForUser(user) : null;
-    const effectiveClientId =
-      user?.role === UserRole.CLIENT_ADMIN ? userClientId : clientId;
+    const userProjectId = user ? await this.getProjectForUser(user) : null;
+    const effectiveProjectId =
+      user?.role === UserRole.PROJECT_ADMIN ? userProjectId : projectId;
 
     return this.prisma.department.findMany({
-      where: effectiveClientId ? { clientId: effectiveClientId } : {},
+      where: effectiveProjectId ? { projectId: effectiveProjectId } : {},
       orderBy: { name: 'asc' },
       include: {
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         createdBy: { select: { id: true, username: true, role: true } },
         approvedBy: { select: { id: true, username: true, role: true } },
       },
@@ -148,7 +147,7 @@ export class DepartmentsService {
     const dept = await this.prisma.department.findUnique({
       where: { id },
       include: {
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         createdBy: { select: { id: true, username: true, role: true } },
         approvedBy: { select: { id: true, username: true, role: true } },
       },
@@ -158,10 +157,10 @@ export class DepartmentsService {
       throw new NotFoundException(`Department ${id} not found`);
     }
 
-    if (user?.role === UserRole.CLIENT_ADMIN) {
-      const userClientId = await this.getClientForUser(user);
-      if (dept.clientId !== userClientId) {
-        throw new ForbiddenException('Access denied to other client departments');
+    if (user?.role === UserRole.PROJECT_ADMIN) {
+      const userProjectId = await this.getProjectForUser(user);
+      if (dept.projectId !== userProjectId) {
+        throw new ForbiddenException('Access denied to other project departments');
       }
     }
 
@@ -180,8 +179,8 @@ export class DepartmentsService {
       if (dto.name && dto.name.trim() !== dept.name) {
         const existing = await this.prisma.department.findUnique({
           where: {
-            clientId_name: {
-              clientId: dept.clientId,
+            projectId_name: {
+              projectId: dept.projectId,
               name: dto.name.trim(),
             },
           },
@@ -202,8 +201,8 @@ export class DepartmentsService {
       });
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      // Client Admin proposes changes requiring Super Admin approval
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      // Project Admin proposes changes requiring Super Admin approval
       return this.prisma.department.update({
         where: { id },
         data: {
@@ -298,43 +297,43 @@ export class DepartmentsService {
   // DEPARTMENT ISSUES
   // ==========================================
 
-  async getOpenIssueBatch(user: AuthenticatedUser, targetClientId?: string) {
-    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Only Client Admins or Super Admin can manage a daily department issue draft');
+  async getOpenIssueBatch(user: AuthenticatedUser, targetProjectId?: string) {
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Project Admins or Super Admin can manage a daily department issue draft');
     }
-    const clientId = user.role === UserRole.SUPER_ADMIN
-      ? (targetClientId || (await this.prisma.client.findFirst({ where: { status: 'ACTIVE' } }))?.id || null)
-      : await this.getClientForUser(user);
-    if (!clientId) throw new ForbiddenException('Client account is not assigned to an organization');
+    const projectId = user.role === UserRole.SUPER_ADMIN
+      ? (targetProjectId || (await this.prisma.project.findFirst({ where: { status: 'ACTIVE' } }))?.id || null)
+      : await this.getProjectForUser(user);
+    if (!projectId) throw new ForbiddenException('Project account is not assigned to an organization');
     const include = { issues: { include: { department: true, product: true, unit: true, batch: true }, orderBy: { createdAt: 'asc' as const } } };
     const existing = await this.prisma.departmentIssueBatch.findFirst({
-      where: { clientId, status: DepartmentIssueBatchStatus.DRAFT }, include,
+      where: { projectId, status: DepartmentIssueBatchStatus.DRAFT }, include,
     });
     if (existing) return existing;
     try {
       return await this.prisma.departmentIssueBatch.create({
-        data: { clientId, createdById: user.id }, include,
+        data: { projectId, createdById: user.id }, include,
       });
     } catch (error) {
       if ((error as { code?: string })?.code !== 'P2002') throw error;
       return this.prisma.departmentIssueBatch.findFirst({
-        where: { clientId, status: DepartmentIssueBatchStatus.DRAFT }, include,
+        where: { projectId, status: DepartmentIssueBatchStatus.DRAFT }, include,
       });
     }
   }
 
   async saveIssueBatchLines(batchId: string, dto: SaveDepartmentIssueBatchDto, user: AuthenticatedUser) {
     const batch = await this.getIssueBatch(batchId, user);
-    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Only Client Admins or Super Admin can edit this draft');
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Project Admins or Super Admin can edit this draft');
     }
-    if (user.role === UserRole.CLIENT_ADMIN && batch.createdById !== user.id) {
-      throw new ForbiddenException('Only the Client Admin who owns this draft can edit it');
+    if (user.role === UserRole.PROJECT_ADMIN && batch.createdById !== user.id) {
+      throw new ForbiddenException('Only the Project Admin who owns this draft can edit it');
     }
     if (batch.status !== DepartmentIssueBatchStatus.DRAFT) {
       throw new ConflictException('Only the open daily draft can be edited');
     }
-    const prepared = await Promise.all(dto.issues.map((line) => this.prepareIssueLine(line, user, batch.clientId)));
+    const prepared = await Promise.all(dto.issues.map((line) => this.prepareIssueLine(line, user, batch.projectId)));
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM department_issue_batches WHERE id = ${batch.id} FOR UPDATE`;
       const current = await tx.departmentIssueBatch.findUnique({ where: { id: batch.id } });
@@ -354,26 +353,26 @@ export class DepartmentsService {
     const batch = await this.prisma.departmentIssueBatch.findUnique({
       where: { id: batchId },
       include: {
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         createdBy: { select: { id: true, username: true, role: true } },
         issues: { include: { department: true, product: true, unit: true, batch: true }, orderBy: { createdAt: 'asc' } },
       },
     });
     if (!batch) throw new NotFoundException(`Department issue batch ${batchId} not found`);
-    if (user.role === UserRole.CLIENT_ADMIN && batch.clientId !== await this.getClientForUser(user)) {
-      throw new ForbiddenException('Access denied to another client department issue batch');
+    if (user.role === UserRole.PROJECT_ADMIN && batch.projectId !== await this.getProjectForUser(user)) {
+      throw new ForbiddenException('Access denied to another project department issue batch');
     }
     return batch;
   }
 
   async getIssueBatches(status: DepartmentIssueBatchStatus | undefined, user: AuthenticatedUser) {
     if (user.role === UserRole.STORE_ADMIN) throw new ForbiddenException('Store Admin cannot view department issue batches');
-    const clientId = user.role === UserRole.CLIENT_ADMIN ? await this.getClientForUser(user) : undefined;
+    const projectId = user.role === UserRole.PROJECT_ADMIN ? await this.getProjectForUser(user) : undefined;
     return this.prisma.departmentIssueBatch.findMany({
-      where: { ...(clientId ? { clientId } : {}), ...(status ? { status } : {}) },
+      where: { ...(projectId ? { projectId } : {}), ...(status ? { status } : {}) },
       orderBy: { createdAt: 'desc' },
       include: {
-        client: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
         createdBy: { select: { id: true, username: true, role: true } },
         issues: { include: { department: true, product: true, unit: true, batch: true }, orderBy: { createdAt: 'asc' } },
       },
@@ -382,11 +381,11 @@ export class DepartmentsService {
 
   async submitIssueBatch(batchId: string, user: AuthenticatedUser) {
     const batch = await this.getIssueBatch(batchId, user);
-    if (user.role !== UserRole.CLIENT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Only Client Admins or Super Admin can submit this draft');
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Project Admins or Super Admin can submit this draft');
     }
-    if (user.role === UserRole.CLIENT_ADMIN && batch.createdById !== user.id) {
-      throw new ForbiddenException('Only the Client Admin who owns this draft can submit it');
+    if (user.role === UserRole.PROJECT_ADMIN && batch.createdById !== user.id) {
+      throw new ForbiddenException('Only the Project Admin who owns this draft can submit it');
     }
     if (batch.status !== DepartmentIssueBatchStatus.DRAFT) throw new ConflictException('This draft has already been submitted');
     if (!batch.issues.length) throw new BadRequestException('Add at least one department issue before submitting');
@@ -395,15 +394,14 @@ export class DepartmentsService {
       productId: line.productId,
       quantity: line.quantity.toNumber(),
       unitId: line.unitId,
-      batchId: line.batchId ?? undefined,
       notes: line.notes ?? undefined,
-    }, user, batch.clientId)));
+    }, user, batch.projectId)));
     if (revalidated.some((line, index) => !line.baseQuantity.equals(batch.issues[index].baseQuantity))) {
       throw new ConflictException('A product unit conversion changed. Edit the affected draft line before submitting.');
     }
     const requirements = (await this.notificationsService.getSettings()).approvalRequirements;
     const requiresApproval = requirements.departmentIssue;
-    const location = await this.inventoryService.getOrCreateLocationForClient(batch.clientId);
+    const location = await this.inventoryService.getOrCreateLocationForProject(batch.projectId);
 
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM department_issue_batches WHERE id = ${batch.id} FOR UPDATE`;
@@ -426,7 +424,7 @@ export class DepartmentsService {
         sourceRefType: 'DEPARTMENT_ISSUE_BATCH', sourceRefId: batch.id,
         idempotencyKey: `department-issue-batch-${batch.id}`,
         lines: freshBatch.issues.map((issue) => ({
-          locationId: location.id, productId: issue.productId, batchId: issue.batchId || undefined,
+          locationId: location.id, productId: issue.productId,
           quantity: issue.quantity.toNumber(), unitName: issue.unitNameSnapshot,
           condition: StockCondition.USABLE, direction: 'OUT' as const,
         })),
@@ -448,7 +446,7 @@ export class DepartmentsService {
     }, { maxWait: 10000, timeout: 30000 });
 
     if (requiresApproval) {
-      await this.notificationsService.notifySuperAdmins('Department issue batch awaiting approval', 'A client submitted a daily department issue batch.', 'DEPARTMENT_ISSUE_BATCH', batch.id);
+      await this.notificationsService.notifySuperAdmins('Department issue batch awaiting approval', 'A project submitted a daily department issue batch.', 'DEPARTMENT_ISSUE_BATCH', batch.id);
     } else {
       await this.notificationsService.notifyUser(user.id, 'Department issue batch posted', 'The department issue batch was validated and posted to inventory.', 'DEPARTMENT_ISSUE_BATCH', batch.id);
     }
@@ -462,7 +460,7 @@ export class DepartmentsService {
       if (approve && (batch.status === DepartmentIssueBatchStatus.APPROVED || batch.status === DepartmentIssueBatchStatus.POSTED)) return batch;
       throw new ConflictException(`Department issue batch is not pending approval (current status: ${batch.status})`);
     }
-    const location = await this.inventoryService.getOrCreateLocationForClient(batch.clientId);
+    const location = await this.inventoryService.getOrCreateLocationForProject(batch.projectId);
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM department_issue_batches WHERE id = ${batch.id} FOR UPDATE`;
       const fresh = await tx.departmentIssueBatch.findUnique({ where: { id: batch.id }, include: { issues: { include: { product: true, department: true } } } });
@@ -481,8 +479,8 @@ export class DepartmentsService {
       }
       for (const issue of fresh.issues) {
         const isBelonging =
-          (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.clientId) ||
-          issue.product.clientId === batch.clientId;
+          (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.projectId) ||
+          issue.product.projectId === batch.projectId;
         if (
           issue.department.status !== DepartmentStatus.ACTIVE ||
           issue.product.status !== ProductStatus.APPROVED ||
@@ -497,7 +495,7 @@ export class DepartmentsService {
         transactionType: TransactionType.STOCK_OUT,
         sourceRefType: 'DEPARTMENT_ISSUE_BATCH', sourceRefId: batch.id,
         idempotencyKey: `department-issue-batch-${batch.id}`,
-        lines: fresh.issues.map((issue) => ({ locationId: location.id, productId: issue.productId, batchId: issue.batchId || undefined, quantity: issue.quantity.toNumber(), unitName: issue.unitNameSnapshot, condition: StockCondition.USABLE, direction: 'OUT' as const })),
+        lines: fresh.issues.map((issue) => ({ locationId: location.id, productId: issue.productId, quantity: issue.quantity.toNumber(), unitName: issue.unitNameSnapshot, condition: StockCondition.USABLE, direction: 'OUT' as const })),
       }, user.id, tx);
       await tx.departmentIssue.updateMany({ where: { issueBatchId: batch.id }, data: { status: DepartmentIssueStatus.APPROVED, approvedById: user.id, issuedAt: new Date() } });
       await tx.auditEvent.create({ data: {
@@ -512,15 +510,15 @@ export class DepartmentsService {
     return result;
   }
 
-  private async prepareIssueLine(dto: CreateDepartmentIssueDto, user: AuthenticatedUser, clientId: string) {
+  private async prepareIssueLine(dto: CreateDepartmentIssueDto, user: AuthenticatedUser, projectId: string) {
     const department = await this.prisma.department.findUnique({ where: { id: dto.departmentId } });
-    if (!department || department.clientId !== clientId || department.status !== DepartmentStatus.ACTIVE) {
+    if (!department || department.projectId !== projectId || department.status !== DepartmentStatus.ACTIVE) {
       throw new BadRequestException('Each issue must select an active department belonging to your organization');
     }
     const product = await this.prisma.product.findUnique({ where: { id: dto.productId }, include: { units: true } });
     const isBelonging = product && (
-      (product.ownerScope === CatalogScope.COMPANY && !product.clientId) ||
-      product.clientId === clientId
+      (product.ownerScope === CatalogScope.COMPANY && !product.projectId) ||
+      product.projectId === projectId
     );
     if (!product || product.status !== ProductStatus.APPROVED || product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
       throw new BadRequestException('Each issue must select an approved manufactured product belonging to your organization');
@@ -535,12 +533,8 @@ export class DepartmentsService {
     const conversion = new Prisma.Decimal(unit.conversionToBase);
     const baseQuantity = quantity.mul(conversion);
     if (product.quantityPrecision === 0 && !baseQuantity.isInteger()) throw new BadRequestException(`Product "${product.name}" requires whole units`);
-    if (dto.batchId) {
-      const stockBatch = await this.prisma.stockBatch.findUnique({ where: { id: dto.batchId } });
-      if (!stockBatch || stockBatch.productId !== product.id) throw new BadRequestException(`Batch is invalid for product ${product.name}`);
-    }
     return {
-      clientId, departmentId: department.id, productId: product.id, batchId: dto.batchId || null,
+      projectId, departmentId: department.id, productId: product.id,
       quantity, unitId: unit.id, unitNameSnapshot: unit.unitName,
       conversionToBaseSnapshot: conversion, baseQuantity, notes: dto.notes?.trim() || null,
       issuedById: user.id,
@@ -566,12 +560,12 @@ export class DepartmentsService {
       );
     }
 
-    const userClientId = await this.getClientForUser(user);
-    if (user.role === UserRole.CLIENT_ADMIN && department.clientId !== userClientId) {
-      throw new ForbiddenException('Department does not belong to your client');
+    const userProjectId = await this.getProjectForUser(user);
+    if (user.role === UserRole.PROJECT_ADMIN && department.projectId !== userProjectId) {
+      throw new ForbiddenException('Department does not belong to your project');
     }
 
-    const clientId = department.clientId;
+    const projectId = department.projectId;
 
     // Validate product
     const product = await this.prisma.product.findUnique({
@@ -589,8 +583,8 @@ export class DepartmentsService {
       );
     }
     const isBelonging =
-      (product.ownerScope === CatalogScope.COMPANY && !product.clientId) ||
-      product.clientId === clientId;
+      (product.ownerScope === CatalogScope.COMPANY && !product.projectId) ||
+      product.projectId === projectId;
     if (product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
       throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is not an approved manufactured product belonging to your organization`);
     }
@@ -623,23 +617,13 @@ export class DepartmentsService {
       );
     }
 
-    // Validate batch if provided
-    if (dto.batchId) {
-      const batch = await this.prisma.stockBatch.findUnique({
-        where: { id: dto.batchId },
-      });
-      if (!batch || batch.productId !== product.id) {
-        throw new BadRequestException(`Batch ${dto.batchId} is invalid for product ${product.name}`);
-      }
-    }
 
-    // Verify stock availability at client location
-    const clientLocation = await this.inventoryService.getOrCreateLocationForClient(clientId);
+    // Verify stock availability at project location
+    const projectLocation = await this.inventoryService.getOrCreateLocationForProject(projectId);
     const balance = await this.prisma.inventoryBalance.findFirst({
       where: {
-        locationId: clientLocation.id,
+        locationId: projectLocation.id,
         productId: product.id,
-        batchId: dto.batchId || null,
       },
     });
 
@@ -655,10 +639,9 @@ export class DepartmentsService {
 
     const issue = await this.prisma.departmentIssue.create({
       data: {
-        clientId,
+        projectId,
         departmentId: department.id,
         productId: product.id,
-        batchId: dto.batchId || null,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
@@ -676,13 +659,13 @@ export class DepartmentsService {
     });
     const requiresApproval = (await this.notificationsService.getSettings?.())?.approvalRequirements?.departmentIssue ?? true;
     if (!requiresApproval) return this.approveIssue(issue.id, {}, user, true);
-    await this.notificationsService.notifySuperAdmins('Department issue awaiting approval', 'A client requested manufactured stock for a department.', 'DEPARTMENT_ISSUE', issue.id);
+    await this.notificationsService.notifySuperAdmins('Department issue awaiting approval', 'A project requested manufactured stock for a department.', 'DEPARTMENT_ISSUE', issue.id);
     return issue;
   }
 
   async getIssues(
     query: {
-      clientId?: string;
+      projectId?: string;
       departmentId?: string;
       status?: DepartmentIssueStatus;
     },
@@ -692,13 +675,13 @@ export class DepartmentsService {
       throw new ForbiddenException('Store Admin cannot view department issues');
     }
 
-    const userClientId = await this.getClientForUser(user);
-    const effectiveClientId =
-      user.role === UserRole.CLIENT_ADMIN ? userClientId : query.clientId;
+    const userProjectId = await this.getProjectForUser(user);
+    const effectiveProjectId =
+      user.role === UserRole.PROJECT_ADMIN ? userProjectId : query.projectId;
 
     const where: Prisma.DepartmentIssueWhereInput = {};
     if (!query.status) where.status = { not: DepartmentIssueStatus.DRAFT };
-    if (effectiveClientId) where.clientId = effectiveClientId;
+    if (effectiveProjectId) where.projectId = effectiveProjectId;
     if (query.departmentId) where.departmentId = query.departmentId;
     if (query.status) {
       where.status = query.status;
@@ -747,10 +730,10 @@ export class DepartmentsService {
       throw new NotFoundException(`Department issue ${id} not found`);
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      const userClientId = await this.getClientForUser(user);
-      if (issue.clientId !== userClientId) {
-        throw new ForbiddenException('Access denied to other client department issues');
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const userProjectId = await this.getProjectForUser(user);
+      if (issue.projectId !== userProjectId) {
+        throw new ForbiddenException('Access denied to other project department issues');
       }
     }
 
@@ -783,8 +766,8 @@ export class DepartmentsService {
       );
     }
     const isBelonging =
-      (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.clientId) ||
-      issue.product.clientId === issue.clientId;
+      (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.projectId) ||
+      issue.product.projectId === issue.projectId;
     if (
       issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
       !isBelonging ||
@@ -793,11 +776,11 @@ export class DepartmentsService {
       throw new BadRequestException('Department issue product must remain an approved manufactured product belonging to your organization');
     }
 
-    const clientLocation = await this.inventoryService.getOrCreateLocationForClient(issue.clientId);
+    const projectLocation = await this.inventoryService.getOrCreateLocationForProject(issue.projectId);
 
-    // Atomic transaction: deduct central client usable stock and update issue status in single transaction
+    // Atomic transaction: deduct central project usable stock and update issue status in single transaction
     const approved = await this.prisma.$transaction(async (tx) => {
-      // 1. Post ledger transaction for stock out from client central stock
+      // 1. Post ledger transaction for stock out from project central stock
       await this.ledgerService.postTransaction(
         {
           transactionType: TransactionType.STOCK_OUT,
@@ -806,9 +789,8 @@ export class DepartmentsService {
           idempotencyKey: dto.idempotencyKey ?? `dept-issue-approve-${issue.id}`,
           lines: [
             {
-              locationId: clientLocation.id,
+              locationId: projectLocation.id,
               productId: issue.productId,
-              batchId: issue.batchId || undefined,
               quantity: issue.quantity.toNumber(),
               unitName: issue.unitNameSnapshot,
               condition: StockCondition.USABLE,
@@ -905,8 +887,8 @@ export class DepartmentsService {
       throw new ForbiddenException('Store Admin is not authorized to submit department returns');
     }
 
-    const userClientId = await this.getClientForUser(user);
-    let clientId = userClientId;
+    const userProjectId = await this.getProjectForUser(user);
+    let projectId = userProjectId;
     let departmentId = dto.departmentId;
 
     if (dto.departmentIssueId) {
@@ -916,10 +898,10 @@ export class DepartmentsService {
       if (!issue) {
         throw new NotFoundException(`Department issue ${dto.departmentIssueId} not found`);
       }
-      if (user.role === UserRole.CLIENT_ADMIN && issue.clientId !== userClientId) {
-        throw new ForbiddenException('Linked department issue belongs to another client');
+      if (user.role === UserRole.PROJECT_ADMIN && issue.projectId !== userProjectId) {
+        throw new ForbiddenException('Linked department issue belongs to another project');
       }
-      clientId = issue.clientId;
+      projectId = issue.projectId;
       departmentId = departmentId ?? issue.departmentId;
     }
 
@@ -930,14 +912,14 @@ export class DepartmentsService {
       if (!department) {
         throw new NotFoundException(`Department ${departmentId} not found`);
       }
-      if (user.role === UserRole.CLIENT_ADMIN && department.clientId !== userClientId) {
-        throw new ForbiddenException('Department does not belong to your client');
+      if (user.role === UserRole.PROJECT_ADMIN && department.projectId !== userProjectId) {
+        throw new ForbiddenException('Department does not belong to your project');
       }
-      clientId = clientId ?? department.clientId;
+      projectId = projectId ?? department.projectId;
     }
 
-    if (!clientId) {
-      throw new BadRequestException('Client could not be determined for department return');
+    if (!projectId) {
+      throw new BadRequestException('Project could not be determined for department return');
     }
 
     // Validate product
@@ -986,17 +968,15 @@ export class DepartmentsService {
 
     const created = await this.prisma.departmentReturn.create({
       data: {
-        clientId,
+        projectId,
         departmentId: departmentId || null,
         departmentIssueId: dto.departmentIssueId || null,
         productId: product.id,
-        batchId: dto.batchId || null,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,
         conversionToBaseSnapshot: conversionSnapshot,
         baseQuantity,
-        condition: dto.condition,
         reason: dto.reason.trim(),
         status: DepartmentReturnStatus.PENDING_APPROVAL,
         notes: dto.notes?.trim() || null,
@@ -1015,9 +995,8 @@ export class DepartmentsService {
 
   async getReturns(
     query: {
-      clientId?: string;
+      projectId?: string;
       departmentId?: string;
-      condition?: StockCondition;
       status?: DepartmentReturnStatus;
     },
     user: AuthenticatedUser,
@@ -1026,14 +1005,13 @@ export class DepartmentsService {
       throw new ForbiddenException('Store Admin cannot view department returns');
     }
 
-    const userClientId = await this.getClientForUser(user);
-    const effectiveClientId =
-      user.role === UserRole.CLIENT_ADMIN ? userClientId : query.clientId;
+    const userProjectId = await this.getProjectForUser(user);
+    const effectiveProjectId =
+      user.role === UserRole.PROJECT_ADMIN ? userProjectId : query.projectId;
 
     const where: Prisma.DepartmentReturnWhereInput = {};
-    if (effectiveClientId) where.clientId = effectiveClientId;
+    if (effectiveProjectId) where.projectId = effectiveProjectId;
     if (query.departmentId) where.departmentId = query.departmentId;
-    if (query.condition) where.condition = query.condition;
     if (query.status) where.status = query.status;
 
     return this.prisma.departmentReturn.findMany({
@@ -1070,10 +1048,10 @@ export class DepartmentsService {
       throw new NotFoundException(`Department return ${id} not found`);
     }
 
-    if (user.role === UserRole.CLIENT_ADMIN) {
-      const userClientId = await this.getClientForUser(user);
-      if (ret.clientId !== userClientId) {
-        throw new ForbiddenException('Access denied to other client department returns');
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const userProjectId = await this.getProjectForUser(user);
+      if (ret.projectId !== userProjectId) {
+        throw new ForbiddenException('Access denied to other project department returns');
       }
     }
 
@@ -1106,9 +1084,9 @@ export class DepartmentsService {
       );
     }
 
-    const clientLocation = await this.inventoryService.getOrCreateLocationForClient(ret.clientId);
+    const projectLocation = await this.inventoryService.getOrCreateLocationForProject(ret.projectId);
 
-    // Credit central client stock in designated condition bucket and update return status in single atomic transaction
+    // Credit central project stock in designated condition bucket and update return status in single atomic transaction
     return this.prisma.$transaction(async (tx) => {
       await this.ledgerService.postTransaction(
         {
@@ -1118,12 +1096,11 @@ export class DepartmentsService {
           idempotencyKey: dto.idempotencyKey ?? `dept-return-approve-${ret.id}`,
           lines: [
             {
-              locationId: clientLocation.id,
+              locationId: projectLocation.id,
               productId: ret.productId,
-              batchId: ret.batchId || undefined,
               quantity: ret.quantity.toNumber(),
               unitName: ret.unitNameSnapshot,
-              condition: ret.condition, // USABLE, DAMAGED, or EXPIRED
+              condition: StockCondition.USABLE,
               direction: 'IN',
             },
           ],
@@ -1191,98 +1168,4 @@ export class DepartmentsService {
     });
   }
 
-  // ==========================================
-  // DAMAGED / EXPIRED STOCK WRITE-OFF
-  // ==========================================
-
-  async writeOffStock(dto: WriteOffStockDto, user: AuthenticatedUser) {
-    if (user.role !== UserRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Write-off of damaged or expired stock requires Super Admin approval');
-    }
-
-    if (dto.condition === StockCondition.USABLE) {
-      throw new BadRequestException('Only DAMAGED or EXPIRED stock can be written off via this workflow');
-    }
-
-    const clientId = dto.clientId;
-    if (!clientId) {
-      throw new BadRequestException('clientId is required for stock write-off');
-    }
-
-    const product = await this.prisma.product.findUnique({
-      where: { id: dto.productId },
-      include: { units: true },
-    });
-
-    if (!product) {
-      throw new NotFoundException('Selected product not found');
-    }
-
-    // Resolve unit
-    let unit = null;
-    if (dto.unitId) {
-      unit = product.units.find((u) => u.id === dto.unitId && u.status === 'ACTIVE');
-    } else if (dto.unitName) {
-      unit = product.units.find(
-        (u) => u.unitName.toLowerCase() === dto.unitName!.trim().toLowerCase() && u.status === 'ACTIVE',
-      );
-    } else {
-      unit = product.units.find((u) => u.isBaseUnit && u.status === 'ACTIVE');
-    }
-
-    if (!unit) {
-      throw new NotFoundException(`Active unit not found for product ${product.name}`);
-    }
-
-    const originalQtyDec = new Prisma.Decimal(dto.quantity);
-    const conversionSnapshot = new Prisma.Decimal(unit.conversionToBase);
-    const baseQuantity = originalQtyDec.mul(conversionSnapshot);
-
-    const clientLocation = await this.inventoryService.getOrCreateLocationForClient(clientId);
-
-    const balance = await this.prisma.inventoryBalance.findFirst({
-      where: {
-        locationId: clientLocation.id,
-        productId: product.id,
-        batchId: dto.batchId || null,
-      },
-    });
-
-    if (!balance) {
-      throw new BadRequestException('No inventory balance found for this product/condition');
-    }
-
-    if (dto.condition === StockCondition.DAMAGED && balance.damagedQty.lt(baseQuantity)) {
-      throw new BadRequestException(
-        `Insufficient damaged stock to write off. Available damaged: ${balance.damagedQty}, requested: ${baseQuantity}`,
-      );
-    }
-
-    if (dto.condition === StockCondition.EXPIRED && balance.expiredQty.lt(baseQuantity)) {
-      throw new BadRequestException(
-        `Insufficient expired stock to write off. Available expired: ${balance.expiredQty}, requested: ${baseQuantity}`,
-      );
-    }
-
-    // Post write-off adjustment
-    return this.ledgerService.postTransaction(
-      {
-        transactionType: TransactionType.ADJUSTMENT,
-        sourceRefType: 'STOCK_WRITE_OFF',
-        idempotencyKey: dto.idempotencyKey ?? `writeoff-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-        lines: [
-          {
-            locationId: clientLocation.id,
-            productId: dto.productId,
-            batchId: dto.batchId || undefined,
-            quantity: dto.quantity,
-            unitName: unit.unitName,
-            condition: dto.condition,
-            direction: 'OUT',
-          },
-        ],
-      },
-      user.id,
-    );
-  }
 }

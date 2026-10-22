@@ -44,7 +44,7 @@ export class RequestsController {
   @ApiOperation({ summary: 'List stock requests within caller scope' })
   @ApiQuery({ name: 'status', required: false, enum: RequestStatus })
   @ApiQuery({ name: 'requestType', required: false, enum: RequestType })
-  @ApiQuery({ name: 'clientId', required: false, type: String })
+  @ApiQuery({ name: 'projectId', required: false, type: String })
   @ApiQuery({ name: 'warehouseId', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -52,7 +52,7 @@ export class RequestsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('status') status?: RequestStatus,
     @Query('requestType') requestType?: RequestType,
-    @Query('clientId') clientId?: string,
+    @Query('projectId') projectId?: string,
     @Query('warehouseId') warehouseId?: string,
     @Query('limit') limit?: number,
     @Query('page') page?: number,
@@ -62,7 +62,7 @@ export class RequestsController {
       {
         status,
         requestType,
-        clientId,
+        projectId,
         warehouseId,
       },
       {
