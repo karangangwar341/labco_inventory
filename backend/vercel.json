@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    { "source": "/api/v1/(.*)", "destination": "/api/v1/$1" },
+    { "source": "/api/v1", "destination": "/api/v1" }
+  ],
+  "routes": [
+    {
+      "src": "/favicon.ico",
+      "status": 204,
+      "headers": {
+        "Content-Length": "0",
+        "Cache-Control": "public, max-age=86400"
+      }
+    }
+  ]
+}
