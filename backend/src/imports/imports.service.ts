@@ -55,30 +55,55 @@ export class ImportsService {
     if (dto.importType !== ImportType.STOCK_IN && dto.importType !== ImportType.STOCK_OUT) {
       throw new BadRequestException(`Import type ${dto.importType} is not supported for posting yet`);
     }
-    // 1. File Security & Validation (Test Plan Section 4: Unsupported/oversize/malicious file rejected)
-    const buffer = Buffer.from(dto.fileContent, 'utf-8');
-    const maxSizeBytes = 10 * 1024 * 1024; // 10MB limit
-
-    if (buffer.length > maxSizeBytes) {
-      throw new BadRequestException(`File size exceeds maximum permitted limit of 10MB (${buffer.length} bytes)`);
-    }
-
     const ext = dto.sourceFilename.split('.').pop()?.toLowerCase();
-    const allowedExts = ['csv', 'json', 'txt'];
+    const allowedExts = ['csv', 'json', 'txt', 'xlsx', 'xls'];
     if (!ext || !allowedExts.includes(ext)) {
       throw new BadRequestException(`Unsupported file type ".${ext}". Allowed import formats: ${allowedExts.join(', ')}`);
     }
 
-    // Check for malicious payload / dangerous signatures
-    const rawContentStr = dto.fileContent.toLowerCase();
-    if (
-      rawContentStr.includes('<script') ||
-      rawContentStr.includes('javascript:') ||
-      rawContentStr.includes('<?php')
-    ) {
-      throw new BadRequestException('Security violation: Malicious script tags or executable code detected in upload');
+    const isExcel = ext === 'xlsx' || ext === 'xls';
+    let buffer: Buffer;
+    if (isExcel) {
+      if (dto.fileContent.startsWith('data:')) {
+        const base64Part = dto.fileContent.split(',')[1] || '';
+        buffer = Buffer.from(base64Part, 'base64');
+      } else {
+        try {
+          buffer = Buffer.from(dto.fileContent, 'base64');
+        } catch {
+          buffer = Buffer.from(dto.fileContent, 'utf-8');
+        }
+      }
+    } else {
+      buffer = Buffer.from(dto.fileContent, 'utf-8');
     }
 
+    const maxSizeBytes = 10 * 1024 * 1024; // 10MB limit
+    if (buffer.length > maxSizeBytes) {
+      throw new BadRequestException(`File size exceeds maximum permitted limit of 10MB (${buffer.length} bytes)`);
+    }
+
+    // Check for malicious payload / dangerous signatures
+    if (!isExcel) {
+      const rawContentStr = dto.fileContent.toLowerCase();
+      if (
+        rawContentStr.includes('<script') ||
+        rawContentStr.includes('javascript:') ||
+        rawContentStr.includes('<?php')
+      ) {
+        throw new BadRequestException('Security violation: Malicious script tags or executable code detected in upload');
+      }
+    }
+
+    const defaultMime = ext === 'xlsx'
+      ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : ext === 'xls'
+      ? 'application/vnd.ms-excel'
+      : ext === 'csv'
+      ? 'text/csv'
+      : 'application/json';
+
+    const mimeType = dto.mimeType || defaultMime;
     const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
     const storageKey = `imports/${Date.now()}-${checksum.substring(0, 12)}.${ext}`;
 
@@ -87,7 +112,7 @@ export class ImportsService {
       data: {
         storageKey,
         originalName: dto.sourceFilename,
-        mimeType: dto.mimeType || (ext === 'csv' ? 'text/csv' : 'application/json'),
+        mimeType,
         sizeBytes: buffer.length,
         checksum,
         scanStatus: FileScanStatus.PENDING,
@@ -112,7 +137,7 @@ export class ImportsService {
 
     // 3. Extract data via AI extraction adapter (or deterministic fallback)
     const extractionResult = await this.extractor.extractFromDocument(
-      dto.fileContent,
+      isExcel ? buffer : dto.fileContent,
       attachment.mimeType,
       dto.importType,
     );

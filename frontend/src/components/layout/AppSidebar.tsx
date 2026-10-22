@@ -284,7 +284,7 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
 
   return (
     <>
-      <aside className="hidden lg:block shrink-0 sticky top-0 h-screen z-30">
+      <aside className="print:hidden hidden lg:block shrink-0 sticky top-0 h-screen z-30">
         {desktopSidebarContent}
       </aside>
 

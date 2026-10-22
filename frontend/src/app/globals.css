@@ -197,14 +197,25 @@ code, kbd, samp, pre, .font-mono {
   }
 }
 
-/* Safe Print Rules for A4 documents */
+/* Safe Print Rules for A4 documents & PDF generation */
 @media print {
   @page {
     size: A4 portrait;
     margin: 10mm;
   }
+  header,
+  aside,
+  .print\:hidden,
   .no-print {
     display: none !important;
+  }
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .dashboard-content {
+    padding: 0 !important;
+    background: transparent !important;
   }
 }
 

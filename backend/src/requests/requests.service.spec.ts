@@ -641,4 +641,107 @@ describe('Requests & Reservations Service (T-007)', () => {
       );
     });
   });
+
+  describe('6. Client-to-Client Transfer Prevention & Location Invariants', () => {
+    it('rejects Super Admin creating draft with client source and client destination', async () => {
+      mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
+        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        if (where.id === 'loc-client-b') return { id: 'loc-client-b', locationType: 'CLIENT', clientId: 'client-b' };
+        return null;
+      });
+
+      await expect(
+        requestsService.createDraft(superAdminUser, {
+          requestType: RequestType.DISPATCH,
+          sourceLocationId: 'loc-client-a',
+          destinationLocationId: 'loc-client-b',
+          lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects Super Admin creating dispatch request originating from a client location', async () => {
+      mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
+        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        if (where.id === 'loc-wh-1') return { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' };
+        return null;
+      });
+
+      await expect(
+        requestsService.createDraft(superAdminUser, {
+          requestType: RequestType.DISPATCH,
+          sourceLocationId: 'loc-client-a',
+          destinationLocationId: 'loc-wh-1',
+          lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
+        }),
+      ).rejects.toThrow('Dispatch requests must originate from a warehouse stock location');
+    });
+
+    it('rejects Super Admin creating transfer request targeting a client location', async () => {
+      mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
+        if (where.id === 'loc-wh-1') return { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' };
+        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        return null;
+      });
+
+      await expect(
+        requestsService.createDraft(superAdminUser, {
+          requestType: RequestType.TRANSFER,
+          sourceLocationId: 'loc-wh-1',
+          destinationLocationId: 'loc-client-a',
+          lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
+        }),
+      ).rejects.toThrow('Transfer requests must target a warehouse stock location');
+    });
+
+    it('rejects Super Admin client stock-out specifying another destination location', async () => {
+      mockPrisma.stockLocation.findUnique.mockImplementation(async ({ where }: any) => {
+        if (where.id === 'loc-client-a') return { id: 'loc-client-a', locationType: 'CLIENT', clientId: 'client-a' };
+        if (where.id === 'loc-client-b') return { id: 'loc-client-b', locationType: 'CLIENT', clientId: 'client-b' };
+        return null;
+      });
+
+      await expect(
+        requestsService.createDraft(superAdminUser, {
+          requestType: RequestType.STOCK_OUT,
+          sourceLocationId: 'loc-client-a',
+          destinationLocationId: 'loc-client-b',
+          lines: [{ productId: 'prod-1', quantity: 10, unitId: 'unit-ea' }],
+        }),
+      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+    });
+
+    it('rejects submitRequest if both source and destination are client locations', async () => {
+      const clientToClientRequest = {
+        id: 'req-c2c-1',
+        status: RequestStatus.DRAFT,
+        requesterId: superAdminUser.id,
+        requestType: RequestType.DISPATCH,
+        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        lines: [{ id: 'l1', productId: 'p1', quantity: new Prisma.Decimal(10), condition: StockCondition.USABLE }],
+      };
+      mockPrisma.stockRequest.findUnique.mockResolvedValue(clientToClientRequest);
+
+      await expect(
+        requestsService.submitRequest(superAdminUser, 'req-c2c-1'),
+      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+    });
+
+    it('rejects approveRequest if both source and destination are client locations', async () => {
+      const clientToClientRequest = {
+        id: 'req-c2c-2',
+        status: RequestStatus.PENDING_APPROVAL,
+        requestType: RequestType.DISPATCH,
+        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        lines: [{ id: 'l1', productId: 'p1', quantity: new Prisma.Decimal(10), condition: StockCondition.USABLE }],
+      };
+      mockPrisma.stockRequest.findUnique.mockResolvedValue(clientToClientRequest);
+
+      await expect(
+        requestsService.approveRequest(superAdminUser, 'req-c2c-2', {}),
+      ).rejects.toThrow('Client-to-client transfer is strictly prohibited');
+    });
+  });
 });

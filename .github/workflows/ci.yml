@@ -44,14 +44,19 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Verify Secret Hygiene
+      - name: Verify Secret Hygiene & API Key Scanning
         run: |
           echo "Verifying no tracked .env or private key files..."
           if git ls-files | grep -E '(^|/)\.env($|\.)|\.key$|\.pem$' | grep -Ev '\.example$'; then
             echo "ERROR: Sensitive file committed to Git!"
             exit 1
           fi
-          echo "Secret hygiene check passed."
+          echo "Verifying no hardcoded cloud API keys in repository source..."
+          if git grep -E '(sk-a[n]t-[a-zA-Z0-9_\-]{20,}|ANTHROPIC_[A]PI_KEY\s*=\s*["'\'']sk-|AIza[S]y[a-zA-Z0-9_\-]{30,})' -- ':!.env.example' ':!*.spec.ts' ':!*.test.ts'; then
+            echo "ERROR: Potential raw API key detected in source code!"
+            exit 1
+          fi
+          echo "Secret hygiene and API key scan passed."
 
       - name: Install Monorepo Root Dependencies
         run: npm ci

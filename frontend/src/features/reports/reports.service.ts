@@ -23,6 +23,10 @@ export const reportsService = {
     return reportsService.generateReport<string>(reportType, { ...params, format: 'csv' });
   },
 
+  generateExcel: async (reportType: ReportType, params?: QueryReportDto): Promise<Blob> => {
+    return reportsService.generateReport<Blob>(reportType, { ...params, format: 'xlsx' });
+  },
+
   getAuditHistory: async (): Promise<ReportAuditDto[]> => {
     return apiClient.get<ReportAuditDto[]>(endpoints.reports.auditHistory());
   },

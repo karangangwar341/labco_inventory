@@ -24,6 +24,7 @@ const REPORT_OPTIONS: Array<{ type: ReportType; label: string; description: stri
   { type: 'BATCH_EXPIRY', label: 'Expiry forecast', description: 'Lot-level expiration schedule, days remaining, and shelf-life tracking' },
   { type: 'CLIENT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department issues and returns' },
   { type: 'PRODUCTION_RUNS', label: 'Manufacturing', description: 'Work-in-progress runs, recipe inputs, outputs, and wastage' },
+  { type: 'SHIPMENTS', label: 'Shipments & Logistics', description: 'Inbound, outbound, and inter-facility movements, status, quantities, and dates' },
 ];
 
 const LABELS: Record<string, string> = {
@@ -37,17 +38,20 @@ const LABELS: Record<string, string> = {
   baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', runId: 'Run ID', productionReference: 'Reference',
   clientName: 'Client', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
+  shipmentId: 'Shipment ID', shipmentType: 'Shipment type', sourceLocation: 'Source location',
+  destinationLocation: 'Destination location', dispatchedQuantity: 'Dispatched qty',
+  dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at',
 };
 
 const NUMERIC_COLUMNS = new Set([
   'usableQuantity', 'reservedQuantity', 'availableQuantity', 'damagedQuantity',
   'expiredQuantity', 'physicalQuantity', 'minThreshold', 'originalQuantity',
   'baseDelta', 'daysRemaining', 'quantity', 'baseQuantity', 'plannedOutput',
-  'actualOutput', 'wastage', 'totalInputsCount', 'totalOutputsCount',
+  'actualOutput', 'wastage', 'totalInputsCount', 'totalOutputsCount', 'dispatchedQuantity',
 ]);
 
 const MONO_COLUMNS = new Set([
-  'batchNumber', 'runId', 'productionReference', 'timestamp', 'date', 'createdAt', 'expiryDate',
+  'batchNumber', 'runId', 'productionReference', 'shipmentId', 'timestamp', 'date', 'createdAt', 'expiryDate',
 ]);
 
 function formatCellValue(column: string, value: unknown): React.ReactNode {
@@ -139,6 +143,7 @@ export function ReportsView() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [productId, setProductId] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
   const [clientId, setClientId] = useState('');
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -152,8 +157,9 @@ export function ReportsView() {
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     ...(productId ? { productId } : {}),
+    ...(isSuperAdmin && warehouseId ? { warehouseId } : {}),
     ...(isSuperAdmin && clientId ? { clientId } : {}),
-  }), [startDate, endDate, productId, isSuperAdmin, clientId]);
+  }), [startDate, endDate, productId, isSuperAdmin, warehouseId, clientId]);
 
   const reportQuery = useQuery({
     queryKey: queryKeys.reports.view(reportType, { ...params }),
@@ -173,6 +179,13 @@ export function ReportsView() {
     queryKey: queryKeys.catalog.products(user?.id, { reportFilters: true }),
     queryFn: () => catalogService.getProducts(),
     enabled: Boolean(user),
+    staleTime: 10 * 60_000,
+  });
+
+  const warehousesQuery = useQuery({
+    queryKey: queryKeys.administration.warehouses(),
+    queryFn: administrationService.getWarehouses,
+    enabled: Boolean(isSuperAdmin),
     staleTime: 10 * 60_000,
   });
 
@@ -199,15 +212,31 @@ export function ReportsView() {
     onError: (error) => setExportError(error instanceof Error ? error.message : 'Could not export this report.'),
   });
 
+  const excelMutation = useMutation({
+    mutationFn: () => reportsService.generateExcel(reportType, params),
+    onSuccess: (blob) => {
+      setExportError(null);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${reportType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    },
+    onError: (error) => setExportError(error instanceof Error ? error.message : 'Could not export Excel spreadsheet.'),
+  });
+
   const rows = reportQuery.data?.data ?? [];
   const columns = rows.length ? Object.keys(rows[0]) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
-  const hasActiveFilters = Boolean(startDate || endDate || productId || clientId);
+  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || clientId);
   const resetFilters = () => {
     setStartDate('');
     setEndDate('');
     setProductId('');
+    setWarehouseId('');
     setClientId('');
   };
 
@@ -247,12 +276,22 @@ export function ReportsView() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header with primary print / CSV actions */}
+      {/* Page Header with primary print / CSV / Excel actions */}
       <PageHeader
         title="Reports & Analytics"
         description="Comprehensive audit-grade inventory movement ledgers, batch expiry forecasting, and stock telemetry."
         actions={
           <div className="flex flex-wrap items-center gap-2.5 print:hidden">
+            <Button
+              variant="primary"
+              disabled={!rows.length || excelMutation.isPending}
+              onClick={() => excelMutation.mutate()}
+            >
+              <svg className="w-4 h-4 mr-1.5 text-emerald-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {excelMutation.isPending ? 'Preparing Excel...' : 'Export Excel (.xlsx)'}
+            </Button>
             <Button
               variant="secondary"
               disabled={!rows.length || csvMutation.isPending}
@@ -355,7 +394,7 @@ export function ReportsView() {
               )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-end">
               <div className="space-y-1.5 w-full">
                 <label className="text-xs font-medium text-slate-700 block">From Date</label>
                 <input
@@ -391,18 +430,33 @@ export function ReportsView() {
               </Select>
 
               {isSuperAdmin && (
-                <Select
-                  label="Client Scope"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                >
-                  <option value="">All client accounts</option>
-                  {(clientsQuery.data ?? []).map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </Select>
+                <>
+                  <Select
+                    label="Warehouse Scope"
+                    value={warehouseId}
+                    onChange={(e) => setWarehouseId(e.target.value)}
+                  >
+                    <option value="">All warehouses (global)</option>
+                    {(warehousesQuery.data ?? []).map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </Select>
+
+                  <Select
+                    label="Client Scope"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                  >
+                    <option value="">All client accounts</option>
+                    {(clientsQuery.data ?? []).map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </Select>
+                </>
               )}
             </div>
           </div>
@@ -439,7 +493,7 @@ export function ReportsView() {
       {!!rows.length && (
         <Card className="print:border-0 print:shadow-none">
           <CardHeader
-            className="print:px-0"
+            className="print:hidden"
             action={
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">
@@ -452,6 +506,42 @@ export function ReportsView() {
             <CardTitle>{activeReportMeta?.label}</CardTitle>
             <CardDescription>{activeReportMeta?.description}</CardDescription>
           </CardHeader>
+
+          {/* Print-only formal document header (replaces UI CardHeader on printed pages) */}
+          <div className="hidden print:block pb-3 mb-3 border-b border-slate-300">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-base font-bold text-slate-900 tracking-tight">Labco Instruments — Warehouse Management System</h1>
+                <p className="text-xs text-slate-700 mt-0.5 font-semibold">{activeReportMeta?.label} — {activeReportMeta?.description}</p>
+                {reportType === 'INVENTORY_LEDGER' && (
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    <strong>Column Guide:</strong> Stock Delta indicates net change in base units (Positive/+ = stock added into facility, Negative/- = stock deducted from facility).
+                  </p>
+                )}
+              </div>
+              <div className="text-right text-[11px] text-slate-500 font-mono space-y-0.5">
+                <div>Printed: {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                <div>Records: {reportQuery.data?.rowCount ?? rows.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* In-UI Column Delta & Movement Guide Banner */}
+          {reportType === 'INVENTORY_LEDGER' && (
+            <div className="mx-6 mb-4 p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-start gap-2.5 print:hidden">
+              <svg className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="space-y-1">
+                <p className="font-semibold text-blue-950">Data Guide: Understanding Stock Delta &amp; Movement Direction</p>
+                <p className="text-blue-800/90 leading-relaxed">
+                  <strong>Stock delta (baseDelta)</strong> shows the exact net change in base packaging units for that specific ledger posting.
+                  Positive values (<span className="text-emerald-700 font-mono font-semibold">+qty IN</span>) indicate stock additions (inbound supplier receipts, transfer receipts, manufacturing output).
+                  Negative values (<span className="text-rose-700 font-mono font-semibold">-qty OUT</span>) indicate stock deductions (client dispatches, department consumption, write-offs).
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <Table className="border-0 rounded-none shadow-none">

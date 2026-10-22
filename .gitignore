@@ -48,4 +48,13 @@ Thumbs.db
 .test-tmp/
 *.tsbuildinfo
 
+# Claude Code artifacts
+.claude/settings.local.json
+.claude/memory.json
+CLAUDE.local.md
+.auto-cycle/
+.auto-explore/
+.cms-iterate/
+
+
 

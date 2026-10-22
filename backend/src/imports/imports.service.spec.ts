@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 import { ImportsService } from './imports.service.js';
 import { GeminiExtractionAdapter } from './adapters/gemini-extraction.adapter.js';
 import {
@@ -133,6 +134,74 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
           superAdminUser,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('successfully ingests and extracts from Excel (.xlsx) workbook draft', async () => {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['productName', 'quantity', 'unitName', 'batchNumber', 'locationId'],
+        ['Diagnostic Cartridge A', 50, 'PIECE', 'LOT-EXCEL-01', 'loc-wh-1'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+      const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+
+      mockPrisma.importBatch.create.mockResolvedValue({
+        id: 'batch-xlsx-1',
+        importType: ImportType.STOCK_IN,
+        status: ImportBatchStatus.DRAFT,
+        sourceFilename: 'stock_import.xlsx',
+        rows: [],
+      });
+
+      mockPrisma.importBatch.findUnique.mockResolvedValue({
+        id: 'batch-xlsx-1',
+        status: ImportBatchStatus.DRAFT,
+        rows: [
+          {
+            id: 'row-xlsx-1',
+            rowNumber: 1,
+            normalizedDataJson: {
+              productName: 'Diagnostic Cartridge A',
+              quantity: 50,
+              unitName: 'PIECE',
+              batchNumber: 'LOT-EXCEL-01',
+              locationId: 'loc-wh-1',
+            },
+            validationStatus: ImportRowStatus.PENDING,
+          },
+        ],
+      });
+
+      mockPrisma.product.findFirst.mockResolvedValue(sampleProduct);
+
+      const batch = await importsService.createBatch(
+        {
+          importType: ImportType.STOCK_IN,
+          sourceFilename: 'stock_import.xlsx',
+          fileContent: base64Data,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        superAdminUser,
+      );
+
+      expect(batch.id).toBe('batch-xlsx-1');
+      expect(mockPrisma.attachment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            originalName: 'stock_import.xlsx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          }),
+        }),
+      );
+      expect(mockPrisma.importRow.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              rowNumber: 1,
+            }),
+          ]),
+        }),
+      );
     });
 
     it('creates draft import batch without posting inventory or changing balances', async () => {

@@ -894,22 +894,33 @@ export function InventoryTable() {
       ) : viewMode === 'PRODUCT' ? (
         /* PRODUCT-WISE VIEW */
         <div className="space-y-0">
-          <Table>
-          <TableHeader sticky>
-            <tr>
-              <TableHead>Product</TableHead>
-              {user?.role !== 'CLIENT_ADMIN' && <TableHead>Brand / Maker</TableHead>}
-              <TableHead>Category</TableHead>
-              <TableHead align="right" className="text-emerald-800 font-bold bg-emerald-50/40">
-                Ready to Send
-              </TableHead>
-              <TableHead align="right">Good Stock</TableHead>
-              <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-              <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-              <TableHead align="right" className="font-bold text-slate-900">Total Units</TableHead>
-              <TableHead className="text-center">Batches</TableHead>
-            </tr>
-          </TableHeader>
+          <Table tableClassName="table-fixed min-w-[850px] w-full">
+            <colgroup>
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[32%]' : 'w-[24%]'} />
+              {user?.role !== 'CLIENT_ADMIN' && <col className="w-[14%]" />}
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[14%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[8%]'} />
+              <col className="w-[6%]" />
+            </colgroup>
+            <TableHeader sticky>
+              <tr>
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[32%]' : 'w-[24%]'}>Product</TableHead>
+                {user?.role !== 'CLIENT_ADMIN' && <TableHead className="w-[14%]">Brand / Maker</TableHead>}
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[14%]'}>Category</TableHead>
+                <TableHead align="right" className={`text-emerald-800 font-bold bg-emerald-50/40 ${user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'}`}>
+                  Ready to Send
+                </TableHead>
+                <TableHead align="right" className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'}>Good Stock</TableHead>
+                <TableHead align="right" className={`text-amber-700 ${user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'}`}>Reserved</TableHead>
+                <TableHead align="right" className={`text-rose-600 ${user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'}`}>Quarantine</TableHead>
+                <TableHead align="right" className={`font-bold text-slate-900 ${user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[8%]'}`}>Total Units</TableHead>
+                <TableHead align="center" className="w-[6%] text-center">Batches</TableHead>
+              </tr>
+            </TableHeader>
           <TableBody>
             {paginatedProductList.map((p) => {
               const isLow = p.minThreshold > 0 && p.availableQty <= p.minThreshold;
@@ -1160,18 +1171,29 @@ export function InventoryTable() {
                   </div>
                 </div>
 
-                <Table>
+                <Table tableClassName="table-fixed min-w-[850px] w-full">
+                  <colgroup>
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[32%]' : 'w-[24%]'} />
+                    {user?.role !== 'CLIENT_ADMIN' && <col className="w-[14%]" />}
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[14%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[5%]' : 'w-[6%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[5%]' : 'w-[8%]'} />
+                  </colgroup>
                   <TableHeader>
                     <tr>
-                      <TableHead>Product Name</TableHead>
-                      {user?.role !== 'CLIENT_ADMIN' && <TableHead>Brand</TableHead>}
-                      <TableHead>Category</TableHead>
-                      <TableHead align="right" className="text-emerald-800 font-bold">Ready to Send</TableHead>
-                      <TableHead align="right">Good Stock</TableHead>
-                      <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-                      <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-                      <TableHead className="text-center">Batches</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[32%]' : 'w-[24%]'}>Product Name</TableHead>
+                      {user?.role !== 'CLIENT_ADMIN' && <TableHead className="w-[14%]">Brand</TableHead>}
+                      <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[14%]'}>Category</TableHead>
+                      <TableHead align="right" className={`text-emerald-800 font-bold ${user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'}`}>Ready to Send</TableHead>
+                      <TableHead align="right" className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[9%]'}>Good Stock</TableHead>
+                      <TableHead align="right" className={`text-amber-700 ${user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'}`}>Reserved</TableHead>
+                      <TableHead align="right" className={`text-rose-600 ${user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'}`}>Quarantine</TableHead>
+                      <TableHead align="center" className={`text-center ${user?.role === 'CLIENT_ADMIN' ? 'w-[5%]' : 'w-[6%]'}`}>Batches</TableHead>
+                      <TableHead align="center" className={`text-center ${user?.role === 'CLIENT_ADMIN' ? 'w-[5%]' : 'w-[8%]'}`}>Status</TableHead>
                     </tr>
                   </TableHeader>
                   <TableBody>
@@ -1181,39 +1203,39 @@ export function InventoryTable() {
 
                       return (
                         <TableRow key={p.productId}>
-                          <TableCell className="font-semibold text-slate-900">
+                          <TableCell className="font-semibold text-slate-900 break-words">
                             {p.productName}
                           </TableCell>
                           {user?.role !== 'CLIENT_ADMIN' && (
                             <TableCell>
-                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60">
+                              <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60" title={p.brand}>
                                 {p.brand}
                               </span>
                             </TableCell>
                           )}
                           <TableCell>
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60">
+                            <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60" title={p.categoryName}>
                               {p.categoryName}
                             </span>
                           </TableCell>
-                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20">
+                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20 whitespace-nowrap">
                             {p.availableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-slate-900">
+                          <TableCell align="right" numeric className="text-slate-900 whitespace-nowrap">
                             {p.usableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-amber-700">
+                          <TableCell align="right" numeric className="text-amber-700 whitespace-nowrap">
                             {p.reservedQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-rose-600">
+                          <TableCell align="right" numeric className="text-rose-600 whitespace-nowrap">
                             {(p.damagedQty + p.expiredQty).toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center whitespace-nowrap">
                             <span className="text-xs font-mono text-slate-600">
                               {p.batches.length} batch{p.batches.length === 1 ? '' : 'es'}
                             </span>
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center whitespace-nowrap">
                             {isOut ? (
                               <Badge variant="danger" size="sm">OUT OF STOCK</Badge>
                             ) : isLow ? (
@@ -1273,17 +1295,27 @@ export function InventoryTable() {
                   </div>
                 </div>
 
-                <Table>
+                <Table tableClassName="table-fixed min-w-[850px] w-full">
+                  <colgroup>
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[34%]' : 'w-[24%]'} />
+                    {user?.role !== 'CLIENT_ADMIN' && <col className="w-[15%]" />}
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[15%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[9%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[9%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[7%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[10%]'} />
+                  </colgroup>
                   <TableHeader>
                     <tr>
-                      <TableHead>Product Name</TableHead>
-                      {user?.role !== 'CLIENT_ADMIN' && <TableHead>Brand</TableHead>}
-                      <TableHead>Category</TableHead>
-                      <TableHead align="right" className="text-emerald-800 font-bold">Usable Stock</TableHead>
-                      <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-                      <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-                      <TableHead className="text-center">Batches</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[34%]' : 'w-[24%]'}>Product Name</TableHead>
+                      {user?.role !== 'CLIENT_ADMIN' && <TableHead className="w-[15%]">Brand</TableHead>}
+                      <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[18%]' : 'w-[15%]'}>Category</TableHead>
+                      <TableHead align="right" className={`text-emerald-800 font-bold ${user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'}`}>Usable Stock</TableHead>
+                      <TableHead align="right" className={`text-amber-700 ${user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[9%]'}`}>Reserved</TableHead>
+                      <TableHead align="right" className={`text-rose-600 ${user?.role === 'CLIENT_ADMIN' ? 'w-[10%]' : 'w-[9%]'}`}>Quarantine</TableHead>
+                      <TableHead align="center" className={`text-center ${user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[7%]'}`}>Batches</TableHead>
+                      <TableHead align="center" className={`text-center ${user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[10%]'}`}>Status</TableHead>
                     </tr>
                   </TableHeader>
                   <TableBody>
@@ -1300,36 +1332,36 @@ export function InventoryTable() {
 
                         return (
                           <TableRow key={p.productId}>
-                            <TableCell className="font-semibold text-slate-900">
+                            <TableCell className="font-semibold text-slate-900 break-words">
                               {p.productName}
                             </TableCell>
                             {user?.role !== 'CLIENT_ADMIN' && (
                               <TableCell>
-                                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60">
+                                <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60" title={p.brand}>
                                   {p.brand}
                                 </span>
                               </TableCell>
                             )}
                             <TableCell>
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60">
+                              <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60" title={p.categoryName}>
                                 {p.categoryName}
                               </span>
                             </TableCell>
-                            <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20">
+                            <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20 whitespace-nowrap">
                               {p.usableQty.toLocaleString()} {p.unit}
                             </TableCell>
-                            <TableCell align="right" numeric className="text-amber-700">
+                            <TableCell align="right" numeric className="text-amber-700 whitespace-nowrap">
                               {p.reservedQty.toLocaleString()} {p.unit}
                             </TableCell>
-                            <TableCell align="right" numeric className="text-rose-600">
+                            <TableCell align="right" numeric className="text-rose-600 whitespace-nowrap">
                               {(p.damagedQty + p.expiredQty).toLocaleString()} {p.unit}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center whitespace-nowrap">
                               <span className="text-xs font-mono text-slate-600">
                                 {p.batches.length} batch{p.batches.length === 1 ? '' : 'es'}
                               </span>
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center whitespace-nowrap">
                               {isOut ? (
                                 <Badge variant="danger" size="sm">OUT OF STOCK</Badge>
                               ) : isLow ? (
@@ -1365,16 +1397,25 @@ export function InventoryTable() {
                     Category Total Available: <strong className="text-emerald-700 text-sm">{totalAvailable.toLocaleString()} units</strong>
                   </div>
                 </div>
-                <Table>
+                <Table tableClassName="table-fixed min-w-[780px] w-full">
+                  <colgroup>
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[40%]' : 'w-[28%]'} />
+                    {user?.role !== 'CLIENT_ADMIN' && <col className="w-[18%]" />}
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[10%]'} />
+                    <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[10%]'} />
+                    <col className="w-[12%]" />
+                  </colgroup>
                   <TableHeader>
                     <tr>
-                      <TableHead>Product Name</TableHead>
-                      {user?.role !== 'CLIENT_ADMIN' && <TableHead>Brand</TableHead>}
-                      <TableHead align="right" className="text-emerald-800 font-bold">Ready to Send</TableHead>
-                      <TableHead align="right">Good Stock</TableHead>
-                      <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-                      <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[40%]' : 'w-[28%]'}>Product Name</TableHead>
+                      {user?.role !== 'CLIENT_ADMIN' && <TableHead className="w-[18%]">Brand</TableHead>}
+                      <TableHead align="right" className={`text-emerald-800 font-bold ${user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'}`}>Ready to Send</TableHead>
+                      <TableHead align="right" className={user?.role === 'CLIENT_ADMIN' ? 'w-[13%]' : 'w-[11%]'}>Good Stock</TableHead>
+                      <TableHead align="right" className={`text-amber-700 ${user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[10%]'}`}>Reserved</TableHead>
+                      <TableHead align="right" className={`text-rose-600 ${user?.role === 'CLIENT_ADMIN' ? 'w-[11%]' : 'w-[10%]'}`}>Quarantine</TableHead>
+                      <TableHead align="center" className="w-[12%] text-center">Status</TableHead>
                     </tr>
                   </TableHeader>
                   <TableBody>
@@ -1384,29 +1425,29 @@ export function InventoryTable() {
 
                       return (
                         <TableRow key={p.productId}>
-                          <TableCell className="font-semibold text-slate-900">
+                          <TableCell className="font-semibold text-slate-900 break-words">
                             {p.productName}
                           </TableCell>
                           {user?.role !== 'CLIENT_ADMIN' && (
                             <TableCell>
-                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60">
+                              <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-200/60" title={p.brand}>
                                 {p.brand}
                               </span>
                             </TableCell>
                           )}
-                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20">
+                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20 whitespace-nowrap">
                             {p.availableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-slate-900">
+                          <TableCell align="right" numeric className="text-slate-900 whitespace-nowrap">
                             {p.usableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-amber-700">
+                          <TableCell align="right" numeric className="text-amber-700 whitespace-nowrap">
                             {p.reservedQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-rose-600">
+                          <TableCell align="right" numeric className="text-rose-600 whitespace-nowrap">
                             {(p.damagedQty + p.expiredQty).toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center whitespace-nowrap">
                             {isOut ? (
                               <Badge variant="danger" size="sm">OUT OF STOCK</Badge>
                             ) : isLow ? (
@@ -1441,16 +1482,25 @@ export function InventoryTable() {
                     Brand Total Available: <strong className="text-indigo-700 text-sm">{totalAvailable.toLocaleString()} units</strong>
                   </div>
                 </div>
-                <Table>
+                <Table tableClassName="table-fixed min-w-[780px] w-full">
+                  <colgroup>
+                    <col className="w-[28%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                  </colgroup>
                   <TableHeader>
                     <tr>
-                      <TableHead>Product Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead align="right" className="text-emerald-800 font-bold">Ready to Send</TableHead>
-                      <TableHead align="right">Good Stock</TableHead>
-                      <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-                      <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
+                      <TableHead className="w-[28%]">Product Name</TableHead>
+                      <TableHead className="w-[18%]">Category</TableHead>
+                      <TableHead align="right" className="w-[11%] text-emerald-800 font-bold">Ready to Send</TableHead>
+                      <TableHead align="right" className="w-[11%]">Good Stock</TableHead>
+                      <TableHead align="right" className="w-[10%] text-amber-700">Reserved</TableHead>
+                      <TableHead align="right" className="w-[10%] text-rose-600">Quarantine</TableHead>
+                      <TableHead align="center" className="w-[12%] text-center">Status</TableHead>
                     </tr>
                   </TableHeader>
                   <TableBody>
@@ -1460,27 +1510,27 @@ export function InventoryTable() {
 
                       return (
                         <TableRow key={p.productId}>
-                          <TableCell className="font-semibold text-slate-900">
+                          <TableCell className="font-semibold text-slate-900 break-words">
                             {p.productName}
                           </TableCell>
                           <TableCell>
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60">
+                            <span className="inline-block max-w-full truncate px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200/60" title={p.categoryName}>
                               {p.categoryName}
                             </span>
                           </TableCell>
-                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20">
+                          <TableCell align="right" numeric className="text-emerald-700 font-bold bg-emerald-50/20 whitespace-nowrap">
                             {p.availableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-slate-900">
+                          <TableCell align="right" numeric className="text-slate-900 whitespace-nowrap">
                             {p.usableQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-amber-700">
+                          <TableCell align="right" numeric className="text-amber-700 whitespace-nowrap">
                             {p.reservedQty.toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell align="right" numeric className="text-rose-600">
+                          <TableCell align="right" numeric className="text-rose-600 whitespace-nowrap">
                             {(p.damagedQty + p.expiredQty).toLocaleString()} {p.unit}
                           </TableCell>
-                          <TableCell className="text-center">
+                          <TableCell className="text-center whitespace-nowrap">
                             {isOut ? (
                               <Badge variant="danger" size="sm">OUT OF STOCK</Badge>
                             ) : isLow ? (
@@ -1501,21 +1551,33 @@ export function InventoryTable() {
       ) : (
         /* DETAILED BATCH / LOT LEDGER VIEW */
         <div className="space-y-0">
-          <Table>
-          <TableHeader sticky>
-            <tr>
-              <TableHead>Item &amp; SKU</TableHead>
-              {user?.role !== 'CLIENT_ADMIN' && <TableHead>Brand</TableHead>}
-              <TableHead>Category</TableHead>
-              <TableHead>Store Location</TableHead>
-              <TableHead>Batch / Lot No.</TableHead>
-              <TableHead align="right" className="text-emerald-800 font-bold bg-emerald-50/40">Ready to Send</TableHead>
-              <TableHead align="right">Good Stock</TableHead>
-              <TableHead align="right" className="text-amber-700">Reserved</TableHead>
-              <TableHead align="right" className="text-rose-600">Quarantine</TableHead>
-              <TableHead align="right" className="font-bold text-slate-900">Total in Store</TableHead>
-            </tr>
-          </TableHeader>
+          <Table tableClassName="table-fixed min-w-[900px] w-full">
+            <colgroup>
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[26%]' : 'w-[20%]'} />
+              {user?.role !== 'CLIENT_ADMIN' && <col className="w-[12%]" />}
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[16%]' : 'w-[12%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[14%]' : 'w-[12%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[12%]' : 'w-[10%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[7%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[6%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[7%]'} />
+              <col className={user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[6%]'} />
+            </colgroup>
+            <TableHeader sticky>
+              <tr>
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[26%]' : 'w-[20%]'}>Item &amp; SKU</TableHead>
+                {user?.role !== 'CLIENT_ADMIN' && <TableHead className="w-[12%]">Brand</TableHead>}
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[16%]' : 'w-[12%]'}>Category</TableHead>
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[14%]' : 'w-[12%]'}>Store Location</TableHead>
+                <TableHead className={user?.role === 'CLIENT_ADMIN' ? 'w-[12%]' : 'w-[10%]'}>Batch / Lot No.</TableHead>
+                <TableHead align="right" className={`text-emerald-800 font-bold bg-emerald-50/40 ${user?.role === 'CLIENT_ADMIN' ? 'w-[9%]' : 'w-[8%]'}`}>Ready to Send</TableHead>
+                <TableHead align="right" className={user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[7%]'}>Good Stock</TableHead>
+                <TableHead align="right" className={`text-amber-700 ${user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[6%]'}`}>Reserved</TableHead>
+                <TableHead align="right" className={`text-rose-600 ${user?.role === 'CLIENT_ADMIN' ? 'w-[8%]' : 'w-[7%]'}`}>Quarantine</TableHead>
+                <TableHead align="right" className={`font-bold text-slate-900 ${user?.role === 'CLIENT_ADMIN' ? 'w-[7%]' : 'w-[6%]'}`}>Total in Store</TableHead>
+              </tr>
+            </TableHeader>
           <TableBody>
             {paginatedBatchList.map((b) => {
               const available = Number(b.availableQty ?? (Number(b.usableQty) - Number(b.reservedQty)));

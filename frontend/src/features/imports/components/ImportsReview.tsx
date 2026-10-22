@@ -11,6 +11,7 @@ import { importsService } from '../imports.service';
 import { ImportBatch, ImportRow } from '../imports.types';
 import { inventoryService } from '../../inventory/inventory.service';
 import { useQueryClient } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 export function ImportsReview() {
@@ -116,22 +117,63 @@ export function ImportsReview() {
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      const text = await file.text();
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+      let text: string;
+      let mimeType = file.type || 'text/csv';
+
+      if (isExcel) {
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = wb.SheetNames[0];
+        if (!firstSheetName || !wb.Sheets[firstSheetName]) {
+          throw new Error('Excel workbook contains no readable sheets');
+        }
+        text = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName]);
+        mimeType = 'text/csv';
+      } else {
+        text = await file.text();
+      }
+
       const newBatch = await importsService.createBatch({
         importType: importIntent,
         sourceFilename: file.name,
         fileContent: text,
-        mimeType: file.type || 'text/csv',
+        mimeType,
         defaultLocationId: defaultLocationId || undefined,
         approvalMode,
       });
       setStatusMessage(`Import draft created: ${file.name} (${newBatch.totalRows ?? 0} rows).`);
       await fetchBatches(newBatch.id, true);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to upload and parse CSV document');
+      setErrorMessage(err.message || 'Failed to upload and parse Excel / CSV document');
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDownloadSample = (format: 'csv' | 'xlsx') => {
+    const sampleHeaders = ['productName', 'quantity', 'unitName', 'batchNumber', 'expiryDate', 'condition'];
+    const sampleRows = [
+      ['Diagnostic Cartridge A', 50, 'PIECE', 'LOT-SAMPLE-01', '2027-12-31', 'USABLE'],
+      ['Reagent Solution B', 20, 'BOX', 'LOT-SAMPLE-02', '2026-11-30', 'USABLE'],
+    ];
+
+    if (format === 'csv') {
+      const csv = [sampleHeaders.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'stock_import_sample_template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([sampleHeaders, ...sampleRows]);
+      ws['!cols'] = sampleHeaders.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
+      XLSX.utils.book_append_sheet(wb, ws, 'ImportTemplate');
+      XLSX.writeFile(wb, 'stock_import_sample_template.xlsx');
     }
   };
 
@@ -254,20 +296,40 @@ export function ImportsReview() {
         title="Scan &amp; Review Stock Bills"
         description="Upload a supplier bill, invoice, or packing list. Review the scanned items and counts before sending to your Admin for approval."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
-              accept=".csv,.txt"
+              accept=".csv,.xlsx,.xls,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
               className="hidden"
             />
+            <Button
+              variant="secondary"
+              onClick={() => handleDownloadSample('xlsx')}
+              className="text-xs"
+            >
+              <svg className="w-3.5 h-3.5 mr-1 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Sample Excel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => handleDownloadSample('csv')}
+              className="text-xs"
+            >
+              <svg className="w-3.5 h-3.5 mr-1 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Sample CSV
+            </Button>
             <Button
               variant="primary"
               onClick={() => fileInputRef.current?.click()}
               isLoading={isProcessing}
             >
-              + Upload Stock Bill (CSV)
+              + Upload Stock Bill (Excel / CSV)
             </Button>
           </div>
         }

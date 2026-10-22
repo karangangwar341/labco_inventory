@@ -13,6 +13,7 @@ import {
   ShipmentType,
   TransactionType,
   Prisma,
+  LocationType,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator.js';
 import { ReceiveShipmentDto } from './dto/receive-shipment.dto.js';
@@ -43,6 +44,28 @@ export class ShipmentsService {
     });
     const receiptConfirmationEnabled =
       setting?.valueJson !== undefined ? Boolean(setting.valueJson) : true;
+
+    const isClientLoc = (loc: any) =>
+      Boolean(loc && (loc.locationType === LocationType.CLIENT || (!loc.warehouseId && Boolean(loc.clientId))));
+
+    let sourceLoc = request.sourceLocation;
+    let destLoc = request.destinationLocation;
+    if (!sourceLoc && request.sourceLocationId) {
+      sourceLoc = await tx.stockLocation.findUnique({ where: { id: request.sourceLocationId } });
+    }
+    if (!destLoc && request.destinationLocationId) {
+      destLoc = await tx.stockLocation.findUnique({ where: { id: request.destinationLocationId } });
+    }
+
+    if (isClientLoc(sourceLoc) && isClientLoc(destLoc)) {
+      throw new BadRequestException('Client-to-client shipment is strictly prohibited.');
+    }
+    if (request.requestType === 'DISPATCH' && isClientLoc(sourceLoc)) {
+      throw new BadRequestException('Dispatch must originate from a warehouse.');
+    }
+    if (request.requestType === 'TRANSFER' && (isClientLoc(sourceLoc) || isClientLoc(destLoc))) {
+      throw new BadRequestException('Transfers are strictly inter-warehouse.');
+    }
 
     const shipmentType =
       request.requestType === 'DISPATCH'

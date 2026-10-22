@@ -94,7 +94,16 @@ export function CreateRequestForm() {
   }, [lines]);
 
   const isWarehouseUser = user?.role === 'STORE_ADMIN' || user?.role === 'SUPER_ADMIN';
-  const isDispatch = direction === 'STOCK_OUT' && isWarehouseUser;
+
+  const selectedSourceLocation = useMemo(
+    () => locations.find((location) => location.id === locationId),
+    [locations, locationId],
+  );
+
+  const isSourceWarehouse = selectedSourceLocation?.locationType === 'WAREHOUSE';
+  const isSourceClient = selectedSourceLocation?.locationType === 'CLIENT';
+
+  const isDispatch = direction === 'STOCK_OUT' && isWarehouseUser && isSourceWarehouse;
 
   const targetLocations = useMemo(() => {
     if (user?.role === 'CLIENT_ADMIN') return locations.filter((location) => location.locationType === 'CLIENT');
@@ -304,10 +313,12 @@ export function CreateRequestForm() {
   }, [balancesByProduct, direction, isLoadingStock, locationId, products, stockLoadedForLocation, stockedProductIds]);
 
   useEffect(() => {
-    if (!dispatchTargets.some((location) => location.id === destinationLocationId)) {
+    if (!isDispatch) {
+      setDestinationLocationId('');
+    } else if (!dispatchTargets.some((location) => location.id === destinationLocationId)) {
       setDestinationLocationId(dispatchTargets[0]?.id || '');
     }
-  }, [dispatchTargets, destinationLocationId]);
+  }, [isDispatch, dispatchTargets, destinationLocationId]);
 
   const updateLine = (index: number, changes: Partial<RequestLineDraft>) => {
     setLines((current) => current.map((line, lineIndex) =>
@@ -351,6 +362,10 @@ export function CreateRequestForm() {
     }
     if (isDispatch && !destinationLocationId) {
       setFormError('Choose the client receiving this stock.');
+      return;
+    }
+    if (direction === 'STOCK_OUT' && isSourceClient && destinationLocationId) {
+      setFormError('Client-to-client transfer is strictly prohibited. Client inventory can only be consumed locally or dispatched from a warehouse.');
       return;
     }
     if (direction === 'STOCK_IN' && !sourceType) {
@@ -460,7 +475,13 @@ export function CreateRequestForm() {
     return <ErrorState title="Stock request could not be started" message={formError} onRetry={loadFormOptions} />;
   }
 
-  const locationLabel = direction === 'STOCK_IN' ? 'Destination Stock Location' : 'Source Warehouse / Origin';
+  const locationLabel = direction === 'STOCK_IN'
+    ? 'Destination Stock Location'
+    : isDispatch
+      ? 'Source Warehouse'
+      : isSourceClient
+        ? 'Client Facility (Internal Stock-Out)'
+        : 'Source Warehouse / Origin';
 
   return (
     <div className={`mx-auto space-y-6 transition-all duration-150 ${viewMode === 'GRID' ? 'max-w-5xl' : 'max-w-3xl'}`}>
@@ -471,15 +492,19 @@ export function CreateRequestForm() {
             ? 'New Restock Request'
             : direction === 'STOCK_IN'
               ? 'Receive New Stock (Stock In)'
-              : 'Send / Dispatch Stock (Stock Out)'}
+              : isDispatch
+                ? 'Send / Dispatch Stock (Stock Out)'
+                : 'Internal Stock Deduction (Stock Out)'}
         description={
           user?.role === 'CLIENT_ADMIN'
             ? 'Request diagnostic products and reagents from Central Supply to restock your clinic or lab inventory.'
             : isDispatch
               ? 'Send items from your warehouse to a client clinic or hospital.'
               : direction === 'STOCK_IN'
-                ? 'Record new items arriving at your warehouse from a supplier or delivery truck.'
-                : 'Record items being dispatched, used, or transferred out of your store.'
+                ? 'Record new items arriving at your location from a supplier or delivery truck.'
+                : isSourceClient
+                  ? 'Record internal consumption, department usage, or write-off at this client facility. Direct client-to-client transfers are prohibited.'
+                  : 'Record items being dispatched, used, or transferred out of your store.'
         }
         actions={
           <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
@@ -576,7 +601,13 @@ export function CreateRequestForm() {
                 onChange={(e) => setLocationId(e.target.value)}
                 required
                 disabled={Boolean(editingDraftId)}
-                helperText="Your operating warehouse or store location."
+                helperText={
+                  direction === 'STOCK_IN'
+                    ? 'Destination facility where new stock will be received.'
+                    : isSourceClient
+                      ? 'Client facility where stock is being consumed or written off.'
+                      : 'Operating warehouse originating this stock dispatch.'
+                }
               >
                 {availableLocations.map((location) => (
                   <option key={location.id} value={location.id}>
@@ -592,7 +623,7 @@ export function CreateRequestForm() {
                   onChange={(e) => setDestinationLocationId(e.target.value)}
                   required
                   disabled={Boolean(editingDraftId)}
-                  helperText="Choose the hospital or facility receiving these items."
+                  helperText="Choose the client hospital or facility receiving these items from the warehouse."
                 >
                   {dispatchTargets.map((location) => (
                     <option key={location.id} value={location.id}>
@@ -600,6 +631,18 @@ export function CreateRequestForm() {
                     </option>
                   ))}
                 </Select>
+              )}
+
+              {direction === 'STOCK_OUT' && isSourceClient && (
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-900">
+                  <span className="text-base leading-none">🏢</span>
+                  <div className="space-y-0.5">
+                    <span className="font-semibold block text-amber-950">Internal Client Facility Stock-Out</span>
+                    <span className="text-amber-800 leading-relaxed block">
+                      Stock will be deducted directly from this client facility for local consumption, department issue, or write-off. Direct client-to-client transfer is strictly prohibited.
+                    </span>
+                  </div>
+                </div>
               )}
 
               {direction === 'STOCK_IN' && (

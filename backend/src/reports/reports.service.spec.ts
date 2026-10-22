@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 import { ReportsService } from './reports.service.js';
 import {
   UserRole,
@@ -254,6 +255,37 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(result.csvData).toContain(`"'=cmd|""/c calc""!A0"`);
       expect(result.csvData).toContain(`"'+MaliciousWarehouse"`);
     });
+
+    it('preserves legitimate negative stock deltas without prepending apostrophe in CSV export', async () => {
+      mockPrisma.ledgerEntry.findMany.mockResolvedValue([
+        {
+          transaction: {
+            id: 'tx-1',
+            transactionType: TransactionType.TRANSFER,
+            sourceRefType: 'STOCK_REQUEST',
+            sourceRefId: 'sr-1',
+            postedAt: new Date('2026-10-22'),
+            postedBy: { id: 'u-1', username: 'superadmin', role: UserRole.SUPER_ADMIN },
+          },
+          product: { id: 'p-1', name: 'Test Product' },
+          location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Main Depot' } },
+          batch: null,
+          condition: StockCondition.USABLE,
+          originalQty: new Prisma.Decimal(20),
+          unitNameSnapshot: 'Kit',
+          qtyDeltaBase: new Prisma.Decimal(-20),
+        },
+      ]);
+
+      const result = await reportsService.generateReport(
+        ReportType.INVENTORY_LEDGER,
+        { format: ReportFormat.CSV },
+        superAdminUser,
+      );
+
+      expect(result.csvData).toContain('"-20"');
+      expect(result.csvData).not.toContain(`"'-20"`);
+    });
   });
 
   describe('6. Immutable Audit Trail (REQ-021 & Test Plan 62)', () => {
@@ -282,6 +314,195 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(str).not.toContain('password');
       expect(str).not.toContain('token');
       expect(str).not.toContain('secret');
+    });
+  });
+
+  describe('7. Excel (.xlsx) Export Engine', () => {
+    it('generates a valid binary XLSX workbook buffer with sheet data', async () => {
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([
+        {
+          usableQty: new Prisma.Decimal(25),
+          reservedQty: new Prisma.Decimal(5),
+          damagedQty: new Prisma.Decimal(1),
+          expiredQty: new Prisma.Decimal(0),
+          product: { id: 'p-1', name: 'Reagent Kit', minQuantity: new Prisma.Decimal(10) },
+          location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Main Depot' } },
+          batch: { batchNumber: 'LOT-XLSX', expiryDate: new Date('2027-06-01') },
+        },
+      ]);
+
+      const result = await reportsService.generateReport(
+        ReportType.STOCK_BALANCE,
+        { format: ReportFormat.XLSX },
+        superAdminUser,
+      );
+
+      expect(result.format).toBe('xlsx');
+      expect(result.filename).toContain('.xlsx');
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+      expect(result.buffer.length).toBeGreaterThan(100);
+      // Valid PK zip header for XLSX
+      expect(result.buffer[0]).toBe(0x50); // 'P'
+      expect(result.buffer[1]).toBe(0x4b); // 'K'
+    });
+
+    it('includes pre-information metadata header, delta guide, and glossary sheet in XLSX workbook', async () => {
+      mockPrisma.ledgerEntry.findMany.mockResolvedValue([
+        {
+          transaction: {
+            id: 'tx-1',
+            transactionType: TransactionType.TRANSFER,
+            sourceRefType: 'STOCK_REQUEST',
+            sourceRefId: 'sr-1',
+            postedAt: new Date('2026-10-22'),
+            postedBy: { id: 'u-1', username: 'superadmin', role: UserRole.SUPER_ADMIN },
+          },
+          product: { id: 'p-1', name: 'ALT / SGPT' },
+          location: { id: 'loc-1', locationType: 'WAREHOUSE', warehouse: { name: 'Apollo Depot' } },
+          batch: null,
+          condition: StockCondition.USABLE,
+          originalQty: new Prisma.Decimal(10),
+          unitNameSnapshot: 'Pack',
+          qtyDeltaBase: new Prisma.Decimal(-10),
+        },
+      ]);
+
+      const result = await reportsService.generateReport(
+        ReportType.INVENTORY_LEDGER,
+        { format: ReportFormat.XLSX },
+        superAdminUser,
+      );
+
+      const wb = XLSX.read(result.buffer, { type: 'buffer' });
+      expect(wb.SheetNames).toContain('Report Data');
+      expect(wb.SheetNames).toContain('Data Guide & Glossary');
+
+      const dataAoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets['Report Data'], { header: 1 });
+      // Row 0 is pre-info brand header
+      expect(dataAoa[0][0]).toContain('LABCO INSTRUMENTS');
+      // Row 1 has report name
+      expect(dataAoa[1][1]).toContain('Movement History');
+      // Has Column Delta Guide explaining baseDelta
+      const guideRow = dataAoa.find((row) => row[0] === 'Column Delta Guide:');
+      expect(guideRow).toBeDefined();
+      expect(guideRow?.[1]).toContain('baseDelta');
+
+      // Glossary sheet contains baseDelta definition
+      const glossaryAoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets['Data Guide & Glossary'], { header: 1 });
+      const baseDeltaDef = glossaryAoa.find((row) => row[0] === 'baseDelta');
+      expect(baseDeltaDef).toBeDefined();
+      expect(baseDeltaDef?.[2]).toContain('STOCK DELTA');
+    });
+  });
+
+  describe('8. Super Admin Scope Filtering: Warehouse-wise, Client-wise, and All', () => {
+    it('allows Super Admin to view unconstrained global stock across all locations', async () => {
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
+
+      await reportsService.generateReport(
+        ReportType.STOCK_BALANCE,
+        { format: ReportFormat.JSON },
+        superAdminUser,
+      );
+
+      // No locationId constraint in where clause means all company and client locations
+      expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {},
+        }),
+      );
+    });
+
+    it('allows Super Admin to scope report warehouse-wise', async () => {
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-wh-alpha' });
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
+
+      await reportsService.generateReport(
+        ReportType.STOCK_BALANCE,
+        { warehouseId: 'wh-alpha-id', format: ReportFormat.JSON },
+        superAdminUser,
+      );
+
+      expect(mockPrisma.stockLocation.findUnique).toHaveBeenCalledWith({
+        where: { warehouseId: 'wh-alpha-id' },
+      });
+      expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            locationId: { in: ['loc-wh-alpha'] },
+          }),
+        }),
+      );
+    });
+
+    it('allows Super Admin to scope report client-wise', async () => {
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-beta' });
+      mockPrisma.inventoryBalance.findMany.mockResolvedValue([]);
+
+      await reportsService.generateReport(
+        ReportType.STOCK_BALANCE,
+        { clientId: 'client-beta-id', format: ReportFormat.JSON },
+        superAdminUser,
+      );
+
+      expect(mockPrisma.stockLocation.findUnique).toHaveBeenCalledWith({
+        where: { clientId: 'client-beta-id' },
+      });
+      expect(mockPrisma.inventoryBalance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            locationId: { in: ['loc-client-beta'] },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('9. Shipments & Inbound Dispatches Report', () => {
+    it('generates shipment report with privacy redaction for Client Admin', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', clientId: 'client-1' });
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-client-1' });
+
+      mockPrisma.shipment = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'ship-101',
+            shipmentType: 'DISPATCH_TO_CLIENT',
+            status: 'IN_TRANSIT',
+            sourceLocation: {
+              id: 'loc-wh-secret',
+              locationType: 'WAREHOUSE',
+              warehouse: { name: 'Secret Central Hub' },
+            },
+            destinationLocation: {
+              id: 'loc-client-1',
+              locationType: 'CLIENT',
+              client: { name: 'Hospital Beta' },
+            },
+            lines: [
+              {
+                dispatchedQty: new Prisma.Decimal(50),
+                product: { name: 'Vials 10ml' },
+              },
+            ],
+            dispatchedAt: new Date('2026-10-01'),
+            receivedAt: null,
+            createdAt: new Date('2026-10-01'),
+          },
+        ]),
+      };
+
+      const result = await reportsService.generateReport(
+        ReportType.SHIPMENTS,
+        { format: ReportFormat.JSON },
+        clientAdminUser,
+      );
+
+      expect(result.data.length).toBe(1);
+      const row = result.data[0];
+      expect(row.sourceLocation).toBe('[REDACTED]');
+      expect(row.destinationLocation).toBe('Hospital Beta');
+      expect(row.dispatchedQuantity).toBe(50);
     });
   });
 });

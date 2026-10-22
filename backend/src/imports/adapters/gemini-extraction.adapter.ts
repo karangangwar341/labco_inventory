@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { ImportType } from '@prisma/client';
 import {
   AiExtractionAdapter,
@@ -16,12 +17,51 @@ export class GeminiExtractionAdapter implements AiExtractionAdapter {
     mimeType: string,
     intent: ImportType,
   ): Promise<ExtractionResult> {
+    const safeMime = (mimeType || '').toLowerCase();
+
+    // 0. If Excel (.xlsx or .xls)
+    const isExcel =
+      safeMime.includes('spreadsheet') ||
+      safeMime.includes('excel') ||
+      safeMime.includes('xlsx') ||
+      safeMime.includes('xls');
+
+    if (isExcel) {
+      try {
+        let buf: Buffer;
+        if (Buffer.isBuffer(content)) {
+          buf = content;
+        } else if (typeof content === 'string') {
+          if (content.startsWith('data:')) {
+            const base64Data = content.split(',')[1] || '';
+            buf = Buffer.from(base64Data, 'base64');
+          } else {
+            // Try base64 decoding first, fallback to utf-8 buffer
+            try {
+              buf = Buffer.from(content, 'base64');
+            } catch {
+              buf = Buffer.from(content, 'utf-8');
+            }
+          }
+        } else {
+          buf = Buffer.from('');
+        }
+
+        const workbook = XLSX.read(buf, { type: 'buffer' });
+        const firstSheetName = workbook.SheetNames[0];
+        if (firstSheetName && workbook.Sheets[firstSheetName]) {
+          const sheetCsv = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+          return this.parseTabularOrJson(sheetCsv, intent);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to parse Excel workbook: ${err.message}`);
+      }
+    }
+
     const textContent =
       typeof content === 'string'
         ? content
         : content.toString('utf-8');
-
-    const safeMime = (mimeType || '').toLowerCase();
 
     // 1. If CSV or tabular data
     if (

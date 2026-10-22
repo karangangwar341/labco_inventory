@@ -493,9 +493,14 @@ export function CatalogView() {
         valign: 'top',
         cell: (product) => {
           const activeUnits = product.units?.filter((u) => u.status !== 'SUPERSEDED') || [];
+          const baseUnit =
+            product.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
+            product.units?.find((u) => u.isBaseUnit)?.unitName ||
+            product.baseUnit ||
+            'Units';
           return (
             <div className="text-xs font-mono text-slate-700 leading-snug">
-              <span className="font-semibold text-slate-900">{product.baseUnit}</span>
+              <span className="font-semibold text-slate-900">{baseUnit}</span>
               {activeUnits.length > 1 && (
                 <div className="text-[10px] text-slate-400">
                   +{activeUnits.length - 1} pack {activeUnits.length - 1 === 1 ? 'unit' : 'units'}
@@ -517,7 +522,12 @@ export function CatalogView() {
           const min = Number(product.minQuantity ?? product.minThreshold ?? 0);
           const isOut = available <= 0;
           const isLow = min > 0 && available <= min;
-          const unit = product.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName || product.baseUnit;
+          const unit =
+            product.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
+            product.units?.find((u) => u.isBaseUnit)?.unitName ||
+            product.baseUnit ||
+            stock?.unit ||
+            '';
 
           return (
             <div className="text-xs">
@@ -567,7 +577,7 @@ export function CatalogView() {
     );
 
     return cols;
-  }, [categoryById, role, user?.clientId]);
+  }, [categoryById, role, user?.clientId, stockByProductId]);
 
   return (
     <div className="space-y-6">
@@ -751,9 +761,9 @@ export function CatalogView() {
           {/* Comprehensive Filter Controls */}
           <Card className="border-slate-200/90 shadow-2xs">
             <CardContent className="p-4 space-y-3">
-              <div className={`grid grid-cols-1 sm:grid-cols-2 ${role === 'CLIENT_ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-3`}>
+              <div className={`grid grid-cols-2 sm:grid-cols-2 ${role === 'CLIENT_ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-2.5 sm:gap-3`}>
                 {/* Search Input */}
-                <div className="relative">
+                <div className="relative col-span-2 sm:col-span-2 lg:col-span-1">
                   <input
                     type="search"
                     value={searchTerm}
@@ -928,46 +938,46 @@ export function CatalogView() {
       {activeTab === 'TAXONOMY' && (
         <div className="space-y-6">
           {/* Top Overview Cards */}
-          <div className={`grid grid-cols-1 ${role === 'CLIENT_ADMIN' ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-4`}>
-            <Card className="bg-gradient-to-br from-blue-50/60 to-white border-blue-200/80">
-              <CardContent className="p-4">
-                <div className="text-xs font-semibold text-blue-900">Total Categories</div>
-                <div className="mt-1 text-2xl font-bold text-slate-900">
+          <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4`}>
+            <Card className="bg-gradient-to-br from-blue-50/70 to-white border-blue-200/80 shadow-2xs">
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-[11px] sm:text-xs font-semibold text-blue-900">Total Categories</div>
+                <div className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
                   {categories.length}{' '}
-                  <span className="text-xs font-normal text-slate-500">
-                    ({roots.length} top-level, {categories.length - roots.length} subcategories)
+                  <span className="text-[10px] sm:text-xs font-normal text-slate-500">
+                    ({roots.length} top, {categories.length - roots.length} sub)
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">Structured inventory taxonomy hierarchy</p>
+                <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 truncate">Taxonomy hierarchy</p>
               </CardContent>
             </Card>
 
             {role !== 'CLIENT_ADMIN' && (
-              <Card className="bg-gradient-to-br from-indigo-50/60 to-white border-indigo-200/80">
-                <CardContent className="p-4">
-                  <div className="text-xs font-semibold text-indigo-900">Registered Brands</div>
-                  <div className="mt-1 text-2xl font-bold text-slate-900">
-                    {brands.length} <span className="text-xs font-normal text-slate-500">brands</span>
+              <Card className="bg-gradient-to-br from-indigo-50/70 to-white border-indigo-200/80 shadow-2xs">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="text-[11px] sm:text-xs font-semibold text-indigo-900">Registered Brands</div>
+                  <div className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
+                    {brands.length} <span className="text-[10px] sm:text-xs font-normal text-slate-500">brands</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">Manufacturers and suppliers represented</p>
+                  <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 truncate">Suppliers &amp; makers</p>
                 </CardContent>
               </Card>
             )}
 
-            <Card className="bg-gradient-to-br from-emerald-50/60 to-white border-emerald-200/80">
-              <CardContent className="p-4">
-                <div className="text-xs font-semibold text-emerald-900">Catalog Coverage</div>
-                <div className="mt-1 text-2xl font-bold text-slate-900">
-                  {products.length} <span className="text-xs font-normal text-slate-500">total products</span>
+            <Card className={`bg-gradient-to-br from-emerald-50/70 to-white border-emerald-200/80 shadow-2xs ${role !== 'CLIENT_ADMIN' ? 'col-span-2 sm:col-span-1' : ''}`}>
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-[11px] sm:text-xs font-semibold text-emerald-900">Catalog Coverage</div>
+                <div className="mt-1 text-xl sm:text-2xl font-bold text-slate-900">
+                  {products.length} <span className="text-[10px] sm:text-xs font-normal text-slate-500">products</span>
                 </div>
-                <p className="mt-1 text-[11px] text-slate-500">Active items assigned to taxonomies</p>
+                <p className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-500 truncate">Active items cataloged</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Categories Hierarchy Section */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Category Hierarchy &amp; Classifications</h3>
                 <p className="text-xs text-slate-500">Browse categories and drill down into their subcategories and products.</p>
@@ -977,6 +987,7 @@ export function CatalogView() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="w-full sm:w-auto justify-center min-h-[38px] shrink-0"
                   onClick={() => {
                     setCategoryParentId('');
                     setShowCategoryForm(true);
@@ -996,13 +1007,13 @@ export function CatalogView() {
                 return (
                   <Card key={root.id} className="border-slate-200 hover:border-slate-300 transition-all">
                     <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <CardTitle className="text-sm font-bold text-slate-900">
+                      <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                            <CardTitle className="text-sm font-bold text-slate-900 break-words">
                               📁 {root.name}
                             </CardTitle>
-                            <Badge variant={root.ownerScope === 'COMPANY' ? 'primary' : 'purple'} size="sm">
+                            <Badge variant={root.ownerScope === 'COMPANY' ? 'primary' : 'purple'} size="sm" className="shrink-0">
                               {root.ownerScope}
                             </Badge>
                           </div>
@@ -1014,6 +1025,7 @@ export function CatalogView() {
                         <Button
                           variant="secondary"
                           size="sm"
+                          className="shrink-0 min-h-[34px] text-xs px-3"
                           onClick={() => viewProductsInCategory(root.id)}
                         >
                           Browse →
@@ -1024,34 +1036,35 @@ export function CatalogView() {
                     <CardContent className="space-y-3 pt-2 text-xs">
                       {/* Subcategories */}
                       <div>
-                        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                          <span>{role === 'CLIENT_ADMIN' ? 'Subcategories' : 'Subcategories & Brands'} ({subs.length})</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                            {role === 'CLIENT_ADMIN' ? 'Subcategories' : 'Subcategories & Brands'} ({subs.length})
+                          </span>
                           {canCreate && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <button
+                                type="button"
                                 onClick={() => {
                                   setCategoryParentId(root.id);
                                   setShowCategoryForm(true);
                                 }}
-                                className="text-blue-600 hover:text-blue-800 text-[11px] font-semibold cursor-pointer"
+                                className="inline-flex items-center px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-[11px] font-semibold transition-colors min-h-[30px] cursor-pointer"
                               >
                                 + Subcategory
                               </button>
                               {role !== 'CLIENT_ADMIN' && (
-                                <>
-                                  <span className="text-slate-300">|</span>
-                                  <button
-                                    onClick={() => {
-                                      setBrandParentId(root.id);
-                                      setBrandName('');
-                                      setBrandError(null);
-                                      setShowBrandModal(true);
-                                    }}
-                                    className="text-indigo-600 hover:text-indigo-800 text-[11px] font-semibold cursor-pointer"
-                                  >
-                                    + Add Brand
-                                  </button>
-                                </>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBrandParentId(root.id);
+                                    setBrandName('');
+                                    setBrandError(null);
+                                    setShowBrandModal(true);
+                                  }}
+                                  className="inline-flex items-center px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-md text-[11px] font-semibold transition-colors min-h-[30px] cursor-pointer"
+                                >
+                                  + Add Brand
+                                </button>
                               )}
                             </div>
                           )}
@@ -1112,7 +1125,7 @@ export function CatalogView() {
           {/* Brands Directory Section */}
           {role !== 'CLIENT_ADMIN' && (
             <div className="space-y-3 pt-4 border-t border-slate-200">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Brands &amp; Manufacturers Directory</h3>
                   <p className="text-xs text-slate-500">Every brand recognized in your warehouse inventory.</p>
@@ -1121,6 +1134,7 @@ export function CatalogView() {
                   <Button
                     variant="secondary"
                     size="sm"
+                    className="w-full sm:w-auto justify-center min-h-[38px] shrink-0"
                     onClick={() => {
                       setBrandName('');
                       setBrandParentId(roots[0]?.id || '');

@@ -459,14 +459,14 @@ export function DepartmentsView() {
                 id={`department-${d.id}`}
                 className={`bg-white border rounded-xl p-4 shadow-sm space-y-2 transition-colors ${highlightedDepartmentId === d.id ? 'border-[#2563eb] ring-2 ring-[#2563eb]/20' : 'border-[#dbe3ee]'}`}
               >
-                <div className="flex justify-end">
-                  <Badge variant={d.status === 'ACTIVE' ? 'success' : 'neutral'}>
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-semibold text-[#172033] text-sm leading-tight">
+                    {d.name}
+                  </h3>
+                  <Badge variant={d.status === 'ACTIVE' ? 'success' : 'neutral'} size="sm" className="shrink-0">
                     {d.status}
                   </Badge>
                 </div>
-                <h3 className="font-semibold text-[#172033] text-sm leading-tight">
-                  {d.name}
-                </h3>
                 {role === 'SUPER_ADMIN' && (d.proposedName || d.proposedStatus) && (
                   <div className="rounded-md bg-blue-50 p-2 text-[11px] text-blue-900">
                     <p className="font-semibold">Change awaiting review</p>
@@ -510,10 +510,11 @@ export function DepartmentsView() {
             <Card>
               <CardHeader
                 action={
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                     <Button
                       variant="secondary"
                       size="sm"
+                      className="w-full sm:w-auto justify-center min-h-[38px] text-xs font-semibold"
                       disabled={!activeDepartments.length || issueDraftQuery.data?.status !== 'DRAFT'}
                       onClick={() => {
                         setErrorMsg(null);
@@ -530,6 +531,7 @@ export function DepartmentsView() {
                     <Button
                       variant="primary"
                       size="sm"
+                      className="w-full sm:w-auto justify-center min-h-[38px] text-xs font-semibold"
                       disabled={issueDraftQuery.data?.status !== 'DRAFT' || !issueDraftQuery.data?.issues?.length || submitIssueBatchMutation.isPending}
                       onClick={() => submitIssueBatchMutation.mutate()}
                     >
@@ -562,162 +564,256 @@ export function DepartmentsView() {
                 )}
               </CardHeader>
               <CardContent className="p-0">
-                {/* Inline Fast Add Row (Zero-Modal Entry) */}
+                {/* Responsive Fast Add Section (Zero-Modal Entry) */}
                 {issueDraftQuery.data?.status === 'DRAFT' && activeDepartments.length > 0 && stockedProducts.length > 0 && (
-                  <div className="p-3 bg-blue-50/50 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center gap-2.5 text-xs">
-                    <span className="text-[11px] font-bold text-blue-900 shrink-0">
-                      ⚡ Quick Add Line:
-                    </span>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 w-full sm:w-auto">
-                      <select
-                        value={effectiveIssueDepartmentId}
-                        onChange={(e) => setIssueDepartmentId(e.target.value)}
-                        className="w-full sm:w-auto px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      >
-                        {activeDepartments.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={effectiveIssueProductId}
-                        onChange={(e) => {
-                          setIssueProductId(e.target.value);
-                          setIssueUnitId('');
-                          setIssueBalanceId('');
-                        }}
-                        className="w-full sm:w-auto flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0"
-                      >
-                        {stockedProducts.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                  <div className="p-3.5 bg-blue-50/60 border-b border-blue-100/90 text-xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                        ⚡ Quick Add Reagent Line
+                      </span>
+                      <span className="text-[11px] text-blue-600 font-medium hidden sm:inline">
+                        Fast zero-modal draft entry
+                      </span>
                     </div>
 
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
-                      <div className="flex items-center gap-1 w-full sm:w-auto">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+                      {/* Department Select */}
+                      <div className="sm:col-span-3">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
+                          Receiving Dept
+                        </label>
+                        <select
+                          value={effectiveIssueDepartmentId}
+                          onChange={(e) => setIssueDepartmentId(e.target.value)}
+                          className="w-full px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
+                        >
+                          {activeDepartments.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Product Select */}
+                      <div className="sm:col-span-4">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
+                          Product / Item
+                        </label>
+                        <select
+                          value={effectiveIssueProductId}
+                          onChange={(e) => {
+                            setIssueProductId(e.target.value);
+                            setIssueUnitId('');
+                            setIssueBalanceId('');
+                          }}
+                          className="w-full px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0 truncate"
+                        >
+                          {stockedProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Quantity & Unit Row */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
+                          Quantity &amp; Unit
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0.0001"
+                            placeholder="Qty"
+                            value={issueQuantity}
+                            onChange={(e) => setIssueQuantity(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && Number(issueQuantity) > 0) {
+                                e.preventDefault();
+                                saveIssueLineMutation.mutate();
+                              }
+                            }}
+                            className="w-1/2 sm:w-20 px-2 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-right min-h-[38px] sm:min-h-0"
+                          />
+                          <select
+                            value={effectiveIssueUnitId}
+                            onChange={(e) => setIssueUnitId(e.target.value)}
+                            className="w-1/2 sm:flex-1 px-2 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
+                          >
+                            {issueUnits.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.unitName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Notes / Clinical Purpose */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
+                          Clinical Purpose / Notes (Optional)
+                        </label>
                         <input
-                          type="number"
-                          min="0.0001"
-                          placeholder="Qty"
-                          value={issueQuantity}
-                          onChange={(e) => setIssueQuantity(e.target.value)}
+                          type="text"
+                          placeholder="Purpose / notes"
+                          value={issueNotes}
+                          onChange={(e) => setIssueNotes(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && Number(issueQuantity) > 0) {
                               e.preventDefault();
                               saveIssueLineMutation.mutate();
                             }
                           }}
-                          className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          className="w-full px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
                         />
-                        <select
-                          value={effectiveIssueUnitId}
-                          onChange={(e) => setIssueUnitId(e.target.value)}
-                          className="flex-1 sm:flex-none px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          {issueUnits.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.unitName}
-                            </option>
-                          ))}
-                        </select>
                       </div>
 
-                      <input
-                        type="text"
-                        placeholder="Clinical purpose / notes (optional)"
-                        value={issueNotes}
-                        onChange={(e) => setIssueNotes(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && Number(issueQuantity) > 0) {
-                            e.preventDefault();
-                            saveIssueLineMutation.mutate();
-                          }
-                        }}
-                        className="flex-1 min-w-[120px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        disabled={!Number(issueQuantity) || saveIssueLineMutation.isPending}
-                        onClick={() => saveIssueLineMutation.mutate()}
-                        className="w-full sm:w-auto text-xs px-3 py-1.5 gap-1 shrink-0"
-                      >
-                        <span>+</span>
-                        <span>Add Line</span>
-                      </Button>
+                      {/* Add Button */}
+                      <div className="sm:col-span-1 flex items-end">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          disabled={!Number(issueQuantity) || saveIssueLineMutation.isPending}
+                          onClick={() => saveIssueLineMutation.mutate()}
+                          className="w-full justify-center text-xs py-2 sm:py-1.5 min-h-[38px] sm:min-h-0 font-semibold gap-1"
+                        >
+                          <span>+</span>
+                          <span>Add</span>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {issueDraftQuery.data?.issues?.length ? (
-                  <Table>
-                    <TableHeader>
-                      <tr>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Receiving Department</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </tr>
-                    </TableHeader>
-                    <TableBody>
+                  <>
+                    {/* Mobile Card List (< md) */}
+                    <div className="block md:hidden divide-y divide-slate-100">
                       {issueDraftQuery.data.issues.map((line) => (
-                        <TableRow key={line.id}>
-                          <TableCell className="font-semibold text-[#172033]">
-                            {line.product?.name || 'Product'}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="neutral">
-                              {line.department?.name || 'Department'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-[#172033]">
-                            {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
-                          </TableCell>
-                          <TableCell className="text-xs text-[#5b6678]">
-                            {line.notes || '—'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingIssueId(line.id);
-                                  setIssueDepartmentId(line.departmentId);
-                                  setIssueProductId(line.productId);
-                                  setIssueUnitId(line.unit?.id || '');
-                                  setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
-                                  setIssueQuantity(String(line.quantity));
-                                  setIssueNotes(line.notes || '');
-                                  setIsIssueModalOpen(true);
-                                }}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                disabled={removeIssueLineMutation.isPending}
-                                onClick={() => removeIssueLineMutation.mutate(line.id)}
-                              >
-                                Remove
-                              </Button>
+                        <div key={line.id} className="p-3.5 space-y-2 bg-white hover:bg-slate-50/50 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm text-[#172033] leading-snug">
+                                {line.product?.name || 'Product'}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="neutral" size="sm">
+                                  {line.department?.name || 'Department'}
+                                </Badge>
+                                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                                  {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
+                                </span>
+                              </div>
                             </div>
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                          {line.notes && (
+                            <p className="text-xs text-slate-500 bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                              {line.notes}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="flex-1 justify-center min-h-[34px] text-xs font-medium"
+                              onClick={() => {
+                                setEditingIssueId(line.id);
+                                setIssueDepartmentId(line.departmentId);
+                                setIssueProductId(line.productId);
+                                setIssueUnitId(line.unit?.id || '');
+                                setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
+                                setIssueQuantity(String(line.quantity));
+                                setIssueNotes(line.notes || '');
+                                setIsIssueModalOpen(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              className="flex-1 justify-center min-h-[34px] text-xs font-medium"
+                              disabled={removeIssueLineMutation.isPending}
+                              onClick={() => removeIssueLineMutation.mutate(line.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </div>
+
+                    {/* Desktop Table (>= md) */}
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <tr>
+                            <TableHead>Product</TableHead>
+                            <TableHead>Receiving Department</TableHead>
+                            <TableHead>Quantity</TableHead>
+                            <TableHead>Notes</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </tr>
+                        </TableHeader>
+                        <TableBody>
+                          {issueDraftQuery.data.issues.map((line) => (
+                            <TableRow key={line.id}>
+                              <TableCell className="font-semibold text-[#172033]">
+                                {line.product?.name || 'Product'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="neutral">
+                                  {line.department?.name || 'Department'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-xs text-[#172033]">
+                                {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
+                              </TableCell>
+                              <TableCell className="text-xs text-[#5b6678]">
+                                {line.notes || '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex justify-end gap-1.5">
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setEditingIssueId(line.id);
+                                      setIssueDepartmentId(line.departmentId);
+                                      setIssueProductId(line.productId);
+                                      setIssueUnitId(line.unit?.id || '');
+                                      setIssueBalanceId(balances.find((b) => b.productId === line.productId && b.batchId === (line.batchId || null))?.id || '');
+                                      setIssueQuantity(String(line.quantity));
+                                      setIssueNotes(line.notes || '');
+                                      setIsIssueModalOpen(true);
+                                    }}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="danger"
+                                    size="sm"
+                                    disabled={removeIssueLineMutation.isPending}
+                                    onClick={() => removeIssueLineMutation.mutate(line.id)}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 ) : (
                   <div className="py-8 text-center text-xs text-[#5b6678]">
                     <p className="font-medium text-[#172033]">No products in today’s stock out draft yet.</p>
@@ -809,8 +905,48 @@ export function DepartmentsView() {
                       </div>
                     </div>
 
-                    {/* Table of issues for this day */}
-                    <div className="overflow-x-auto">
+                    {/* Mobile Card List for Day Group (< md) */}
+                    <div className="block md:hidden divide-y divide-slate-100">
+                      {group.items.map((tx: DepartmentIssue) => (
+                        <div key={tx.id} className="p-3 space-y-2 bg-white">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs font-semibold text-slate-800">
+                              {tx.issueNumber || 'Dept Issue'}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={tx.status === 'APPROVED' ? 'success' : 'warning'} size="sm">
+                                {tx.status}
+                              </Badge>
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {tx.createdAt
+                                  ? new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">
+                              {tx.department?.name || tx.departmentName || 'Department'}
+                            </p>
+                            <p className="text-xs text-slate-700 mt-0.5">
+                              <span className="font-semibold text-blue-700">
+                                {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'}
+                              </span>
+                              {' · '}
+                              <span>{tx.product?.name || tx.productName || 'Product'}</span>
+                            </p>
+                          </div>
+                          {tx.notes && (
+                            <p className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded border border-slate-100">
+                              {tx.notes}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Table of issues for this day (>= md) */}
+                    <div className="hidden md:block overflow-x-auto">
                       <Table className="min-w-[640px]">
                         <TableHeader sticky>
                           <tr>

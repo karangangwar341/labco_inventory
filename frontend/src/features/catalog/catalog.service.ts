@@ -3,22 +3,41 @@ import { endpoints } from '../../lib/api/endpoints';
 import { CatalogProduct, CategoryDto } from './catalog.types';
 import { CreateProductDto, ProductVersionSummaryDto, ReviewProductDto } from '../../types/api/catalog';
 
+function normalizeProduct(p: CatalogProduct): CatalogProduct {
+  const baseUnit =
+    p.units?.find((u) => u.isBaseUnit && u.status !== 'SUPERSEDED')?.unitName ||
+    p.units?.find((u) => u.isBaseUnit)?.unitName ||
+    p.baseUnit ||
+    'Units';
+  return {
+    ...p,
+    baseUnit,
+    minThreshold: Number(p.minQuantity ?? p.minThreshold ?? 0),
+  };
+}
+
 export const catalogService = {
   getProducts: async (params?: { search?: string; categoryId?: string }): Promise<CatalogProduct[]> => {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.categoryId) q.set('categoryId', params.categoryId);
     const qs = q.toString() ? `?${q.toString()}` : '';
-    return apiClient.get<CatalogProduct[]>(`${endpoints.catalog.products()}${qs}`);
+    const raw = await apiClient.get<CatalogProduct[]>(`${endpoints.catalog.products()}${qs}`);
+    return (raw || []).map(normalizeProduct);
   },
 
   getManufacturingOptions: async (clientId?: string): Promise<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }> => {
     const qs = clientId ? `?clientId=${clientId}` : '';
-    return apiClient.get<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }>(`${endpoints.catalog.products()}/manufacturing-options${qs}`);
+    const res = await apiClient.get<{ rawMaterials: CatalogProduct[]; manufacturedProducts: CatalogProduct[] }>(`${endpoints.catalog.products()}/manufacturing-options${qs}`);
+    return {
+      rawMaterials: (res?.rawMaterials || []).map(normalizeProduct),
+      manufacturedProducts: (res?.manufacturedProducts || []).map(normalizeProduct),
+    };
   },
 
   getProductById: async (id: string): Promise<CatalogProduct> => {
-    return apiClient.get<CatalogProduct>(endpoints.catalog.productById(id));
+    const p = await apiClient.get<CatalogProduct>(endpoints.catalog.productById(id));
+    return normalizeProduct(p);
   },
 
   createProduct: async (payload: CreateProductDto): Promise<CatalogProduct> => {

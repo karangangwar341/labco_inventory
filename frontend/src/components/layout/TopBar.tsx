@@ -102,7 +102,7 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
   );
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 min-w-0 items-center justify-between gap-1 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur-md transition-colors sm:gap-3 sm:px-6 lg:px-8">
+    <header className="print:hidden sticky top-0 z-20 flex h-16 min-w-0 items-center justify-between gap-1 border-b border-slate-200/80 bg-white/95 px-2 backdrop-blur-md transition-colors sm:gap-3 sm:px-6 lg:px-8">
       {/* 1. Left Region: Mobile Trigger + Active Domain Context */}
       <div className="flex min-w-0 shrink items-center gap-1 sm:gap-3">
         {onOpenMobileMenu && (

@@ -48,6 +48,19 @@ export class ReportsController {
       return result.csvData;
     }
 
+    if (result.format === 'xlsx') {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${result.filename || 'report.xlsx'}"`,
+      );
+      res.end(result.buffer);
+      return;
+    }
+
     return result;
   }
 }

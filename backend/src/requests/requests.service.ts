@@ -80,6 +80,18 @@ export class RequestsService {
     return { whatText, fromText, toText, reqCode };
   }
 
+  private isClientLocation(
+    loc: { locationType?: LocationType; clientId?: string | null; warehouseId?: string | null } | null | undefined,
+  ): boolean {
+    return Boolean(loc && (loc.locationType === LocationType.CLIENT || (!loc.warehouseId && Boolean(loc.clientId))));
+  }
+
+  private isWarehouseLocation(
+    loc: { locationType?: LocationType; clientId?: string | null; warehouseId?: string | null } | null | undefined,
+  ): boolean {
+    return Boolean(loc && (loc.locationType === LocationType.WAREHOUSE || (!loc.clientId && Boolean(loc.warehouseId))));
+  }
+
   /**
    * Helper to validate and calculate line base quantities and snapshots.
    */
@@ -228,6 +240,65 @@ export class RequestsService {
    * Create a new draft request without altering inventory or reservations.
    */
   async createDraft(user: AuthenticatedUser, dto: CreateStockRequestDto) {
+    // Fetch locations to enforce domain invariants across all roles (including SUPER_ADMIN)
+    const sourceLoc = dto.sourceLocationId
+      ? await this.prisma.stockLocation.findUnique({
+          where: { id: dto.sourceLocationId },
+        })
+      : null;
+
+    const destLoc = dto.destinationLocationId
+      ? await this.prisma.stockLocation.findUnique({
+          where: { id: dto.destinationLocationId },
+        })
+      : null;
+
+    if (dto.sourceLocationId && !sourceLoc) {
+      throw new BadRequestException(`Source stock location ${dto.sourceLocationId} not found`);
+    }
+    if (dto.destinationLocationId && !destLoc) {
+      throw new BadRequestException(`Destination stock location ${dto.destinationLocationId} not found`);
+    }
+
+    // Invariant 1: Client-to-client transfer/dispatch is strictly prohibited across all roles
+    if (this.isClientLocation(sourceLoc) && this.isClientLocation(destLoc)) {
+      throw new BadRequestException(
+        'Client-to-client transfer is strictly prohibited. Clients are consumer endpoints, not distribution hubs.',
+      );
+    }
+
+    // Invariant 2: Dispatch must originate from a Warehouse and target a Client
+    if (dto.requestType === RequestType.DISPATCH) {
+      if (!this.isWarehouseLocation(sourceLoc)) {
+        throw new BadRequestException('Dispatch requests must originate from a warehouse stock location');
+      }
+      if (!this.isClientLocation(destLoc)) {
+        throw new BadRequestException('Dispatch requests must target a client stock location');
+      }
+    }
+
+    // Invariant 3: Transfer is strictly inter-warehouse (Warehouse -> Warehouse)
+    if (dto.requestType === RequestType.TRANSFER) {
+      if (!this.isWarehouseLocation(sourceLoc)) {
+        throw new BadRequestException('Transfer requests must originate from a warehouse stock location');
+      }
+      if (!this.isWarehouseLocation(destLoc)) {
+        throw new BadRequestException('Transfer requests must target a warehouse stock location');
+      }
+      if (sourceLoc?.id === destLoc?.id) {
+        throw new BadRequestException('Transfer source and destination warehouse locations must be different');
+      }
+    }
+
+    // Invariant 4: Client stock-out is an internal consumption or write-off, not a transfer
+    if (dto.requestType === RequestType.STOCK_OUT && this.isClientLocation(sourceLoc)) {
+      if (dto.destinationLocationId && dto.destinationLocationId !== sourceLoc?.id) {
+        throw new BadRequestException(
+          'Client stock-out is strictly an internal deduction. A destination location cannot be specified.',
+        );
+      }
+    }
+
     // Role-scoped location validation
     if (user.role === UserRole.STORE_ADMIN) {
       const warehouseId = user.warehouseId !== undefined
@@ -391,6 +462,20 @@ export class RequestsService {
       line.product?.kind !== ProductKind.RAW_MATERIAL || line.product?.ownerScope !== CatalogScope.COMPANY
     ))) {
       throw new ForbiddenException('Store Admins can only submit requests for company raw materials');
+    }
+
+    if (this.isClientLocation(request.sourceLocation) && this.isClientLocation(request.destinationLocation)) {
+      throw new BadRequestException('Client-to-client transfer is strictly prohibited.');
+    }
+    if (request.requestType === RequestType.DISPATCH && request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) {
+      throw new BadRequestException('Dispatch must originate from a warehouse.');
+    }
+    if (
+      request.requestType === RequestType.TRANSFER &&
+      ((request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) ||
+       (request.destinationLocation && !this.isWarehouseLocation(request.destinationLocation)))
+    ) {
+      throw new BadRequestException('Transfers are strictly inter-warehouse.');
     }
 
     const requirements = (await this.notificationsService.getSettings()).approvalRequirements;
@@ -715,6 +800,20 @@ export class RequestsService {
       line.product?.kind !== ProductKind.RAW_MATERIAL || line.product?.ownerScope !== CatalogScope.COMPANY
     ))) {
       throw new BadRequestException('Warehouse stock requests can only contain company raw materials');
+    }
+
+    if (this.isClientLocation(request.sourceLocation) && this.isClientLocation(request.destinationLocation)) {
+      throw new BadRequestException('Client-to-client transfer is strictly prohibited.');
+    }
+    if (request.requestType === RequestType.DISPATCH && request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) {
+      throw new BadRequestException('Dispatch must originate from a warehouse.');
+    }
+    if (
+      request.requestType === RequestType.TRANSFER &&
+      ((request.sourceLocation && !this.isWarehouseLocation(request.sourceLocation)) ||
+       (request.destinationLocation && !this.isWarehouseLocation(request.destinationLocation)))
+    ) {
+      throw new BadRequestException('Transfers are strictly inter-warehouse.');
     }
 
     const approved = await this.prisma.$transaction(async (tx) => {

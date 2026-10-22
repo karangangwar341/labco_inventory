@@ -105,6 +105,14 @@ export async function request<T = unknown>(
       }
 
       const contentType = res.headers.get('content-type') || '';
+      if (
+        contentType.includes('application/vnd.openxmlformats') ||
+        contentType.includes('application/vnd.ms-excel') ||
+        contentType.includes('application/octet-stream') ||
+        contentType.includes('application/pdf')
+      ) {
+        return (await res.blob()) as T;
+      }
       if (contentType.includes('text/')) {
         return (await res.text()) as T;
       }

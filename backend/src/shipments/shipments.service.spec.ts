@@ -310,4 +310,34 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
       expect(mockLedgerService.postTransaction).not.toHaveBeenCalled();
     });
   });
+
+  describe('5. Client-to-Client Shipment Prevention', () => {
+    it('rejects creating shipment when source and destination are both client locations', async () => {
+      const c2cRequest = {
+        id: 'req-c2c',
+        requestType: 'DISPATCH',
+        sourceLocation: { id: 'loc-c1', locationType: 'CLIENT', clientId: 'c1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        lines: [],
+      };
+
+      await expect(
+        shipmentsService.createShipmentForApprovedDispatch(mockPrisma, c2cRequest, superAdminUser.id),
+      ).rejects.toThrow('Client-to-client shipment is strictly prohibited');
+    });
+
+    it('rejects creating transfer shipment when destination is a client location', async () => {
+      const transferRequest = {
+        id: 'req-trans-c',
+        requestType: 'TRANSFER',
+        sourceLocation: { id: 'loc-wh-1', locationType: 'WAREHOUSE', warehouseId: 'wh-1' },
+        destinationLocation: { id: 'loc-c2', locationType: 'CLIENT', clientId: 'c2' },
+        lines: [],
+      };
+
+      await expect(
+        shipmentsService.createShipmentForApprovedDispatch(mockPrisma, transferRequest, superAdminUser.id),
+      ).rejects.toThrow('Transfers are strictly inter-warehouse');
+    });
+  });
 });

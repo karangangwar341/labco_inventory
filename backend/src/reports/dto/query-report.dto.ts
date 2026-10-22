@@ -7,15 +7,17 @@ export enum ReportType {
   BATCH_EXPIRY = 'BATCH_EXPIRY',
   CLIENT_CONSUMPTION = 'CLIENT_CONSUMPTION',
   PRODUCTION_RUNS = 'PRODUCTION_RUNS',
+  SHIPMENTS = 'SHIPMENTS',
 }
 
 export enum ReportFormat {
   JSON = 'json',
   CSV = 'csv',
+  XLSX = 'xlsx',
 }
 
 export class QueryReportDto {
-  @ApiPropertyOptional({ enum: ReportFormat, default: ReportFormat.JSON, description: 'Export format: json or csv' })
+  @ApiPropertyOptional({ enum: ReportFormat, default: ReportFormat.JSON, description: 'Export format: json, csv, or xlsx' })
   @IsOptional()
   @IsEnum(ReportFormat)
   format?: ReportFormat = ReportFormat.JSON;

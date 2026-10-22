@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   UserRole,
@@ -117,6 +118,10 @@ export class ReportsService {
         rows = await this.generateProductionRunsReport(user, query);
         break;
 
+      case ReportType.SHIPMENTS:
+        rows = await this.generateShipmentsReport(scopedLocationIds, query, user);
+        break;
+
       default:
         throw new BadRequestException(`Unsupported report type: ${reportType}`);
     }
@@ -134,6 +139,17 @@ export class ReportsService {
         filename: `${reportType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`,
         rowCount: rows.length,
         csvData,
+      };
+    }
+
+    if (format === ReportFormat.XLSX) {
+      const buffer = this.transformToExcel(rows, reportType, query, user);
+      return {
+        reportType,
+        format: 'xlsx',
+        filename: `${reportType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        rowCount: rows.length,
+        buffer,
       };
     }
 
@@ -398,6 +414,24 @@ export class ReportsService {
       issueWhere.clientId = clientId;
       returnWhere.clientId = clientId;
     }
+    if (query.productId) {
+      issueWhere.productId = query.productId;
+      returnWhere.productId = query.productId;
+    }
+    if (query.startDate || query.endDate) {
+      const issueDateFilter: Prisma.DateTimeNullableFilter = {};
+      const returnDateFilter: Prisma.DateTimeNullableFilter = {};
+      if (query.startDate) {
+        issueDateFilter.gte = new Date(query.startDate);
+        returnDateFilter.gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        issueDateFilter.lte = new Date(query.endDate);
+        returnDateFilter.lte = new Date(query.endDate);
+      }
+      issueWhere.issuedAt = issueDateFilter;
+      returnWhere.approvedAt = returnDateFilter;
+    }
 
     const [issues, returns] = await Promise.all([
       this.prisma.departmentIssue.findMany({
@@ -466,6 +500,20 @@ export class ReportsService {
       where.clientId = query.clientId;
     }
 
+    if (query.startDate || query.endDate) {
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (query.startDate) dateFilter.gte = new Date(query.startDate);
+      if (query.endDate) dateFilter.lte = new Date(query.endDate);
+      where.createdAt = dateFilter;
+    }
+
+    if (query.productId) {
+      where.OR = [
+        { inputs: { some: { productId: query.productId } } },
+        { outputs: { some: { productId: query.productId } } },
+      ];
+    }
+
     const runs = await this.prisma.productionRun.findMany({
       where,
       include: {
@@ -504,6 +552,295 @@ export class ReportsService {
   }
 
   // ==========================================
+  // 6. SHIPMENTS REPORT
+  // ==========================================
+
+  private async generateShipmentsReport(
+    scopedLocationIds: string[] | undefined,
+    query: QueryReportDto,
+    user: AuthenticatedUser,
+  ): Promise<Record<string, any>[]> {
+    const where: Prisma.ShipmentWhereInput = {};
+
+    if (scopedLocationIds) {
+      where.OR = [
+        { sourceLocationId: { in: scopedLocationIds } },
+        { destinationLocationId: { in: scopedLocationIds } },
+      ];
+    }
+
+    if (query.startDate || query.endDate) {
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (query.startDate) dateFilter.gte = new Date(query.startDate);
+      if (query.endDate) dateFilter.lte = new Date(query.endDate);
+      where.createdAt = dateFilter;
+    }
+
+    if (query.productId) {
+      where.lines = {
+        some: { productId: query.productId },
+      };
+    }
+
+    const shipments = await this.prisma.shipment.findMany({
+      where,
+      include: {
+        sourceLocation: {
+          select: {
+            id: true,
+            locationType: true,
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
+        destinationLocation: {
+          select: {
+            id: true,
+            locationType: true,
+            warehouse: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true } },
+          },
+        },
+        lines: {
+          include: {
+            product: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+    });
+
+    return shipments.map((s) => {
+      let sourceName =
+        s.sourceLocation.locationType === 'WAREHOUSE'
+          ? s.sourceLocation.warehouse?.name ?? 'Warehouse'
+          : s.sourceLocation.client?.name ?? 'Client';
+
+      let destinationName =
+        s.destinationLocation.locationType === 'WAREHOUSE'
+          ? s.destinationLocation.warehouse?.name ?? 'Warehouse'
+          : s.destinationLocation.client?.name ?? 'Client';
+
+      // Tenant privacy invariant: Client Admin must not see source warehouse name
+      if (user.role === UserRole.CLIENT_ADMIN && s.sourceLocation.locationType === 'WAREHOUSE') {
+        sourceName = '[REDACTED]';
+      }
+
+      const totalQty = s.lines.reduce((sum, l) => sum + l.dispatchedQty.toNumber(), 0);
+
+      return {
+        shipmentId: s.id,
+        shipmentType: s.shipmentType,
+        status: s.status,
+        sourceLocation: sourceName,
+        destinationLocation: destinationName,
+        totalItemsCount: s.lines.length,
+        dispatchedQuantity: totalQty,
+        dispatchedAt: s.dispatchedAt ? s.dispatchedAt.toISOString().slice(0, 10) : 'PENDING',
+        receivedAt: s.receivedAt ? s.receivedAt.toISOString().slice(0, 10) : 'PENDING',
+        createdAt: s.createdAt.toISOString().slice(0, 10),
+      };
+    });
+  }
+
+  // ==========================================
+  // EXCEL (XLSX) GENERATION ENGINE
+  // ==========================================
+
+  // ==========================================
+  // EXCEL & SPREADSHEET TRANSFORMATION ENGINE
+  // ==========================================
+
+  private static readonly REPORT_METADATA: Record<string, { title: string; description: string; deltaExplanation?: string }> = {
+    [ReportType.INVENTORY_LEDGER]: {
+      title: 'Movement History & Inventory Ledger',
+      description: 'Immutable double-entry inventory audit trail and stock movement deltas.',
+      deltaExplanation:
+        "Stock Delta ('baseDelta'): Net change in physical usable inventory in base packaging units. Positive (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). Negative (- / Direction 'OUT') = stock deducted (client dispatch, consumption, write-off).",
+    },
+    [ReportType.STOCK_BALANCE]: {
+      title: 'Current Stock Balances & Availability',
+      description: 'Real-time projected usable, reserved, available, and quarantined quantities.',
+      deltaExplanation:
+        'Formula Invariants: Available = Usable - Reserved. Physical Total = Usable + Damaged + Expired. Low Stock Alert triggers when Available < Min Threshold.',
+    },
+    [ReportType.BATCH_EXPIRY]: {
+      title: 'Batch & Lot Expiry Forecast',
+      description: 'Lot-level expiration schedule, days remaining, and shelf-life tracking.',
+      deltaExplanation:
+        'Days Remaining shows calendar days until lot expiration. Batches with <= 0 days remaining are classified as Expired and locked from dispensing.',
+    },
+    [ReportType.CLIENT_CONSUMPTION]: {
+      title: 'Clinical Department Consumption & Usage',
+      description: 'Internal clinical and department stock issues and return activities.',
+      deltaExplanation:
+        'Quantity reflects clinical dispensing or return to department in selected packaging units and base quantity.',
+    },
+    [ReportType.PRODUCTION_RUNS]: {
+      title: 'Manufacturing & Formulation Runs',
+      description: 'Work-in-progress runs, recipe inputs, batch outputs, and recorded wastage.',
+      deltaExplanation:
+        'Planned vs. Actual output and recorded wastage during formulation cycles.',
+    },
+    [ReportType.SHIPMENTS]: {
+      title: 'Shipments & Logistics Tracking',
+      description: 'Inbound, outbound, and inter-facility stock movements, status, quantities, and dates.',
+      deltaExplanation:
+        'Dispatched quantity shows items en route from source to destination location.',
+    },
+  };
+
+  private transformToExcel(
+    rows: Record<string, any>[],
+    reportType: ReportType,
+    query?: QueryReportDto,
+    user?: AuthenticatedUser,
+  ): Buffer {
+    const wb = XLSX.utils.book_new();
+    const meta = ReportsService.REPORT_METADATA[reportType] || {
+      title: reportType.replace(/_/g, ' '),
+      description: 'Labco Operations & Logistics Report',
+      deltaExplanation: "Stock Delta ('baseDelta'): Net change in usable inventory in base packaging units.",
+    };
+
+    if (rows.length === 0) {
+      const emptyAoa = [
+        ['LABCO INSTRUMENTS — DIAGNOSTIC WAREHOUSE OPERATIONS'],
+        ['Report Name:', meta.title],
+        ['Report Code:', reportType],
+        ['Description:', meta.description],
+        ['Generated At:', new Date().toISOString()],
+        ['Generated By:', user ? `${user.username} (${user.role})` : 'System'],
+        ['Status:', 'No data available for the selected criteria'],
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(emptyAoa);
+      ws['!cols'] = [{ wch: 20 }, { wch: 60 }];
+      XLSX.utils.book_append_sheet(wb, ws, 'Report Data');
+      this.appendGlossarySheet(wb);
+      return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    // Build the executive pre-information header section
+    const preInfo: any[][] = [
+      ['LABCO INSTRUMENTS — DIAGNOSTIC WAREHOUSE OPERATIONS'],
+      ['Report Name:', meta.title, '', 'Report Code:', reportType],
+      ['Description:', meta.description],
+      [
+        'Generated At:',
+        new Date().toISOString(),
+        '',
+        'Generated By:',
+        user ? `${user.username} (${user.role})` : 'System',
+        '',
+        'Total Records:',
+        rows.length,
+      ],
+      ['Column Delta Guide:', meta.deltaExplanation || "See 'Data Guide & Glossary' worksheet for complete definitions."],
+      ['Data Dictionary:', "Review the 'Data Guide & Glossary' sheet for full field definitions, formulas, and domain invariants."],
+      [], // blank separator row
+      headers, // Table header row
+    ];
+
+    // Format data rows: native numbers for numeric values, formula sanitization for text
+    const dataRows = rows.map((row) => {
+      return headers.map((h) => {
+        const val = row[h];
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'number') return val;
+        if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+        if (typeof val === 'string') {
+          const trimmed = val.trim();
+          // Formula injection defense: neutralize strings starting with =, +, -, @ ONLY if not a number
+          if (
+            (trimmed.startsWith('=') ||
+              trimmed.startsWith('+') ||
+              trimmed.startsWith('-') ||
+              trimmed.startsWith('@')) &&
+            isNaN(Number(trimmed))
+          ) {
+            return `'${trimmed}`;
+          }
+          if (!isNaN(Number(trimmed)) && !['=', '@'].includes(trimmed[0])) {
+            return Number(trimmed);
+          }
+          return val;
+        }
+        if (Array.isArray(val) || (typeof val === 'object' && val !== null)) {
+          return JSON.stringify(val);
+        }
+        return val;
+      });
+    });
+
+    const fullSheetAoa = [...preInfo, ...dataRows];
+    const ws = XLSX.utils.aoa_to_sheet(fullSheetAoa);
+
+    // Auto-fit column widths based on headers and data
+    ws['!cols'] = headers.map((h, colIndex) => {
+      let maxLen = Math.max(h.length, 12);
+      for (let r = 0; r < Math.min(dataRows.length, 50); r++) {
+        const cellVal = String(dataRows[r][colIndex] ?? '');
+        if (cellVal.length > maxLen) {
+          maxLen = Math.min(cellVal.length, 40);
+        }
+      }
+      return { wch: maxLen + 3 };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Report Data');
+
+    // Add dedicated glossary sheet explaining what every column means
+    this.appendGlossarySheet(wb);
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
+
+  private appendGlossarySheet(wb: XLSX.WorkBook) {
+    const glossaryAoa: any[][] = [
+      ['LABCO INSTRUMENTS WAREHOUSE MANAGEMENT SYSTEM — DATA DICTIONARY & GLOSSARY'],
+      ['Overview:', 'Audit-grade inventory movement ledgers, batch expiry forecasting, and stock telemetry definitions.'],
+      [],
+      ['COLUMN / FIELD', 'DATA TYPE', 'BUSINESS MEANING & DOMAIN INVARIANTS'],
+      ['baseDelta', 'Number (Decimal)', "STOCK DELTA: Net change in physical inventory balance measured in the catalog product's base unit. POSITIVE (+ / Direction 'IN') = stock added (receiving, inbound transfer, production output). NEGATIVE (- / Direction 'OUT') = stock deducted (client dispatch, consumption, write-off)."],
+      ['direction', 'String (IN / OUT)', "Operational stock flow relative to the location: 'IN' indicates stock entered inventory (+); 'OUT' indicates stock left inventory (-)."],
+      ['timestamp', 'ISO 8601 Date', 'Exact date and time when the inventory transaction was finalized and immutably ledgered.'],
+      ['transactionType', 'Enum', 'Operational workflow type: TRANSFER (between facilities), DISPATCH (warehouse to client), STOCK_IN (receipt), STOCK_OUT (deduction), MANUFACTURING (production).'],
+      ['sourceRefType', 'Enum', 'Authorizing document type: STOCK_REQUEST, SHIPMENT, DEPARTMENT_ISSUE, DEPARTMENT_RETURN, PRODUCTION_RUN, DIRECT.'],
+      ['sourceRefId', 'UUID / String', 'Unique reference ID of the authorizing document, request, or shipment.'],
+      ['productName', 'String', 'Standardized catalog name of the reagent, consumable, or diagnostic product.'],
+      ['batchNumber', 'String', 'Lot or Batch identifier tracking physical batch provenance and shelf life.'],
+      ['condition', 'Enum', 'Inventory quality classification: USABLE (available for use), DAMAGED (broken/quarantined), EXPIRED (past shelf life), QUARANTINE (holding).'],
+      ['originalQuantity', 'Number (Decimal)', 'Quantity specified in the transaction using the selected packaging unit snapshot.'],
+      ['unitName', 'String', 'The packaging unit active during transaction entry (e.g., Pack, Kit, Vial, Box, Bottle).'],
+      ['locationName', 'String', 'The warehouse or client facility where the inventory transaction was executed.'],
+      ['postedBy', 'String', 'Username of the authorized operator who submitted or posted the transaction.'],
+      [],
+      ['STOCK BALANCE FORMULAS & FIELDS', '', ''],
+      ['usableQuantity', 'Number (Decimal)', 'Stock in usable condition available for immediate transfer, dispatch, or manufacturing.'],
+      ['reservedQuantity', 'Number (Decimal)', 'Stock allocated to approved pending dispatches or in-progress runs, not yet shipped.'],
+      ['availableQuantity', 'Number (Decimal)', 'Formula: Available = Usable - Reserved. Non-negotiable invariant: must never be negative.'],
+      ['damagedQuantity', 'Number (Decimal)', 'Stock damaged or compromised, held segregated from usable stock.'],
+      ['expiredQuantity', 'Number (Decimal)', 'Stock exceeding its expiration date, locked from dispensing pending write-off.'],
+      ['physicalQuantity', 'Number (Decimal)', 'Formula: Physical Total = Usable + Damaged + Expired.'],
+      ['minThreshold', 'Number (Decimal)', 'Configured minimum safe reorder threshold for the product at this location.'],
+      ['lowStockAlert', 'Boolean', 'True when Available Stock is below Min Threshold (Available < Min Threshold).'],
+      [],
+      ['EXPIRY & LOGISTICS FIELDS', '', ''],
+      ['daysRemaining', 'Integer', 'Number of calendar days remaining until lot expiration. Zero or negative indicates expired.'],
+      ['batchStatus', 'Enum', 'ACTIVE (safe shelf life), WARNING (approaching expiry <= 30 days), EXPIRED (shelf life ended).'],
+      ['dispatchedQuantity', 'Number (Decimal)', 'Quantity of goods dispatched in an active shipment.'],
+      ['shipmentType', 'Enum', 'DISPATCH_TO_CLIENT (warehouse to client), TRANSFER (warehouse to warehouse).'],
+    ];
+
+    const wsGlossary = XLSX.utils.aoa_to_sheet(glossaryAoa);
+    wsGlossary['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsGlossary, 'Data Guide & Glossary');
+  }
+
+  // ==========================================
   // CSV CONVERSION & FORMULA INJECTION DEFENSE
   // (Test Plan Section 5 item 61)
   // ==========================================
@@ -519,7 +856,9 @@ export class ReportsService {
       if (val === null || val === undefined) return '""';
       let str = String(val).trim();
       // Neutralize formula injection (=, +, -, @)
-      if (str.startsWith('=') || str.startsWith('+') || str.startsWith('-') || str.startsWith('@')) {
+      // Legitimate numeric values (e.g. -20, 25, -1.5) must NOT be prepended with apostrophe!
+      const isNumeric = typeof val === 'number' || (!isNaN(Number(str)) && !['=', '@'].includes(str[0]));
+      if (!isNumeric && (str.startsWith('=') || str.startsWith('+') || str.startsWith('-') || str.startsWith('@'))) {
         str = `'${str}`;
       }
       return `"${str.replace(/"/g, '""')}"`;

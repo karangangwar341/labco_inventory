@@ -3,9 +3,10 @@ export type ReportType =
   | 'INVENTORY_LEDGER'
   | 'BATCH_EXPIRY'
   | 'CLIENT_CONSUMPTION'
-  | 'PRODUCTION_RUNS';
+  | 'PRODUCTION_RUNS'
+  | 'SHIPMENTS';
 
-export type ReportFormat = 'json' | 'csv';
+export type ReportFormat = 'json' | 'csv' | 'xlsx';
 
 export interface QueryReportDto {
   format?: ReportFormat;
