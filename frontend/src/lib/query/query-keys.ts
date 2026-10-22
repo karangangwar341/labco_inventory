@@ -24,6 +24,7 @@ export const queryKeys = {
       ['catalog', 'products', { scope: scope || 'company', ...filters }] as const,
     product: (id: string) => ['catalog', 'product', id] as const,
     categories: (scope?: string) => ['catalog', 'categories', scope || 'all'] as const,
+    units: () => ['catalog', 'units'] as const,
     manufacturingOptions: (clientId?: string) => ['catalog', 'manufacturing-options', clientId || 'current-client'] as const,
   },
 

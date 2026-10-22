@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Button } from '../../../components/ui/Button';
@@ -159,6 +160,23 @@ export function SystemSettingsForm() {
         <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
           <div><h2 className="text-base font-semibold text-[#172033]">Notification sound</h2><p className="mt-1 text-sm text-[#5b6678]">Sound is off by default.</p></div>
           <label className="flex min-h-11 items-center gap-3 text-sm text-[#172033]"><input type="checkbox" checked={draft.soundEnabled} onChange={(event) => setDraft({ ...draft, soundEnabled: event.target.checked })} />Play sound for in-app notifications</label>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-[#172033]">Measurement Units &amp; Packaging Formats</h2>
+              <p className="mt-1 text-sm text-[#5b6678]">
+                Manage global standard units (vials, boxes, packs, volumes, weights) available across catalog items and requests.
+              </p>
+            </div>
+            <Link
+              href="/catalog?tab=UNITS"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 shrink-0"
+            >
+              <span>📏 Open Units Directory →</span>
+            </Link>
+          </div>
         </section>
 
         <div className="flex justify-end"><Button type="submit" disabled={!validIntervals || saveMutation.isPending}>{saveMutation.isPending ? 'Saving...' : 'Save settings'}</Button></div>

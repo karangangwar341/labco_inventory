@@ -83,6 +83,8 @@ export const endpoints = {
     reviewProductVersion: (id: string, versionId: string) =>
       `/products/${id}/versions/${versionId}/review`,
     categories: () => "/categories",
+    units: () => "/units",
+    unitByName: (name: string) => `/units/${encodeURIComponent(name)}`,
   },
 
   manufacturing: {

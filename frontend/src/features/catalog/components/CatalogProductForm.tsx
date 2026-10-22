@@ -122,6 +122,8 @@ export function CatalogProductForm({
   const [customUnits, setCustomUnits] = useState<string[]>([]);
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [modalUnitName, setModalUnitName] = useState('');
+  const [modalUnitCategory, setModalUnitCategory] = useState<'CONTAINER' | 'PACKAGING' | 'VOLUME' | 'WEIGHT' | 'COUNT' | 'OTHER'>('PACKAGING');
+  const [saveAsSystemStandard, setSaveAsSystemStandard] = useState(true);
   const [modalUnitError, setModalUnitError] = useState<string | null>(null);
 
   // Quick Category Creation Modal State
@@ -163,6 +165,19 @@ export function CatalogProductForm({
     queryFn: () => catalogService.getCategories(),
   });
 
+  const { data: standardUnits = [] } = useQuery({
+    queryKey: queryKeys.catalog.units(),
+    queryFn: () => catalogService.getStandardUnits(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const saveStandardUnitMutation = useMutation({
+    mutationFn: catalogService.createStandardUnit,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.catalog.units() });
+    },
+  });
+
   // Categories scoped to current user
   const visibleCategories = useMemo(() => {
     const scoped = categories.filter((category) =>
@@ -202,15 +217,25 @@ export function CatalogProductForm({
 
   // All standard units combined with product units & custom registered units
   const allStandardUnits = useMemo(() => {
-    const set = new Set<string>(STANDARD_PRESET_UNITS);
+    const set = new Set<string>();
+    // Priority: system standard units loaded from backend
+    standardUnits.forEach((u) => {
+      if (u.name?.trim()) set.add(u.name.trim());
+    });
+    // Fallback defaults if backend units not loaded
+    if (set.size === 0) {
+      STANDARD_PRESET_UNITS.forEach((u) => set.add(u));
+    }
+    // Units from existing products
     products.forEach((p) => {
       p.units?.forEach((u) => {
         if (u.unitName?.trim()) set.add(u.unitName.trim());
       });
     });
+    // Locally added custom units in this session
     customUnits.forEach((u) => set.add(u.trim()));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products, customUnits]);
+  }, [products, customUnits, standardUnits]);
 
   // Known units and attribute names for suggestions
   const unitNames = useMemo(
@@ -686,12 +711,23 @@ export function CatalogProductForm({
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                {role === 'SUPER_ADMIN' && (
+                  <Link
+                    href="/catalog?tab=UNITS"
+                    target="_blank"
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 mr-1"
+                  >
+                    <span>📏 Manage Units Directory ↗</span>
+                  </Link>
+                )}
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={() => {
                     setModalUnitName('');
+                    setModalUnitCategory('PACKAGING');
+                    setSaveAsSystemStandard(role === 'SUPER_ADMIN');
                     setModalUnitError(null);
                     setShowUnitModal(true);
                   }}
@@ -1243,7 +1279,7 @@ export function CatalogProductForm({
       <Modal
         isOpen={showUnitModal}
         onClose={() => setShowUnitModal(false)}
-        title="Register Custom Measurement Unit"
+        title="Register Measurement Unit"
         description="Add a reusable standard packaging format or scientific measurement unit."
       >
         <div className="space-y-4 pt-2">
@@ -1253,15 +1289,54 @@ export function CatalogProductForm({
             </div>
           )}
 
-          <Input
-            label="Measurement / Packaging Unit Name"
-            value={modalUnitName}
-            onChange={(e) => setModalUnitName(e.target.value)}
-            required
-            maxLength={60}
-            placeholder="e.g. Box of 25, Drum of 200L, Pack of 50 Tests, Pallet"
-            helperText="Standard unit name that will be reusable across all product packaging configurations."
-          />
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Unit Name <span className="text-rose-500">*</span>
+            </label>
+            <Input
+              value={modalUnitName}
+              onChange={(e) => setModalUnitName(e.target.value)}
+              required
+              maxLength={60}
+              placeholder="e.g. Box of 25, Drum of 200L, Pack of 50 Tests, Pallet"
+              helperText="Unit name available across all product packaging and conversion configurations."
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Classification / Category
+            </label>
+            <select
+              value={modalUnitCategory}
+              onChange={(e) => setModalUnitCategory(e.target.value as any)}
+              className="w-full text-xs rounded-lg border border-slate-300 bg-white p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="PACKAGING">Packaging (Boxes, Packs, Cartons, Kits)</option>
+              <option value="CONTAINER">Container (Vials, Ampoules, Bottles, Tubes)</option>
+              <option value="VOLUME">Volume (Liters, Milliliters, Gallons)</option>
+              <option value="WEIGHT">Weight / Mass (Kilograms, Grams, Milligrams)</option>
+              <option value="COUNT">Count (Pieces, Units, Strips)</option>
+              <option value="OTHER">Other / Specialized</option>
+            </select>
+          </div>
+
+          {role === 'SUPER_ADMIN' && (
+            <label className="flex items-start gap-2 pt-1 text-xs text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={saveAsSystemStandard}
+                onChange={(e) => setSaveAsSystemStandard(e.target.checked)}
+                className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                <strong>Save to System Standard Units Directory</strong>
+                <span className="block text-[11px] text-slate-500">
+                  Persists globally so this unit is automatically available for all other products and future sessions.
+                </span>
+              </span>
+            </label>
+          )}
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
             <Button
@@ -1276,10 +1351,27 @@ export function CatalogProductForm({
               type="button"
               variant="primary"
               size="sm"
-              disabled={!modalUnitName.trim()}
-              onClick={() => {
+              disabled={!modalUnitName.trim() || saveStandardUnitMutation.isPending}
+              isLoading={saveStandardUnitMutation.isPending}
+              onClick={async () => {
                 const trimmed = modalUnitName.trim();
                 if (!trimmed) return;
+
+                if (role === 'SUPER_ADMIN' && saveAsSystemStandard) {
+                  try {
+                    await saveStandardUnitMutation.mutateAsync({
+                      name: trimmed,
+                      category: modalUnitCategory,
+                    });
+                  } catch (err: any) {
+                    // If already exists or error, display it unless it's just already in the list
+                    if (!err.message?.includes('already exists')) {
+                      setModalUnitError(err.message || 'Failed to save unit to system registry');
+                      return;
+                    }
+                  }
+                }
+
                 setCustomUnits((prev) => [...prev, trimmed]);
                 // Set on last unit if empty, or append new unit row
                 setUnits((curr) => {

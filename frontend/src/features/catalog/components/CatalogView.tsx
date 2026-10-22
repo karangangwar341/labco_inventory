@@ -19,8 +19,9 @@ import { ErrorState } from '@/components/feedback/ErrorState';
 import { catalogService } from '../catalog.service';
 import { CatalogProduct, CategoryDto } from '../catalog.types';
 import { inventoryService } from '@/features/inventory/inventory.service';
+import { UnitsDirectory } from './UnitsDirectory';
 
-type CatalogTab = 'PRODUCTS' | 'TAXONOMY';
+type CatalogTab = 'PRODUCTS' | 'TAXONOMY' | 'UNITS';
 
 export function CatalogView() {
   const { user, role } = useAuth();
@@ -29,10 +30,18 @@ export function CatalogView() {
   const productIdFromNotification = searchParams.get('productId');
   const queryClient = useQueryClient();
   const attemptedProductLookup = useRef<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<CatalogTab>('PRODUCTS');
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<CatalogTab>(
+    tabParam === 'UNITS' ? 'UNITS' : tabParam === 'TAXONOMY' ? 'TAXONOMY' : 'PRODUCTS'
+  );
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [notificationLoadError, setNotificationLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tabParam === 'UNITS' || tabParam === 'TAXONOMY' || tabParam === 'PRODUCTS') {
+      setActiveTab(tabParam as CatalogTab);
+    }
+  }, [tabParam]);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,6 +80,12 @@ export function CatalogView() {
     queryKey: queryKeys.catalog.categories(user?.clientId ? `client-${user.clientId}` : 'company'),
     queryFn: () => catalogService.getCategories(),
     staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: standardUnits = [] } = useQuery({
+    queryKey: queryKeys.catalog.units(),
+    queryFn: () => catalogService.getStandardUnits(),
+    staleTime: 5 * 60 * 1000,
   });
 
   // Cached inventory balances to display real-time stock without redundant server requests
@@ -681,6 +696,24 @@ export function CatalogView() {
                 : `${categories.length} categories · ${brands.length} brands`}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('UNITS')}
+            className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              activeTab === 'UNITS'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>📏 Units of Measure</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'UNITS' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {standardUnits.length} units
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1173,6 +1206,9 @@ export function CatalogView() {
           )}
         </div>
       )}
+
+      {/* TAB 3: UNITS OF MEASURE DIRECTORY */}
+      {activeTab === 'UNITS' && <UnitsDirectory />}
 
       {/* Product Detail & Inspection Modal */}
       <Modal

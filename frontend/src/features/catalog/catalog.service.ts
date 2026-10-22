@@ -1,6 +1,6 @@
 import { apiClient } from '../../lib/api/client';
 import { endpoints } from '../../lib/api/endpoints';
-import { CatalogProduct, CategoryDto } from './catalog.types';
+import { CatalogProduct, CategoryDto, StandardUnitDto, CreateStandardUnitPayload } from './catalog.types';
 import { CreateProductDto, ProductVersionSummaryDto, ReviewProductDto } from '../../types/api/catalog';
 
 function normalizeProduct(p: CatalogProduct): CatalogProduct {
@@ -62,5 +62,17 @@ export const catalogService = {
 
   getCategories: async (): Promise<CategoryDto[]> => {
     return apiClient.get<CategoryDto[]>(endpoints.catalog.categories());
+  },
+
+  getStandardUnits: async (): Promise<StandardUnitDto[]> => {
+    return apiClient.get<StandardUnitDto[]>(endpoints.catalog.units());
+  },
+
+  createStandardUnit: async (payload: CreateStandardUnitPayload): Promise<StandardUnitDto> => {
+    return apiClient.post<StandardUnitDto>(endpoints.catalog.units(), payload);
+  },
+
+  deleteStandardUnit: async (name: string): Promise<{ success: boolean; message: string }> => {
+    return apiClient.delete<{ success: boolean; message: string }>(endpoints.catalog.unitByName(name));
   },
 };

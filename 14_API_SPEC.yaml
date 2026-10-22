@@ -182,6 +182,29 @@ paths:
       summary: Create a main category (omit parentId) or a brand subcategory (set parentId to a main category). Only one subcategory level is supported.
       responses:
         "201": { description: Category created }
+  /units:
+    get:
+      summary: List standard measurement units, category classifications, and real-time product usage statistics.
+      responses:
+        "200": { description: List of standard units with catalog product usage count }
+    post:
+      summary: Create a standard measurement unit template (Super Admin only).
+      responses:
+        "201": { description: Standard unit template created }
+        "403": { description: Super Admin only }
+        "409": { description: Unit name already exists }
+  /units/{name}:
+    delete:
+      summary: Remove a custom unit template or hide a built-in standard unit template (Super Admin only).
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Unit template removed }
+        "403": { description: Super Admin only }
+        "404": { description: Unit not found }
   /inventory/locations:
     get:
       summary: List stock locations available within the caller's authorized scope.
