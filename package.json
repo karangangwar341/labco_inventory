@@ -17,13 +17,20 @@
     "lint:backend": "npm run lint --workspace backend",
     "lint:frontend": "npm run lint --workspace frontend",
     "lint": "npm run lint:backend && npm run lint:frontend",
-    "typecheck": "npm run typecheck --workspace frontend",
+    "typecheck:frontend": "npm run typecheck --workspace frontend",
+    "typecheck:backend": "npm run typecheck --workspace backend",
+    "typecheck": "npm run typecheck:frontend && npm run typecheck:backend",
     "test:backend": "npm run test --workspace backend",
     "test": "npm run test:backend",
     "build:backend": "npm run build --workspace backend",
     "build:frontend": "npm run build --workspace frontend",
     "build": "npm run prisma:generate && npm run build:backend && npm run build:frontend",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "overrides": {
+    "braces": "^3.0.3",
+    "deepmerge-ts": "^8.0.0",
+    "tmp": "^0.2.6"
   },
   "keywords": [
     "inventory",

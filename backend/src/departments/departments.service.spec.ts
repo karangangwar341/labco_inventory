@@ -194,7 +194,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
 
       const result = await departmentsService.getOpenIssueBatch(clientAdminUser);
 
-      expect(result.status).toBe(DepartmentIssueBatchStatus.DRAFT);
+      expect(result!.status).toBe(DepartmentIssueBatchStatus.DRAFT);
       expect(mockPrisma.departmentIssueBatch.create).toHaveBeenCalledWith(expect.objectContaining({
         data: { clientId: 'client-123', createdById: 'ca-1' },
       }));

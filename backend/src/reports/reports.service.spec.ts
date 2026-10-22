@@ -113,7 +113,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         superAdminUser,
       );
 
-      const row = result.data[0];
+      const row = result.data![0];
       expect(row.usableQuantity).toBe(100);
       expect(row.reservedQuantity).toBe(30);
       expect(row.availableQuantity).toBe(70); // 100 - 30
@@ -168,7 +168,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         clientAdminUser,
       );
 
-      const row = result.data[0];
+      const row = result.data![0];
       // Invariant check: Inbound privacy filter masks source warehouse identity
       expect(row.locationName).toBe('[REDACTED]');
     });
@@ -196,7 +196,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         superAdminUser,
       );
 
-      const row = result.data[0];
+      const row = result.data![0];
       expect(row.isExpired).toBe(true);
       expect(row.daysRemaining).toBeLessThanOrEqual(0);
       expect(row.expiredQuantity).toBe(20);
@@ -261,7 +261,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         {
           transaction: {
             id: 'tx-1',
-            transactionType: TransactionType.TRANSFER,
+            transactionType: TransactionType.TRANSFER_DISPATCH,
             sourceRefType: 'STOCK_REQUEST',
             sourceRefId: 'sr-1',
             postedAt: new Date('2026-10-22'),
@@ -340,10 +340,10 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(result.format).toBe('xlsx');
       expect(result.filename).toContain('.xlsx');
       expect(Buffer.isBuffer(result.buffer)).toBe(true);
-      expect(result.buffer.length).toBeGreaterThan(100);
+      expect(result.buffer!.length).toBeGreaterThan(100);
       // Valid PK zip header for XLSX
-      expect(result.buffer[0]).toBe(0x50); // 'P'
-      expect(result.buffer[1]).toBe(0x4b); // 'K'
+      expect(result.buffer![0]).toBe(0x50); // 'P'
+      expect(result.buffer![1]).toBe(0x4b); // 'K'
     });
 
     it('includes pre-information metadata header, delta guide, and glossary sheet in XLSX workbook', async () => {
@@ -351,7 +351,7 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         {
           transaction: {
             id: 'tx-1',
-            transactionType: TransactionType.TRANSFER,
+            transactionType: TransactionType.TRANSFER_DISPATCH,
             sourceRefType: 'STOCK_REQUEST',
             sourceRefId: 'sr-1',
             postedAt: new Date('2026-10-22'),
@@ -498,8 +498,8 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         clientAdminUser,
       );
 
-      expect(result.data.length).toBe(1);
-      const row = result.data[0];
+      expect(result.data!.length).toBe(1);
+      const row = result.data![0];
       expect(row.sourceLocation).toBe('[REDACTED]');
       expect(row.destinationLocation).toBe('Hospital Beta');
       expect(row.dispatchedQuantity).toBe(50);

@@ -20,9 +20,9 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
   let mockLedgerService: any;
   let mockNotificationsService: any;
 
-  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
-  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN };
-  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN };
+  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa' };
+  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca' };
+  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN, status: 'ACTIVE', sessionId: 'sess-sm' };
 
   beforeEach(() => {
     mockPrisma = {

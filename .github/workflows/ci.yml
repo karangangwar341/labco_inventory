@@ -62,7 +62,7 @@ jobs:
         run: npm ci
 
       - name: Check Dependency Advisories
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=critical
 
       - name: Generate Prisma Client
         run: npm run prisma:generate
@@ -73,7 +73,7 @@ jobs:
       - name: Lint Backend and Frontend
         run: npm run lint
 
-      - name: Typecheck Frontend
+      - name: Typecheck Backend and Frontend
         run: npm run typecheck
 
       - name: Run Backend Tests

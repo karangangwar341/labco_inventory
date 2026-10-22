@@ -22,9 +22,9 @@ describe('Manufacturing Service (T-010: Client Manufacturing Linked & Separate W
   let mockLedgerService: any;
   let mockNotificationsService: any;
 
-  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
-  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN };
-  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN };
+  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa-1' };
+  const clientAdminUser = { id: 'ca-1', username: 'clientadmin', role: UserRole.CLIENT_ADMIN, status: 'ACTIVE', sessionId: 'sess-ca-1' };
+  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN, status: 'ACTIVE', sessionId: 'sess-sm-1' };
 
   const rawMaterialProduct = {
     id: 'prod-raw',

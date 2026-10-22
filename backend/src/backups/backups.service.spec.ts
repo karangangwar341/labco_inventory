@@ -86,6 +86,8 @@ describe('BackupsService', () => {
         id: 'user-sa-1',
         role: UserRole.SUPER_ADMIN,
         username: 'superadmin',
+        status: 'ACTIVE',
+        sessionId: 'sess-sa-1',
       });
 
       expect(mockPrisma.backupRecord.create).toHaveBeenCalled();
@@ -149,7 +151,7 @@ describe('BackupsService', () => {
 
       const result = await service.triggerBackup(
         { simulateFailure: true, retentionDays: 90 },
-        { id: 'user-sa-1', role: UserRole.SUPER_ADMIN, username: 'superadmin' },
+        { id: 'user-sa-1', role: UserRole.SUPER_ADMIN, username: 'superadmin', status: 'ACTIVE', sessionId: 'sess-sa-1' },
       );
 
       expect(mockPrisma.backupRecord.update).toHaveBeenCalledWith(

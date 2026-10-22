@@ -29,8 +29,8 @@ describe('Requests & Reservations Service (T-007)', () => {
   let mockLedgerService: any;
   let mockNotificationsService: any;
 
-  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN };
-  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN };
+  const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa' };
+  const storeAdminUser = { id: 'sm-1', username: 'storeadmin', role: UserRole.STORE_ADMIN, status: 'ACTIVE', sessionId: 'sess-sm' };
 
   const approvedProduct = {
     id: 'prod-1',
@@ -561,7 +561,7 @@ describe('Requests & Reservations Service (T-007)', () => {
         expiredQty: new Prisma.Decimal(0),
       });
 
-      mockPrisma.stockRequest.create.mockImplementation(async (args) => args.data);
+      mockPrisma.stockRequest.create.mockImplementation(async (args: any) => args.data);
 
       // Counted quantity is 55 (variance is +5)
       const draft = await requestsService.createDraft(storeAdminUser, {

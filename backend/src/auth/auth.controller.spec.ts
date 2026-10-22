@@ -16,7 +16,7 @@ describe('AuthController & MeController', () => {
     };
 
     authController = new AuthController(mockAuthService);
-    meController = new MeController();
+    meController = new MeController(mockAuthService);
   });
 
   describe('login', () => {

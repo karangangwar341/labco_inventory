@@ -139,12 +139,11 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       };
       mockPrisma.ledgerTransaction.findUnique.mockResolvedValue(existingTx);
 
-      const result = await ledgerService.postTransaction({
+      const result = await (ledgerService as any).postTransaction({
         idempotencyKey: 'idem-123',
         transactionType: TransactionType.STOCK_IN,
-        actorId: 'admin-1',
         lines: [],
-      });
+      }, 'admin-1');
 
       expect(result).toBe(existingTx);
       expect(mockPrisma.ledgerTransaction.create).not.toHaveBeenCalled();
@@ -173,10 +172,9 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       };
       mockPrisma.ledgerTransaction.create.mockResolvedValue(createdTx);
 
-      const result = await ledgerService.postTransaction({
+      const result = await (ledgerService as any).postTransaction({
         idempotencyKey: 'idem-456',
         transactionType: TransactionType.STOCK_IN,
-        actorId: 'admin-1',
         lines: [
           {
             locationId: 'loc-1',
@@ -187,7 +185,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
             unitName: 'BOX',
           },
         ],
-      });
+      }, 'admin-1');
 
       expect(result).toBe(createdTx);
       expect(mockPrisma.inventoryBalance.create).toHaveBeenCalled();
@@ -217,10 +215,9 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
 
       // Attempt to deduct 5 EACH (available is only 2)
       await expect(
-        ledgerService.postTransaction({
+        (ledgerService as any).postTransaction({
           idempotencyKey: 'idem-789',
           transactionType: TransactionType.STOCK_OUT,
-          actorId: 'admin-1',
           lines: [
             {
               locationId: 'loc-1',
@@ -231,7 +228,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
               unitName: 'EACH',
             },
           ],
-        }),
+        }, 'admin-1'),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -249,10 +246,9 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       });
 
       await expect(
-        ledgerService.postTransaction({
+        (ledgerService as any).postTransaction({
           idempotencyKey: 'idem-damaged',
           transactionType: TransactionType.ADJUSTMENT,
-          actorId: 'admin-1',
           lines: [
             {
               locationId: 'loc-1',
@@ -263,7 +259,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
               unitName: 'EACH',
             },
           ],
-        }),
+        }, 'admin-1'),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -273,10 +269,9 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
 
       // Qty has decimal part for whole-unit product
       await expect(
-        ledgerService.postTransaction({
+        (ledgerService as any).postTransaction({
           idempotencyKey: 'idem-prec',
           transactionType: TransactionType.STOCK_IN,
-          actorId: 'admin-1',
           lines: [
             {
               locationId: 'loc-1',
@@ -287,7 +282,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
               unitName: 'EACH',
             },
           ],
-        }),
+        }, 'admin-1'),
       ).rejects.toThrow(BadRequestException);
     });
   });
