@@ -168,12 +168,27 @@ export class InventoryService {
 
   async getBalances(
     user: AuthenticatedUser,
-    filters?: { locationId?: string; productId?: string; limit?: number; page?: number },
+    filters?: {
+      locationId?: string;
+      productId?: string;
+      limit?: number;
+      page?: number;
+      kind?: ProductKind;
+      locationType?: LocationType;
+    },
   ): Promise<CalculatedBalanceView[]> {
     const where: Prisma.InventoryBalanceWhereInput = {};
 
     if (filters?.productId) {
       where.productId = filters.productId;
+    }
+
+    if (filters?.kind) {
+      where.product = { ...((where.product as object) || {}), kind: filters.kind };
+    }
+
+    if (filters?.locationType) {
+      where.location = { ...((where.location as object) || {}), locationType: filters.locationType };
     }
 
     if (user.role === UserRole.SUPER_ADMIN) {
@@ -190,7 +205,7 @@ export class InventoryService {
       const loc = await this.prisma.stockLocation.findUnique({ where: { warehouseId } });
       if (!loc) return [];
       where.locationId = loc.id;
-      where.product = { kind: ProductKind.RAW_MATERIAL };
+      where.product = { ...((where.product as object) || {}), kind: ProductKind.RAW_MATERIAL };
     } else if (user.role === UserRole.PROJECT_ADMIN) {
       const projectId = user.projectId !== undefined
         ? user.projectId
@@ -216,7 +231,14 @@ export class InventoryService {
             kind: true,
             brand: true,
             minQuantity: true,
-            category: { select: { id: true, name: true } },
+            category: {
+              select: {
+                id: true,
+                name: true,
+                parentId: true,
+                parent: { select: { id: true, name: true } },
+              },
+            },
             units: { where: { isBaseUnit: true }, select: { unitName: true } },
           },
         },
@@ -236,6 +258,12 @@ export class InventoryService {
       const { physicalQty, availableQty } = calculateProjectedQuantities(b);
       const product = (b as any).product;
       const location = (b as any).location;
+      const rawCat = product?.category;
+      const categoryName = rawCat?.parent ? rawCat.parent.name : (rawCat?.name || 'General');
+      const categoryId = rawCat?.parent ? rawCat.parent.id : (rawCat?.id || null);
+      const subCategoryName = rawCat?.parent ? rawCat.name : null;
+      const subCategoryId = rawCat?.parent ? rawCat.id : null;
+
       return {
         id: b.id,
         locationId: b.locationId,
@@ -248,9 +276,12 @@ export class InventoryService {
         projectId: location?.projectId || null,
         productId: b.productId,
         productName: product?.name || 'Product',
+        productKind: product?.kind || 'RAW_MATERIAL',
         brand: product?.brand || null,
-        categoryName: product?.category?.name || 'General',
-        categoryId: product?.category?.id || null,
+        categoryName,
+        categoryId,
+        subCategoryName,
+        subCategoryId,
         unit: product?.units?.[0]?.unitName || 'units',
         minThreshold: product?.minQuantity ? Number(product.minQuantity) : 0,
         usableQty: b.usableQty,

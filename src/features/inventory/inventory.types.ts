@@ -8,4 +8,6 @@ export interface InventoryFilterParams {
   productId?: string;
   limit?: number;
   page?: number;
+  kind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
+  locationType?: 'WAREHOUSE' | 'PROJECT';
 }

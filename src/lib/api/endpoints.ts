@@ -19,12 +19,16 @@ export const endpoints = {
       productId?: string;
       limit?: number;
       page?: number;
+      kind?: string;
+      locationType?: string;
     }) => {
       const q = new URLSearchParams();
       if (params?.locationId) q.set("locationId", params.locationId);
       if (params?.productId) q.set("productId", params.productId);
       if (params?.limit) q.set("limit", String(params.limit));
       if (params?.page) q.set("page", String(params.page));
+      if (params?.kind) q.set("kind", params.kind);
+      if (params?.locationType) q.set("locationType", params.locationType);
       const qs = q.toString();
       return qs ? `/inventory/balances?${qs}` : "/inventory/balances";
     },

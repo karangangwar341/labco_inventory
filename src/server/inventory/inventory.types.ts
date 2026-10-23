@@ -4,11 +4,17 @@ export interface CalculatedBalanceView {
   id: string;
   locationId: string;
   locationName?: string;
+  locationType?: 'WAREHOUSE' | 'PROJECT';
+  warehouseId?: string | null;
+  projectId?: string | null;
   productId: string;
   productName?: string;
+  productKind?: string;
   brand?: string | null;
   categoryName?: string | null;
   categoryId?: string | null;
+  subCategoryName?: string | null;
+  subCategoryId?: string | null;
   unit?: string | null;
   minThreshold?: number;
   usableQty: Decimal;

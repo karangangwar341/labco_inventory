@@ -9,9 +9,12 @@ export interface StockBalanceDto {
   projectId?: string | null;
   productId: string;
   productName?: string;
+  productKind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
   brand?: string | null;
   categoryName?: string | null;
   categoryId?: string | null;
+  subCategoryName?: string | null;
+  subCategoryId?: string | null;
   usableQty: number;
   reservedQty: number;
   availableQty: number;
