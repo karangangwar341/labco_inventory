@@ -1,0 +1,66 @@
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+  Res,
+  ParseEnumPipe,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { ReportsService } from './reports.service';
+import { ReportType, ReportFormat, QueryReportDto } from './dto/query-report.dto';
+
+@ApiTags('Reports, Exports & Audit')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('reports')
+export class ReportsController {
+  constructor(private readonly reportsService: ReportsService) {}
+
+  @Get('audit-history')
+  @ApiOperation({ summary: 'View immutable report export audit history' })
+  async getExportAuditHistory(@CurrentUser() user: AuthenticatedUser) {
+    return this.reportsService.getExportAuditHistory(user);
+  }
+
+  @Get(':reportType')
+  @ApiOperation({ summary: 'Generate authorized report (JSON data or downloadable CSV)' })
+  async generateReport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('reportType', new ParseEnumPipe(ReportType)) reportType: ReportType,
+    @Query() query: QueryReportDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.reportsService.generateReport(reportType, query, user);
+
+    if (result.format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${result.filename || 'report.csv'}"`,
+      );
+      return result.csvData;
+    }
+
+    if (result.format === 'xlsx') {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${result.filename || 'report.xlsx'}"`,
+      );
+      res.end(result.buffer);
+      return;
+    }
+
+    return result;
+  }
+}

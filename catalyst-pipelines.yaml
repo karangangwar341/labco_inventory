@@ -1,16 +1,16 @@
 version: 1
 
 jobs:
-  Build_And_Deploy_Backend:
+  Build_And_Deploy_App:
     steps:
       - node -v
       - npm ci
       - npm run prisma:generate
-      - npm run build --workspace backend
+      - npm run build
       - npm install -g zcatalyst-cli
-      - catalyst deploy --only appsail:warehouse-backend --token << env.CATALYST_TOKEN >> --project << env.CATALYST_PROJECT_NAME >> --org << env.CATALYST_ORG >> --dc << env.CATALYST_DC >> -ni
+      - catalyst deploy --only appsail:warehouse-app --token << env.CATALYST_TOKEN >> --project << env.CATALYST_PROJECT_NAME >> --org << env.CATALYST_ORG >> --dc << env.CATALYST_DC >> -ni
 
 stages:
   - name: Build and Deploy
     jobs:
-      - Build_And_Deploy_Backend
+      - Build_And_Deploy_App
