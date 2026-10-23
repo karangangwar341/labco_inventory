@@ -1,10 +1,11 @@
-name: Backend CI/CD - Zoho Catalyst AppSail
+name: Application CI/CD - Zoho Catalyst AppSail
 
 on:
   push:
     branches: [main, master]
     paths:
-      - 'backend/**'
+      - 'src/**'
+      - 'prisma/**'
       - 'package.json'
       - 'package-lock.json'
       - 'catalyst.json'
@@ -12,7 +13,8 @@ on:
   pull_request:
     branches: [main, master]
     paths:
-      - 'backend/**'
+      - 'src/**'
+      - 'prisma/**'
       - 'package.json'
       - 'package-lock.json'
       - 'catalyst.json'
@@ -85,21 +87,18 @@ jobs:
         run: npm run prisma:generate
 
       - name: Validate and Apply Migrations to Ephemeral DB
-        run: npm run prisma:migrate:deploy --workspace backend
+        run: npm run prisma:migrate:deploy
 
-      - name: Typecheck Backend
-        run: npm run typecheck --workspace backend
+      - name: Typecheck Application
+        run: npm run typecheck
 
-      - name: Lint Backend
-        run: npm run lint --workspace backend
-
-      - name: Run Backend Tests
+      - name: Run Tests
         env:
           NODE_ENV: test
-        run: npm test --workspace backend
+        run: npm test
 
-      - name: Build Backend Artifacts
-        run: npm run build --workspace backend
+      - name: Build Application
+        run: npm run build
 
   # ========================================================
   # JOB 2: Deploy to Zoho Catalyst AppSail
@@ -129,13 +128,13 @@ jobs:
       - name: Verify Catalyst CLI Version
         run: catalyst --version
 
-      - name: Install Root & Backend Dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Generate Prisma Client & Build Backend
+      - name: Generate Prisma Client & Build Application
         run: |
           npm run prisma:generate
-          npm run build --workspace backend
+          npm run build
 
       - name: Deploy to Catalyst AppSail (Development)
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.target_env == 'Development')
@@ -145,9 +144,9 @@ jobs:
           CATALYST_ORG_ID: ${{ secrets.CATALYST_ORG_ID }}
           CATALYST_DC: ${{ secrets.CATALYST_DC || 'in' }}
         run: |
-          echo "Deploying warehouse-backend service to Zoho Catalyst AppSail (Development)..."
+          echo "Deploying warehouse-app service to Zoho Catalyst AppSail (Development)..."
           catalyst deploy \
-            --only appsail:warehouse-backend \
+            --only appsail:warehouse-app \
             --token "$CATALYST_TOKEN" \
             --project "$CATALYST_PROJECT_ID" \
             --org "$CATALYST_ORG_ID" \
@@ -162,9 +161,9 @@ jobs:
           CATALYST_ORG_ID: ${{ secrets.CATALYST_ORG_ID }}
           CATALYST_DC: ${{ secrets.CATALYST_DC || 'in' }}
         run: |
-          echo "Deploying warehouse-backend service to Zoho Catalyst AppSail (Production)..."
+          echo "Deploying warehouse-app service to Zoho Catalyst AppSail (Production)..."
           catalyst deploy \
-            --only appsail:warehouse-backend \
+            --only appsail:warehouse-app \
             --production \
             --token "$CATALYST_TOKEN" \
             --project "$CATALYST_PROJECT_ID" \
@@ -177,9 +176,9 @@ jobs:
         env:
           CATALYST_APP_URL: ${{ secrets.CATALYST_APP_URL }}
         run: |
-          echo "Verifying health endpoint at ${CATALYST_APP_URL}/health..."
+          echo "Verifying health endpoint at ${CATALYST_APP_URL}/api/v1/health..."
           for i in {1..12}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${CATALYST_APP_URL}/health" || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${CATALYST_APP_URL}/api/v1/health" || echo "000")
             if [ "$STATUS" -eq 200 ]; then
               echo "AppSail instance is healthy and responding (HTTP 200)."
               exit 0
