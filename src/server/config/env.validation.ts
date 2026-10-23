@@ -13,7 +13,8 @@ function isPlaceholder(input: string): boolean {
 export function validateEnvironment(config: Environment): Environment {
   if (value(config, 'NODE_ENV') !== 'production') return config;
 
-  const missing = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET', 'CORS_ALLOWED_ORIGINS']
+  // In unified full-stack Next.js, API and frontend are same-origin; CORS_ALLOWED_ORIGINS is optional.
+  const missing = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET']
     .filter((key) => !value(config, key));
 
   const errors: string[] = [];

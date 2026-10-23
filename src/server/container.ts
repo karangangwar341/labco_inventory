@@ -54,7 +54,10 @@ class AppContainer {
   public staffService: StaffService;
 
   constructor() {
-    if (process.env.NODE_ENV === 'production') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.NEXT_PHASE !== 'phase-production-build'
+    ) {
       validateEnvironment(process.env);
     }
     this.prisma = new PrismaService();
