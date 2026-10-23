@@ -359,13 +359,7 @@ export function WarehousesManagement() {
                     </div>
 
                     {/* Fulfillment Capability Indicator */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium text-xs border border-emerald-200/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Universal Transfer Enabled · Direct dispatch to all active projects without mapping
-                      </span>
-                      <span className="text-[11px] text-slate-400">ID: {warehouse.id.slice(0, 8)}</span>
-                    </div>
+
                   </div>
                 );
               })}
