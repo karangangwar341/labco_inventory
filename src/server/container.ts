@@ -26,32 +26,32 @@ import { StaffService } from './staff/staff.service';
 
 import { validateEnvironment } from './config/env.validation';
 
-// Global singleton registry for Next.js App Router (persists across hot reloads in development)
+// Global singleton registry for Next.js App Router with lazy service getters for fast cold-starts
 class AppContainer {
-  public prisma: PrismaService;
-  public jwtService: JwtService;
-  public configService: ConfigService;
-  public storageService: StorageService;
-  public notificationsService: NotificationsService;
-  public authorizationService: AuthorizationService;
-  public authService: AuthService;
-  public ledgerService: LedgerService;
-  public inventoryService: InventoryService;
-  public reservationsService: ReservationsService;
-  public shipmentsService: ShipmentsService;
-  public requestsService: RequestsService;
-  public manufacturingService: ManufacturingService;
-  public departmentsService: DepartmentsService;
-  public productsService: ProductsService;
-  public categoriesService: CategoriesService;
-  public unitsService: UnitsService;
-  public importsService: ImportsService;
-  public reportsService: ReportsService;
-  public backupsService: BackupsService;
-  public usersService: UsersService;
-  public projectsService: ProjectsService;
-  public warehousesService: WarehousesService;
-  public staffService: StaffService;
+  private _prisma?: PrismaService;
+  private _jwtService?: JwtService;
+  private _configService?: ConfigService;
+  private _storageService?: StorageService;
+  private _notificationsService?: NotificationsService;
+  private _authorizationService?: AuthorizationService;
+  private _authService?: AuthService;
+  private _ledgerService?: LedgerService;
+  private _inventoryService?: InventoryService;
+  private _reservationsService?: ReservationsService;
+  private _shipmentsService?: ShipmentsService;
+  private _requestsService?: RequestsService;
+  private _manufacturingService?: ManufacturingService;
+  private _departmentsService?: DepartmentsService;
+  private _productsService?: ProductsService;
+  private _categoriesService?: CategoriesService;
+  private _unitsService?: UnitsService;
+  private _importsService?: ImportsService;
+  private _reportsService?: ReportsService;
+  private _backupsService?: BackupsService;
+  private _usersService?: UsersService;
+  private _projectsService?: ProjectsService;
+  private _warehousesService?: WarehousesService;
+  private _staffService?: StaffService;
 
   constructor() {
     if (
@@ -60,65 +60,136 @@ class AppContainer {
     ) {
       validateEnvironment(process.env);
     }
-    this.prisma = new PrismaService();
-    this.configService = new ConfigService();
-    this.jwtService = new JwtService({
+  }
+
+  get prisma(): PrismaService {
+    return (this._prisma ??= new PrismaService());
+  }
+
+  get configService(): ConfigService {
+    return (this._configService ??= new ConfigService());
+  }
+
+  get jwtService(): JwtService {
+    return (this._jwtService ??= new JwtService({
       secret: process.env.JWT_SECRET || 'super_secret_jwt_signing_key_change_in_production',
       signOptions: { expiresIn: '30d' },
-    });
-    this.storageService = new StorageService(this.configService);
-    this.notificationsService = new NotificationsService(this.prisma);
-    this.authorizationService = new AuthorizationService(this.prisma);
-    this.authService = new AuthService(this.prisma, this.jwtService, this.configService);
-    this.ledgerService = new LedgerService(this.prisma);
-    this.inventoryService = new InventoryService(this.prisma);
-    this.reservationsService = new ReservationsService(this.prisma);
-    this.shipmentsService = new ShipmentsService(
+    }));
+  }
+
+  get storageService(): StorageService {
+    return (this._storageService ??= new StorageService(this.configService));
+  }
+
+  get notificationsService(): NotificationsService {
+    return (this._notificationsService ??= new NotificationsService(this.prisma));
+  }
+
+  get authorizationService(): AuthorizationService {
+    return (this._authorizationService ??= new AuthorizationService(this.prisma));
+  }
+
+  get authService(): AuthService {
+    return (this._authService ??= new AuthService(this.prisma, this.jwtService, this.configService));
+  }
+
+  get ledgerService(): LedgerService {
+    return (this._ledgerService ??= new LedgerService(this.prisma));
+  }
+
+  get inventoryService(): InventoryService {
+    return (this._inventoryService ??= new InventoryService(this.prisma));
+  }
+
+  get reservationsService(): ReservationsService {
+    return (this._reservationsService ??= new ReservationsService(this.prisma));
+  }
+
+  get shipmentsService(): ShipmentsService {
+    return (this._shipmentsService ??= new ShipmentsService(
       this.prisma,
       this.ledgerService,
       this.notificationsService,
-    );
-    this.requestsService = new RequestsService(
+    ));
+  }
+
+  get requestsService(): RequestsService {
+    return (this._requestsService ??= new RequestsService(
       this.prisma,
       this.authorizationService,
       this.ledgerService,
       this.reservationsService,
       this.shipmentsService,
       this.notificationsService,
-    );
-    this.manufacturingService = new ManufacturingService(
+    ));
+  }
+
+  get manufacturingService(): ManufacturingService {
+    return (this._manufacturingService ??= new ManufacturingService(
       this.prisma,
       this.ledgerService,
       this.notificationsService,
-    );
-    this.departmentsService = new DepartmentsService(
+    ));
+  }
+
+  get departmentsService(): DepartmentsService {
+    return (this._departmentsService ??= new DepartmentsService(
       this.prisma,
       this.ledgerService,
       this.inventoryService,
       this.notificationsService,
       this.reservationsService,
-    );
-    this.productsService = new ProductsService(this.prisma, this.notificationsService);
-    this.categoriesService = new CategoriesService(this.prisma);
-    this.unitsService = new UnitsService(this.prisma);
-    const geminiAdapter = new GeminiExtractionAdapter();
-    this.importsService = new ImportsService(
+    ));
+  }
+
+  get productsService(): ProductsService {
+    return (this._productsService ??= new ProductsService(this.prisma, this.notificationsService));
+  }
+
+  get categoriesService(): CategoriesService {
+    return (this._categoriesService ??= new CategoriesService(this.prisma));
+  }
+
+  get unitsService(): UnitsService {
+    return (this._unitsService ??= new UnitsService(this.prisma));
+  }
+
+  get importsService(): ImportsService {
+    return (this._importsService ??= new ImportsService(
       this.prisma,
       this.ledgerService,
-      geminiAdapter,
+      new GeminiExtractionAdapter(),
       this.storageService,
       this.notificationsService,
-    );
-    this.reportsService = new ReportsService(this.prisma);
-    this.backupsService = new BackupsService(
+    ));
+  }
+
+  get reportsService(): ReportsService {
+    return (this._reportsService ??= new ReportsService(this.prisma));
+  }
+
+  get backupsService(): BackupsService {
+    return (this._backupsService ??= new BackupsService(
       this.prisma,
       this.notificationsService,
       this.storageService,
-    );
-    this.usersService = new UsersService(this.prisma, this.authService);
-    this.projectsService = new ProjectsService(this.prisma);
-    this.warehousesService = new WarehousesService(this.prisma);
-    this.staffService = new StaffService(this.prisma);
+    ));
+  }
+
+  get usersService(): UsersService {
+    return (this._usersService ??= new UsersService(this.prisma, this.authService));
+  }
+
+  get projectsService(): ProjectsService {
+    return (this._projectsService ??= new ProjectsService(this.prisma));
+  }
+
+  get warehousesService(): WarehousesService {
+    return (this._warehousesService ??= new WarehousesService(this.prisma));
+  }
+
+  get staffService(): StaffService {
+    return (this._staffService ??= new StaffService(this.prisma));
   }
 }
 
