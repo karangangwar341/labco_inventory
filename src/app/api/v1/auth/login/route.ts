@@ -72,7 +72,15 @@ export async function POST(req: Request) {
       ipAddress,
     });
 
-    return NextResponse.json(authResponse);
+    const response = NextResponse.json(authResponse);
+    response.cookies.set('session_token', authResponse.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: authResponse.expiresIn || 30 * 24 * 60 * 60,
+    });
+    return response;
   } catch (error) {
     return handleApiError(error);
   }

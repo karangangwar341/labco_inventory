@@ -24,6 +24,8 @@ import { ProjectsService } from './organization/projects.service';
 import { WarehousesService } from './organization/warehouses.service';
 import { StaffService } from './staff/staff.service';
 
+import { validateEnvironment } from './config/env.validation';
+
 // Global singleton registry for Next.js App Router (persists across hot reloads in development)
 class AppContainer {
   public prisma: PrismaService;
@@ -52,6 +54,9 @@ class AppContainer {
   public staffService: StaffService;
 
   constructor() {
+    if (process.env.NODE_ENV === 'production') {
+      validateEnvironment(process.env);
+    }
     this.prisma = new PrismaService();
     this.configService = new ConfigService();
     this.jwtService = new JwtService({

@@ -133,8 +133,7 @@ export class StorageService implements IStorageService, OnModuleInit {
     }
 
     // Local file fallback
-    const normalizedKey = key.replace(/^[/\\]+/, '');
-    const fullPath = path.resolve(this.localBasePath, normalizedKey);
+    const fullPath = this.resolveSafeLocalPath(key);
     const targetDir = path.dirname(fullPath);
     this.ensureLocalDirectory(targetDir);
 
@@ -168,8 +167,7 @@ export class StorageService implements IStorageService, OnModuleInit {
     }
 
     // Local file fallback
-    const normalizedKey = key.replace(/^[/\\]+/, '');
-    const fullPath = path.resolve(this.localBasePath, normalizedKey);
+    const fullPath = this.resolveSafeLocalPath(key);
     return fs.promises.readFile(fullPath);
   }
 
@@ -202,8 +200,7 @@ export class StorageService implements IStorageService, OnModuleInit {
       return;
     }
 
-    const normalizedKey = key.replace(/^[/\\]+/, '');
-    const fullPath = path.resolve(this.localBasePath, normalizedKey);
+    const fullPath = this.resolveSafeLocalPath(key);
     try {
       if (fs.existsSync(fullPath)) {
         await fs.promises.unlink(fullPath);
@@ -211,6 +208,16 @@ export class StorageService implements IStorageService, OnModuleInit {
     } catch {
       // Ignore deletion errors on absent local files
     }
+  }
+
+  private resolveSafeLocalPath(key: string): string {
+    const normalizedKey = key.replace(/^[/\\]+/, '');
+    const baseResolved = path.resolve(this.localBasePath);
+    const fullPath = path.resolve(baseResolved, normalizedKey);
+    if (!fullPath.startsWith(baseResolved)) {
+      throw new Error(`Security violation: Storage key "${key}" resolves outside of local base path.`);
+    }
+    return fullPath;
   }
 
   async getStorageHealth(): Promise<StorageHealthResult> {
