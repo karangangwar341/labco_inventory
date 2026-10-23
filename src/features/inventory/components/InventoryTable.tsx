@@ -58,10 +58,14 @@ export function InventoryTable() {
 
   // Extract only physical warehouses (exclude all project facilities / client clinics)
   const warehouseLocations = useMemo(() => {
-    return (locationsQuery.data || []).filter(
+    const all = (locationsQuery.data || []).filter(
       (loc) => loc.locationType === 'WAREHOUSE' || (!loc.projectId && loc.warehouseId),
     );
-  }, [locationsQuery.data]);
+    if (user?.role === 'STORE_ADMIN' && user.warehouseId) {
+      return all.filter((loc) => loc.warehouseId === user.warehouseId);
+    }
+    return all;
+  }, [locationsQuery.data, user?.role, user?.warehouseId]);
 
   // Strict invariant: Filter to only RAW MATERIALS located in WAREHOUSES
   // (strictly removes project sites and manufactured assemblies)

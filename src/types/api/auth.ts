@@ -53,5 +53,6 @@ export interface CurrentUserProfile {
   status: UserStatus;
   sessionId?: string;
   projectId?: string | null;
+  warehouseId?: string | null;
   assignedWarehouseIds?: string[];
 }

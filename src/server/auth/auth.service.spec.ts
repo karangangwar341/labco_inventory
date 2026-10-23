@@ -64,7 +64,18 @@ describe('AuthService (T-002: Authentication, Lockout & Sessions)', () => {
       });
 
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { ownerScope: 'COMPANY', kind: 'RAW_MATERIAL', status: 'APPROVED' },
+        where: {
+          ownerScope: 'COMPANY',
+          kind: 'RAW_MATERIAL',
+          status: 'APPROVED',
+          balances: {
+            some: {
+              location: {
+                warehouseId: 'warehouse-1',
+              },
+            },
+          },
+        },
         take: 250,
       }));
     });

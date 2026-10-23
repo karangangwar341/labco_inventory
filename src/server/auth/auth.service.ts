@@ -9,7 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, UserStatus, LoginOutcome, UserRole, ProductStatus, ProductKind, CatalogScope, OrganizationStatus } from '@prisma/client';
+import { User, UserStatus, LoginOutcome, UserRole, ProductStatus, ProductKind, CatalogScope, OrganizationStatus, LocationType } from '@prisma/client';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -214,7 +214,18 @@ export class AuthService {
     const productScope = role === UserRole.SUPER_ADMIN
       ? { status: ProductStatus.APPROVED }
       : role === UserRole.STORE_ADMIN
-        ? { ownerScope: CatalogScope.COMPANY, kind: ProductKind.RAW_MATERIAL, status: ProductStatus.APPROVED }
+        ? {
+            ownerScope: CatalogScope.COMPANY,
+            kind: ProductKind.RAW_MATERIAL,
+            status: ProductStatus.APPROVED,
+            balances: {
+              some: {
+                location: {
+                  warehouseId: user.warehouseId ?? '__unassigned__',
+                },
+              },
+            },
+          }
         : {
             status: ProductStatus.APPROVED,
             OR: [
@@ -243,7 +254,7 @@ export class AuthService {
             where: {
               OR: [
                 { warehouseId: user.warehouseId ?? '__unassigned__', warehouse: { status: OrganizationStatus.ACTIVE } },
-                { project: { status: OrganizationStatus.ACTIVE, warehouseAssignments: { some: { warehouseId: user.warehouseId ?? '__unassigned__', isActive: true } } } },
+                { locationType: LocationType.PROJECT, project: { status: OrganizationStatus.ACTIVE } },
               ],
             },
             select: { id: true, locationType: true, warehouseId: true, projectId: true, warehouse: { select: { name: true } }, project: { select: { name: true } } },

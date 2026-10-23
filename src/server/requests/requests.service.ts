@@ -303,18 +303,9 @@ export class RequestsService {
           ? await this.prisma.stockLocation.findUnique({ where: { id: dto.destinationLocationId } })
           : null;
         if (!destination?.projectId) {
-          throw new ForbiddenException('Dispatch must be sent to an assigned project');
+          throw new ForbiddenException('Dispatch must be sent to a project location');
         }
-        const assignment = await this.prisma.projectWarehouseAssignment.findFirst({
-          where: {
-            warehouseId,
-            projectId: destination.projectId,
-            isActive: true,
-          },
-        });
-        if (!assignment) {
-          throw new ForbiddenException('Warehouse is not assigned to this project');
-        }
+        // Any warehouse can transfer to any project; warehouse-project mapping is not required.
       }
       if (dto.requestType === RequestType.TRANSFER) {
         if (dto.sourceLocationId !== warehouseLocation.id) {

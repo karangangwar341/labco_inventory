@@ -37,6 +37,9 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       user: {
         findUnique: vi.fn(),
       },
+      inventoryBalance: {
+        findFirst: vi.fn(),
+      },
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
@@ -120,8 +123,8 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       ],
     };
 
-    it('limits Store Admin catalog results to approved company raw materials', async () => {
-      const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN };
+    it('limits Store Admin catalog results to approved company raw materials present in their warehouse', async () => {
+      const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN, warehouseId: 'wh-test' };
       mockPrisma.product.findMany.mockResolvedValue([]);
 
       await productsService.findAll(storeAdmin);
@@ -131,8 +134,28 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
           ownerScope: CatalogScope.COMPANY,
           kind: ProductKind.RAW_MATERIAL,
           status: ProductStatus.APPROVED,
+          balances: {
+            some: {
+              location: { warehouseId: 'wh-test' },
+            },
+          },
         }),
       }));
+    });
+
+    it('blocks Store Admin from viewing product not present in their warehouse', async () => {
+      const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN, warehouseId: 'wh-test' };
+      mockPrisma.product.findUnique.mockResolvedValue({
+        id: 'p-other',
+        name: 'Other Warehouse Product',
+        kind: ProductKind.RAW_MATERIAL,
+        ownerScope: CatalogScope.COMPANY,
+      });
+      mockPrisma.inventoryBalance.findFirst.mockResolvedValue(null);
+
+      await expect(productsService.findById('p-other', storeAdmin)).rejects.toThrow(
+        'Store Admin cannot view products of other warehouses',
+      );
     });
 
     it('blocks Store Admin from creating products', async () => {

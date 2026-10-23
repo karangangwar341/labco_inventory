@@ -499,10 +499,26 @@ export class ProductsService {
         orderBy: { name: 'asc' },
       });
     } else if (user.role === UserRole.STORE_ADMIN) {
-      // Store Admins only handle company raw materials; manufactured goods belong to projects.
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({
+            where: { id: user.id },
+            select: { warehouseId: true },
+          }))?.warehouseId;
+      if (!warehouseId) {
+        return [];
+      }
+
+      // Store Admins only handle company raw materials present in their assigned warehouse.
+      // Every warehouse does not have every product; store admins cannot see products of other warehouses.
       where.ownerScope = CatalogScope.COMPANY;
       where.kind = ProductKind.RAW_MATERIAL;
       where.status = ProductStatus.APPROVED;
+      where.balances = {
+        some: {
+          location: { warehouseId },
+        },
+      };
 
       results = await this.prisma.product.findMany({
         where,
@@ -663,10 +679,31 @@ export class ProductsService {
       ) {
         throw new ForbiddenException('Access denied to other project products');
       }
-    } else if (user.role === UserRole.STORE_ADMIN && (
-      product.ownerScope !== CatalogScope.COMPANY || product.kind !== ProductKind.RAW_MATERIAL
-    )) {
-      throw new ForbiddenException('Store Admins can only access company raw materials');
+    } else if (user.role === UserRole.STORE_ADMIN) {
+      if (
+        product.ownerScope !== CatalogScope.COMPANY ||
+        product.kind !== ProductKind.RAW_MATERIAL
+      ) {
+        throw new ForbiddenException('Store Admins can only access company raw materials');
+      }
+      const warehouseId = user.warehouseId !== undefined
+        ? user.warehouseId
+        : (await this.prisma.user.findUnique({
+            where: { id: user.id },
+            select: { warehouseId: true },
+          }))?.warehouseId;
+      if (!warehouseId) {
+        throw new ForbiddenException('Store Admin is not assigned to any warehouse');
+      }
+      const hasBalanceInWarehouse = await this.prisma.inventoryBalance.findFirst({
+        where: {
+          productId: id,
+          location: { warehouseId },
+        },
+      });
+      if (!hasBalanceInWarehouse) {
+        throw new ForbiddenException('Store Admin cannot view products of other warehouses');
+      }
     }
 
     return product;

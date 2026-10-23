@@ -64,16 +64,11 @@ export class WarehousesService {
     }
 
     if (currentUser.role === UserRole.PROJECT_ADMIN) {
-      const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (!user?.projectId) {
-        return [];
-      }
-      // Return warehouses actively assigned to this project
-      const assignments = await this.prisma.projectWarehouseAssignment.findMany({
-        where: { projectId: user.projectId, isActive: true },
-        include: { warehouse: true },
+      // Any warehouse can transfer to any project; warehouse-project mapping is not required.
+      return this.prisma.warehouse.findMany({
+        where: { status: OrganizationStatus.ACTIVE },
+        orderBy: { name: 'asc' },
       });
-      return assignments.map((a) => a.warehouse);
     }
 
     return [];

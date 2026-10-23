@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole, LocationType, ProductKind, Prisma } from '@prisma/client';
+import { UserRole, LocationType, ProductKind, Prisma, OrganizationStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { calculateProjectedQuantities, CalculatedBalanceView } from './inventory.types';
 
@@ -44,22 +44,20 @@ export class InventoryService {
           }))?.warehouseId;
       if (!warehouseId) return [];
 
-      const assignments = await this.prisma.projectWarehouseAssignment.findMany({
-        where: { warehouseId, isActive: true },
-        select: { projectId: true },
-      });
-      const allowedProjectIds = assignments.map((assignment) => assignment.projectId);
+      // Any warehouse can transfer to any project; warehouse-project mapping is not required.
+      // Store Admin can see their own warehouse AND all active projects, but cannot see other warehouses.
       const locations = await this.prisma.stockLocation.findMany({
         where: {
           OR: [
-            { warehouseId },
-            ...(allowedProjectIds.length ? [{ projectId: { in: allowedProjectIds } }] : []),
+            { warehouseId, warehouse: { status: OrganizationStatus.ACTIVE } },
+            { locationType: LocationType.PROJECT, project: { status: OrganizationStatus.ACTIVE } },
           ],
         },
         include: {
           warehouse: { select: { id: true, name: true } },
           project: { select: { id: true, name: true } },
         },
+        orderBy: [{ locationType: 'desc' }, { createdAt: 'asc' }],
       });
       result = locations.map((location) => ({
         id: location.id,

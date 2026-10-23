@@ -71,7 +71,13 @@ export function CatalogView() {
     error: queryError,
     refetch,
   } = useQuery({
-    queryKey: queryKeys.catalog.products(user?.projectId ? `project-${user.projectId}` : 'company'),
+    queryKey: queryKeys.catalog.products(
+      user?.projectId
+        ? `project-${user.projectId}`
+        : user?.warehouseId
+          ? `warehouse-${user.warehouseId}`
+          : 'company',
+    ),
     queryFn: () => catalogService.getProducts(),
     staleTime: 10 * 60 * 1000,
   });
