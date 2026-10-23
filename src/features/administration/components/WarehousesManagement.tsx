@@ -28,8 +28,6 @@ export function WarehousesManagement() {
   const [warehouseLocation, setWarehouseLocation] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editing, setEditing] = useState<WarehouseEdit | null>(null);
-  const [consigningWarehouseId, setConsigningWarehouseId] = useState<string | null>(null);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -72,25 +70,11 @@ export function WarehousesManagement() {
     ...mutationOptions,
   });
 
-  const assignWarehouse = useMutation({
-    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
-      administrationService.assignWarehouse(projectId, warehouseId),
-    ...mutationOptions,
-  });
-
-  const deactivateAssignment = useMutation({
-    mutationFn: ({ projectId, warehouseId }: { projectId: string; warehouseId: string }) =>
-      administrationService.deactivateAssignment(projectId, warehouseId),
-    ...mutationOptions,
-  });
-
   const warehouses = warehousesQuery.data ?? [];
   const projects = projectsQuery.data ?? [];
   const busy =
     createWarehouse.isPending ||
-    updateWarehouse.isPending ||
-    assignWarehouse.isPending ||
-    deactivateAssignment.isPending;
+    updateWarehouse.isPending;
 
   const filteredWarehouses = useMemo(() => {
     if (!searchTerm.trim()) return warehouses;
@@ -99,21 +83,6 @@ export function WarehousesManagement() {
       (w) => w.name.toLowerCase().includes(q) || (w.locationDescription || '').toLowerCase().includes(q)
     );
   }, [warehouses, searchTerm]);
-
-  // Project assignments mapped by warehouse ID
-  const projectsByWarehouseId = useMemo(() => {
-    const map = new Map<string, Array<{ projectId: string; projectName: string }>>();
-    for (const c of projects) {
-      if (c.warehouseAssignments) {
-        for (const a of c.warehouseAssignments) {
-          const list = map.get(a.warehouseId) ?? [];
-          list.push({ projectId: c.id, projectName: c.name });
-          map.set(a.warehouseId, list);
-        }
-      }
-    }
-    return map;
-  }, [projects]);
 
   const handleCreate = (e: FormEvent) => {
     e.preventDefault();
@@ -156,30 +125,14 @@ export function WarehousesManagement() {
     );
   };
 
-  const handleConsignProject = (e: FormEvent) => {
-    e.preventDefault();
-    if (!consigningWarehouseId || !selectedProjectId) return;
-    setActionError(null);
-    assignWarehouse.mutate(
-      { projectId: selectedProjectId, warehouseId: consigningWarehouseId },
-      {
-        onSuccess: () => {
-          setConsigningWarehouseId(null);
-          setSelectedProjectId('');
-          setNotice('Project consignment route established.');
-        },
-      }
-    );
-  };
 
-  const consigningWarehouse = warehouses.find((w) => w.id === consigningWarehouseId);
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
         title="Distribution Warehouses"
-        description="Configure central storage depots, physical location details, and project consignment dispatch authorization."
+        description="Configure central storage depots, physical location details, and multi-depot distribution network."
         actions={
           <Link href="/admin/projects">
             <Button variant="secondary">
@@ -236,12 +189,12 @@ export function WarehousesManagement() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Serviced Projects
+                Fulfillment Network
               </span>
-              <div className="text-xl font-bold font-mono text-slate-900">
-                {projectsQuery.isLoading ? '—' : projects.filter((c) => (c.warehouseAssignments?.length || 0) > 0).length}
+              <div className="text-xl font-bold font-mono text-emerald-600">
+                Universal
               </div>
-              <p className="text-[11px] text-slate-500">Consigned organizations</p>
+              <p className="text-[11px] text-slate-500">All depots dispatch to any active project</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -343,7 +296,7 @@ export function WarehousesManagement() {
         >
           <CardTitle>Warehouse Directory</CardTitle>
           <CardDescription>
-            Operational storage facilities and the list of consigned project organizations authorized for dispatch.
+            Operational storage facilities and fulfillment depots. Any warehouse can transfer to any active project without prior mapping.
           </CardDescription>
         </CardHeader>
 
@@ -357,7 +310,6 @@ export function WarehousesManagement() {
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredWarehouses.map((warehouse: ManagedWarehouse) => {
-                const servicedProjects = projectsByWarehouseId.get(warehouse.id) ?? [];
                 const isInactive = warehouse.status === 'INACTIVE';
 
                 return (
@@ -392,13 +344,6 @@ export function WarehousesManagement() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => setConsigningWarehouseId(warehouse.id)}
-                        >
-                          + Consign Project
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
                           onClick={() =>
                             setEditing({
                               id: warehouse.id,
@@ -413,39 +358,13 @@ export function WarehousesManagement() {
                       </div>
                     </div>
 
-                    {/* Consigned Projects Tags */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
-                      <span className="text-xs font-medium text-slate-500">Authorized Project Consignments:</span>
-                      {servicedProjects.length > 0 ? (
-                        servicedProjects.map((project) => (
-                          <span
-                            key={project.projectId}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 text-xs font-mono"
-                          >
-                            <svg className="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                            </svg>
-                            <span>{project.projectName}</span>
-                            <button
-                              type="button"
-                              aria-label={`Disconnect ${project.projectName} consignment`}
-                              disabled={busy}
-                              onClick={() =>
-                                deactivateAssignment.mutate({
-                                  projectId: project.projectId,
-                                  warehouseId: warehouse.id,
-                                })
-                              }
-                              className="ml-1 text-slate-400 hover:text-rose-600 font-bold transition-colors"
-                              title="Disconnect project consignment"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">No projects currently consigned</span>
-                      )}
+                    {/* Fulfillment Capability Indicator */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium text-xs border border-emerald-200/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Universal Transfer Enabled · Direct dispatch to all active projects without mapping
+                      </span>
+                      <span className="text-[11px] text-slate-400">ID: {warehouse.id.slice(0, 8)}</span>
                     </div>
                   </div>
                 );
@@ -496,53 +415,6 @@ export function WarehousesManagement() {
               </Button>
               <Button type="submit" variant="primary" disabled={busy}>
                 {busy ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* Consign Project Modal */}
-      {consigningWarehouseId && consigningWarehouse && (
-        <Modal
-          isOpen={Boolean(consigningWarehouseId)}
-          onClose={() => {
-            setConsigningWarehouseId(null);
-            setSelectedProjectId('');
-          }}
-          title="Consign Project to Warehouse"
-          description={`Authorize Store Admins at ${consigningWarehouse.name} to fulfill stock-out dispatches to this project.`}
-        >
-          <form onSubmit={handleConsignProject} className="space-y-4">
-            <Select
-              label="Select Project Organization"
-              required
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-            >
-              <option value="">Choose a project...</option>
-              {projects
-                .filter((c) => c.status !== 'INACTIVE')
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </Select>
-
-            <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setConsigningWarehouseId(null);
-                  setSelectedProjectId('');
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={busy || !selectedProjectId}>
-                {busy ? 'Connecting...' : 'Authorize Consignment'}
               </Button>
             </div>
           </form>

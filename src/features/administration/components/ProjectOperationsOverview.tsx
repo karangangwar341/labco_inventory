@@ -278,11 +278,9 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
             {project.status ?? "ACTIVE"}
           </Badge>
           <span className="text-slate-300">|</span>
-          <span className="text-slate-600">
-            <strong>Assigned warehouses:</strong>{" "}
-            {project.warehouseAssignments
-              ?.map((a) => a.warehouse.name)
-              .join(", ") || "No warehouse assigned"}
+          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded px-2 py-0.5 text-[11px] font-medium flex items-center gap-1.5">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            Universal Fulfillment (Transferable from any warehouse)
           </span>
         </div>
       </div>
