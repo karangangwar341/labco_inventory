@@ -86,12 +86,26 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
       product: {
         findUnique: vi.fn(),
         findFirst: vi.fn(),
+        create: vi.fn(),
       },
       stockLocation: {
         findUnique: vi.fn().mockResolvedValue({ id: 'loc-wh-1' }),
       },
       inventoryBalance: {
         findFirst: vi.fn(),
+      },
+      category: {
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
+      productVersion: {
+        create: vi.fn(),
+      },
+      auditEvent: {
+        create: vi.fn(),
+      },
+      user: {
+        findUnique: vi.fn(),
       },
     };
 
@@ -470,6 +484,290 @@ describe('Imports Service (T-012: Bulk CSV/document extraction, validation and a
       // Verify that values starting with =, +, -, @ are prepended with '
       expect(exportResult.csvData).toContain(`"'=cmd|""/c calc""!A0"`);
       expect(exportResult.csvData).toContain(`"'+1234"`);
+    });
+  });
+
+  describe('6. Bulk Product Catalog, Categories and Subcategories Import via Excel & CSV', () => {
+    it('rejects Store Admin from creating or importing product catalog batch', async () => {
+      await expect(
+        importsService.createBatch(
+          {
+            importType: ImportType.PRODUCT_CATALOG,
+            sourceFilename: 'catalog.xlsx',
+            fileContent: 'UEsDBBQAAAA=',
+          },
+          storeAdminUser,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('ingests and extracts products, categories and subcategories from an Excel (.xlsx) file', async () => {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['category', 'subcategory', 'productName', 'brand', 'unitName', 'description', 'quantityPrecision', 'allowFractional'],
+        ['Medical Consumables', 'Gloves', 'Latex Examination Gloves M', 'SafeTouch', 'BOX', 'Box of 100 powder-free latex gloves', 0, false],
+        ['Laboratory Reagents', 'Acids', 'Hydrochloric Acid 37% AR', 'Merck', 'BOTTLE', '500ml analytical reagent grade', 2, true],
+      ]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Catalog');
+      const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+
+      mockPrisma.importBatch.create.mockResolvedValue({
+        id: 'batch-cat-xlsx',
+        importType: ImportType.PRODUCT_CATALOG,
+        status: ImportBatchStatus.DRAFT,
+        sourceFilename: 'products_catalog.xlsx',
+        rows: [],
+      });
+
+      mockPrisma.importBatch.findUnique.mockResolvedValue({
+        id: 'batch-cat-xlsx',
+        importType: ImportType.PRODUCT_CATALOG,
+        status: ImportBatchStatus.DRAFT,
+        rows: [
+          {
+            id: 'row-cat-1',
+            rowNumber: 1,
+            normalizedDataJson: {
+              category: 'Medical Consumables',
+              subcategory: 'Gloves',
+              productName: 'Latex Examination Gloves M',
+              brand: 'SafeTouch',
+              unitName: 'BOX',
+              quantityPrecision: 0,
+              allowFractional: false,
+            },
+            validationStatus: ImportRowStatus.PENDING,
+          },
+        ],
+      });
+
+      mockPrisma.product.findFirst.mockResolvedValue(null);
+
+      const batch = await importsService.createBatch(
+        {
+          importType: ImportType.PRODUCT_CATALOG,
+          sourceFilename: 'products_catalog.xlsx',
+          fileContent: base64Data,
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+        superAdminUser,
+      );
+
+      expect(batch.id).toBe('batch-cat-xlsx');
+      expect(mockPrisma.attachment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            originalName: 'products_catalog.xlsx',
+          }),
+        }),
+      );
+      expect(mockPrisma.importRow.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              rowNumber: 1,
+              normalizedDataJson: expect.objectContaining({
+                category: 'Medical Consumables',
+                subcategory: 'Gloves',
+                productName: 'Latex Examination Gloves M',
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('validates catalog rows and flags missing required fields', async () => {
+      mockPrisma.importBatch.findUnique.mockResolvedValue({
+        id: 'batch-cat-val',
+        importType: ImportType.PRODUCT_CATALOG,
+        status: ImportBatchStatus.DRAFT,
+        approvalMode: ImportApprovalMode.PARTIAL,
+        rows: [
+          {
+            id: 'r-valid',
+            rowNumber: 1,
+            normalizedDataJson: {
+              category: 'Consumables',
+              productName: 'Syringe 5ml',
+              quantityPrecision: 0,
+            },
+            validationStatus: ImportRowStatus.PENDING,
+          },
+          {
+            id: 'r-no-name',
+            rowNumber: 2,
+            normalizedDataJson: {
+              category: 'Consumables',
+              quantityPrecision: 0,
+            },
+            validationStatus: ImportRowStatus.PENDING,
+          },
+          {
+            id: 'r-no-cat',
+            rowNumber: 3,
+            normalizedDataJson: {
+              productName: 'Unnamed Test Item',
+              quantityPrecision: 0,
+            },
+            validationStatus: ImportRowStatus.PENDING,
+          },
+        ],
+      });
+
+      mockPrisma.product.findFirst.mockResolvedValue(null);
+
+      await importsService.validateBatch('batch-cat-val', superAdminUser);
+
+      // Verify row 1 is marked valid
+      expect(mockPrisma.importRow.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'r-valid' },
+          data: expect.objectContaining({ validationStatus: ImportRowStatus.VALID }),
+        }),
+      );
+
+      // Verify row 2 is marked invalid for missing product name
+      expect(mockPrisma.importRow.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'r-no-name' },
+          data: expect.objectContaining({
+            validationStatus: ImportRowStatus.INVALID,
+            validationErrors: expect.arrayContaining(['Product name is required']),
+          }),
+        }),
+      );
+
+      // Verify row 3 is marked invalid for missing category
+      expect(mockPrisma.importRow.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'r-no-cat' },
+          data: expect.objectContaining({
+            validationStatus: ImportRowStatus.INVALID,
+            validationErrors: expect.arrayContaining(['Category is required']),
+          }),
+        }),
+      );
+    });
+
+    it('approves product catalog import batch, creating categories, subcategories, products and versions', async () => {
+      mockPrisma.importBatch.findUnique.mockResolvedValue({
+        id: 'batch-cat-appr',
+        importType: ImportType.PRODUCT_CATALOG,
+        status: ImportBatchStatus.SUBMITTED,
+        approvalMode: ImportApprovalMode.ALL_OR_NOTHING,
+        uploadedBy: { role: UserRole.SUPER_ADMIN },
+        rows: [
+          {
+            id: 'r-prod-1',
+            rowNumber: 1,
+            validationStatus: ImportRowStatus.VALID,
+            normalizedDataJson: {
+              category: 'Medical Consumables',
+              subcategory: 'Gloves',
+              productName: 'Latex Gloves Medium',
+              brand: 'SafeTouch',
+              unitName: 'BOX',
+              description: 'Box of 100 gloves',
+              quantityPrecision: 0,
+              allowFractional: false,
+            },
+          },
+        ],
+      });
+
+      mockPrisma.category.findFirst
+        .mockResolvedValueOnce(null) // Main category not found -> will create
+        .mockResolvedValueOnce(null); // Subcategory not found -> will create
+
+      mockPrisma.category.create
+        .mockResolvedValueOnce({ id: 'cat-main-1', name: 'Medical Consumables', parentId: null })
+        .mockResolvedValueOnce({ id: 'cat-sub-1', name: 'Gloves', parentId: 'cat-main-1' });
+
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      mockPrisma.product.create.mockResolvedValue({
+        id: 'prod-gloves-1',
+        name: 'Latex Gloves Medium',
+        categoryId: 'cat-sub-1',
+        status: ProductStatus.APPROVED,
+        quantityPrecision: 0,
+        allowFractional: false,
+      });
+
+      mockPrisma.productVersion.create.mockResolvedValue({
+        id: 'ver-1',
+        versionNumber: 1,
+      });
+
+      mockPrisma.importBatch.update.mockResolvedValue({
+        id: 'batch-cat-appr',
+        status: ImportBatchStatus.POSTED,
+        rows: [],
+      });
+
+      const result = await importsService.approveBatch('batch-cat-appr', {}, superAdminUser);
+
+      // Verify category creation: main category and subcategory
+      expect(mockPrisma.category.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Medical Consumables',
+          parentId: null,
+          ownerScope: 'COMPANY',
+        }),
+      });
+
+      expect(mockPrisma.category.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Gloves',
+          parentId: 'cat-main-1',
+          ownerScope: 'COMPANY',
+        }),
+      });
+
+      // Verify product creation with base unit
+      expect(mockPrisma.product.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Latex Gloves Medium',
+          brand: 'SafeTouch',
+          categoryId: 'cat-sub-1',
+          ownerScope: 'COMPANY',
+          status: ProductStatus.APPROVED,
+          units: expect.objectContaining({
+            create: expect.arrayContaining([
+              expect.objectContaining({
+                unitName: 'BOX',
+                isBaseUnit: true,
+              }),
+            ]),
+          }),
+        }),
+      });
+
+      // Verify product version 1 creation
+      expect(mockPrisma.productVersion.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          productId: 'prod-gloves-1',
+          versionNumber: 1,
+          status: 'APPROVED',
+        }),
+      });
+
+      // Verify audit event creation
+      expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'PRODUCT_CATALOG_IMPORT_POSTED',
+          entityType: 'IMPORT_BATCH',
+          entityId: 'batch-cat-appr',
+        }),
+      });
+
+      // Verify row updated to POSTED
+      expect(mockPrisma.importRow.update).toHaveBeenCalledWith({
+        where: { id: 'r-prod-1' },
+        data: { validationStatus: ImportRowStatus.POSTED },
+      });
+
+      expect(result.status).toBe(ImportBatchStatus.POSTED);
     });
   });
 });

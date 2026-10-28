@@ -38,6 +38,10 @@
 22. Batch approval/rejection is atomic across all lines, and rejection releases every reservation.
 23. With department-issue approval disabled, submit posts all lines, marks `POSTED`, emits an audit event, and retries cannot duplicate ledger posting.
 24. Changing approval settings does not alter already-pending submissions.
+25. Store Admin can be assigned to manage multiple warehouses; access control scopes queries, stock balances, requests, and shipments to all assigned warehouses.
+26. One warehouse can have at most one Store Admin assigned; assigning warehouse W to Admin B replaces Admin A without affecting other warehouses assigned to Admin A or B.
+27. Physical Indent Form tracking: department issue lines record `indent_number` and `requested_quantity`; issues are displayed grouped by indent number in tabular format.
+28. Partial vs full fulfillment of indent form: supplied quantity is deducted from usable stock while paper requested quantity is preserved for audit and discrepancy reporting.
 
 ## 3. Reservation and concurrency tests
 1. 100 available; submit request for 90 → reserved 90, available 10.

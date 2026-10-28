@@ -26,8 +26,9 @@
 - Project product approval and product-change review.
 - Project operations overview: Super Admin can open a separate, project-scoped view of posted stock, manufacturing runs, and department issue/return reports. Department and manufacturing workspaces remain in the Project Admin navigation; Super Admin reviews their pending inventory changes through Approvals.
 - Project Production Jobs page: show run counts and clear draft, waiting approval, approved, and rejected states. Project Admin can save, reopen, edit, or delete their own draft, then submit it for Super Admin approval from its details. Submitted and approved runs are retained. State clearly that drafts and pending approval do not change inventory; approval posts raw-material deductions and finished output atomically. Capture planned output, actual output when complete, wastage, and optional reference/notes.
-- Department issue page: provide one open daily draft per Project Admin, with editable/removable lines across multiple active departments and manufactured products. Show the reserved quantities only after submission, and present the batch as a single approval outcome. Super Admin settings expose a clear approval-required toggle for every supported workflow; all toggles default on.
+- Department issue page: provide one open daily draft per Project Admin, with editable/removable lines across multiple active departments and manufactured products. Issues are tracked by physical Indent Form Number, capturing both requested quantity (from the paper form) and supplied quantity (from usable stock). Issues are presented grouped by Indent Form Number in a tabular layout with fulfillment badges (Full/Partial). Show the reserved quantities only after submission, and present the batch as a single approval outcome. Super Admin settings expose a clear approval-required toggle for every supported workflow; all toggles default on.
 - Project/warehouse assignment management with effective history.
+- Warehouse management allows Super Admin to register, edit, and assign any warehouse to any Store Admin via a Store Admin selector. Warehouse cards display assigned Store Admin badges (`👤 {username}`) or `Unassigned`. Each warehouse has at most one Store Admin; Store Admins can manage multiple warehouses. User management displays all managed warehouses for each Store Admin.
 - User account management: create, disable, reset password; sessions revoked on reset/disable.
 - Import review: extracted field mapping, confidence/uncertainty indicators, duplicate warnings, row-level edit, validation, approval-mode selection.
 - Global settings: receipt-confirmation toggle, notification sound, per-workflow approval requirements, quantity settings, source types.
@@ -54,7 +55,7 @@
 - Stock-in form records items already received at the project location; it is not a warehouse replenishment request and remains approval-gated. Stock-out records product leaving project stock.
 - Manufacturing run form (linked and separate modes).
 - Department list and proposed changes.
-- One daily department-issue draft with editable/removable lines across departments and products; submission reserves all lines and creates one approval decision.
+- One daily department-issue draft with editable/removable lines across departments and products, grouped by physical Indent Form Number in a tabular layout comparing requested vs supplied quantities; submission reserves all lines and creates one approval decision.
 - Department return forms with condition, reason and optional attachment.
 - Daily report/batch preparation, per-transaction statuses and row-level corrections.
 - Incoming shipment view must hide source warehouse identity.

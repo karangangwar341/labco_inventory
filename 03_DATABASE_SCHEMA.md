@@ -17,7 +17,7 @@
 | sessions | Active session control & device binding | id, user_id, session_token_hash, device_id, user_agent_hash, ip_address, created_at, last_activity_at, revoked_at |
 | login_events | Security audit | id, username_attempted, user_id nullable, outcome, ip_hash/policy-approved metadata, occurred_at |
 | projects | Project organizations | id, name, status, created_at |
-| warehouses | Company warehouses | id, name, location_description, status |
+| warehouses | Company warehouses | id, name, location_description, status, store_admin_id nullable |
 | project_warehouse_assignments | Many-to-many scope | id, project_id, warehouse_id, active_from, inactive_from, changed_by |
   | categories | Product taxonomy; one main category level with brand/subcategory children | id, parent_id nullable, name, owner_scope |
 | products | Company/project catalog | id, owner_scope, project_id nullable, category_id, kind (RAW_MATERIAL or MANUFACTURED_PRODUCT), name, description, image_ref, status, quantity_precision, allow_fractional, min_quantity |
@@ -35,7 +35,7 @@
 | production_inputs | Material consumed | id, production_run_id, product_id, quantity, unit_id, conversion_snapshot, base_quantity |
 | production_outputs | Finished products | id, production_run_id, product_id, quantity, unit_id, conversion_snapshot, base_quantity |
 | departments | Project department master | id, project_id, name, status, pending_change_id nullable |
-| department_issues | Issue history | id, project_id, department_id, product_id, quantity_base, request_id, issued_at |
+| department_issues | Issue history | id, project_id, department_id, product_id, quantity_base, requested_quantity, indent_number, batch_id nullable, request_id nullable, issued_at |
 | department_issue_batches | Daily department issue decision | id, project_id, created_by_id, status, rejection_reason, approved_by_id, submitted_at, approved_at; one open DRAFT per project |
 | department_returns | Return history | id, department_issue_id nullable, product_id, quantity_base, condition, reason, request_id |
 | ledger_transactions | Posted movement header | id, transaction_type, source_ref_type, source_ref_id, posted_at, posted_by, idempotency_key |
@@ -67,6 +67,9 @@
 - Department issue batch submission reserves every line in one transaction; approval consumes every reservation and posts every line atomically, while rejection releases all holds. Immediate-post policy uses the same atomicity and creates an audit event.
 - Approval requirements are stored in the `system_settings` JSON value and default to required; only new submissions use the current setting.
 - Never use floating-point types for inventory quantities or conversion factors.
+- `warehouses.store_admin_id` is a foreign key referencing `users(id)` with ON DELETE SET NULL. Each warehouse has at most one Store Admin assigned (1:0..1); one Store Admin may manage multiple warehouses (1:N). Indexed on `store_admin_id`.
+- `department_issues.indent_number` records the physical indent form number provided by requesting departments (default 'N/A', indexed).
+- `department_issues.requested_quantity` records the paper requested quantity (DECIMAL(18, 4), default 0) distinct from `quantity_base` which records the actual supplied and deducted quantity.
 
 ## 4. Inventory definitions
 - `usable_qty`: inventory available before active reservations.

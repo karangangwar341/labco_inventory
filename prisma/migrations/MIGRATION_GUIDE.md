@@ -31,3 +31,12 @@
 Migration `20261023130000_resolve_shipment_discrepancies` adds one-time shipment resolution fields and the historical line conversion snapshot used by the missing-stock report. Existing shipment lines default to a conversion factor of 1; this preserves current stored quantities but cannot reconstruct a historical non-base conversion that was never stored. New dispatches store their request-line conversion snapshot.
 
 Apply through the normal Prisma migration process against the intended Neon branch using `DIRECT_URL`; do not use `db push`. The migration is additive. Rollback requires a forward migration and should preserve any resolution decisions and stock-in ledger entries; do not delete ledger/audit records to reverse a decision. No Neon database was changed as part of authoring this migration.
+
+
+## 4. Store Admin Multi-Warehouse Assignment & Physical Indent Forms (2026-10-24)
+- **Migration ID**: `20261024110000_store_admin_warehouses_and_indent_forms`
+- **Scope**:
+  1. Add `store_admin_id` column to `warehouses` referencing `users(id)` with `ON DELETE SET NULL`, indexed. Backfills `store_admin_id` from existing `users.warehouse_id` relationships. This allows a Store Admin to manage multiple warehouses while guaranteeing each warehouse has at most one assigned Store Admin.
+  2. Add `indent_number` (default `'N/A'`) and `requested_quantity` (default `0`) to `department_issues`, with an index on `indent_number`. Backfills `requested_quantity = quantity` for historical entries.
+- **Rollback & Forward-Fix Strategy**:
+  Additive migration with safe defaults. Forward-fix preferred. If emergency rollback is required, dropping `store_admin_id`, `indent_number`, and `requested_quantity` will remove multi-warehouse mappings and indent tracking without breaking underlying stock ledgers or inventory balances.

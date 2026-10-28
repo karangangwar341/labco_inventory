@@ -12,7 +12,7 @@ import { Select } from '../../../components/ui/Select';
 import { Modal } from '../../../components/ui/Modal';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
-import { administrationService, ManagedWarehouse, ManagedProject } from '../administration.service';
+import { administrationService, ManagedWarehouse } from '../administration.service';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 type WarehouseEdit = {
@@ -20,12 +20,14 @@ type WarehouseEdit = {
   name: string;
   status: 'ACTIVE' | 'INACTIVE';
   locationDescription?: string;
+  storeAdminId?: string | null;
 };
 
 export function WarehousesManagement() {
   const queryClient = useQueryClient();
   const [warehouseName, setWarehouseName] = useState('');
   const [warehouseLocation, setWarehouseLocation] = useState('');
+  const [createStoreAdminId, setCreateStoreAdminId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [editing, setEditing] = useState<WarehouseEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,10 +43,22 @@ export function WarehousesManagement() {
     queryFn: administrationService.getProjects,
   });
 
+  const usersQuery = useQuery({
+    queryKey: queryKeys.administration.users(),
+    queryFn: administrationService.getUsers,
+  });
+
+  const storeAdmins = useMemo(() => {
+    return (usersQuery.data ?? []).filter(
+      (u) => u.role === 'STORE_ADMIN' && u.status === 'ACTIVE',
+    );
+  }, [usersQuery.data]);
+
   const refresh = async () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.warehouses() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.projects() }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.administration.users() }),
     ]);
 
   const mutationOptions = {
@@ -65,22 +79,32 @@ export function WarehousesManagement() {
   });
 
   const updateWarehouse = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: { name: string; status: 'ACTIVE' | 'INACTIVE'; locationDescription?: string } }) =>
-      administrationService.updateWarehouse(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: {
+        name: string;
+        status: 'ACTIVE' | 'INACTIVE';
+        locationDescription?: string;
+        storeAdminId?: string | null;
+      };
+    }) => administrationService.updateWarehouse(id, payload),
     ...mutationOptions,
   });
 
   const warehouses = warehousesQuery.data ?? [];
-  const projects = projectsQuery.data ?? [];
-  const busy =
-    createWarehouse.isPending ||
-    updateWarehouse.isPending;
+  const busy = createWarehouse.isPending || updateWarehouse.isPending;
 
   const filteredWarehouses = useMemo(() => {
     if (!searchTerm.trim()) return warehouses;
     const q = searchTerm.toLowerCase();
     return warehouses.filter(
-      (w) => w.name.toLowerCase().includes(q) || (w.locationDescription || '').toLowerCase().includes(q)
+      (w) =>
+        w.name.toLowerCase().includes(q) ||
+        (w.locationDescription || '').toLowerCase().includes(q) ||
+        (w.storeAdmin?.username || '').toLowerCase().includes(q),
     );
   }, [warehouses, searchTerm]);
 
@@ -92,14 +116,16 @@ export function WarehousesManagement() {
       {
         name: warehouseName.trim(),
         locationDescription: warehouseLocation.trim() || undefined,
+        storeAdminId: createStoreAdminId || null,
       },
       {
         onSuccess: () => {
           setWarehouseName('');
           setWarehouseLocation('');
+          setCreateStoreAdminId('');
           setNotice(`Warehouse "${warehouseName.trim()}" created successfully.`);
         },
-      }
+      },
     );
   };
 
@@ -114,6 +140,7 @@ export function WarehousesManagement() {
           name: editing.name.trim(),
           status: editing.status,
           locationDescription: editing.locationDescription?.trim(),
+          storeAdminId: editing.storeAdminId ?? null,
         },
       },
       {
@@ -121,23 +148,19 @@ export function WarehousesManagement() {
           setEditing(null);
           setNotice('Warehouse details saved.');
         },
-      }
+      },
     );
   };
-
-
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
         title="Distribution Warehouses"
-        description="Configure central storage depots, physical location details, and multi-depot distribution network."
+        description="Configure central storage depots, physical location details, and assign Store Admins."
         actions={
           <Link href="/admin/projects">
-            <Button variant="secondary">
-              ← Go to Projects
-            </Button>
+            <Button variant="secondary">← Go to Projects</Button>
           </Link>
         }
       />
@@ -169,17 +192,20 @@ export function WarehousesManagement() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Configured Locations
+                Store Admin Assigned
               </span>
               <div className="text-xl font-bold font-mono text-slate-900">
-                {warehousesQuery.isLoading ? '—' : warehouses.filter((w) => Boolean(w.locationDescription)).length}
+                {warehousesQuery.isLoading
+                  ? '—'
+                  : warehouses.filter((w) => Boolean(w.storeAdminId || w.storeAdmin)).length}
               </div>
-              <p className="text-[11px] text-slate-500">Facilities with address recorded</p>
+              <p className="text-[11px] text-slate-500">
+                {warehouses.filter((w) => !w.storeAdminId && !w.storeAdmin).length} unassigned depot(s)
+              </p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
           </CardContent>
@@ -191,9 +217,7 @@ export function WarehousesManagement() {
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 Fulfillment Network
               </span>
-              <div className="text-xl font-bold font-mono text-emerald-600">
-                Universal
-              </div>
+              <div className="text-xl font-bold font-mono text-emerald-600">Universal</div>
               <p className="text-[11px] text-slate-500">All depots dispatch to any active project</p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -236,12 +260,12 @@ export function WarehousesManagement() {
         <CardHeader>
           <CardTitle>Register New Distribution Warehouse</CardTitle>
           <CardDescription>
-            Add a physical warehouse location. Store Admin accounts can be assigned to manage stock receipts here.
+            Add a physical warehouse location. Assign any Store Admin to manage stock operations (one Store Admin can manage multiple warehouses; each warehouse has at most one Store Admin).
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCreate} className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Input
                 label="Warehouse Name"
                 value={warehouseName}
@@ -257,13 +281,21 @@ export function WarehousesManagement() {
                 maxLength={240}
                 placeholder="e.g. Industrial Sector 4, Dock 12 (optional)"
               />
+              <Select
+                label="Assign Store Admin (Optional)"
+                value={createStoreAdminId}
+                onChange={(e) => setCreateStoreAdminId(e.target.value)}
+              >
+                <option value="">Unassigned (No Store Admin)</option>
+                {storeAdmins.map((admin) => (
+                  <option key={admin.id} value={admin.id}>
+                    {admin.username}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div className="flex justify-end pt-1">
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={busy || !warehouseName.trim()}
-              >
+              <Button type="submit" variant="primary" disabled={busy || !warehouseName.trim()}>
                 + Create Warehouse
               </Button>
             </div>
@@ -278,7 +310,7 @@ export function WarehousesManagement() {
             <div className="w-full sm:w-64 relative">
               <input
                 type="text"
-                placeholder="Search warehouses..."
+                placeholder="Search warehouses or store admins..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
@@ -296,24 +328,32 @@ export function WarehousesManagement() {
         >
           <CardTitle>Warehouse Directory</CardTitle>
           <CardDescription>
-            Operational storage facilities and fulfillment depots. Any warehouse can transfer to any active project without prior mapping.
+            Operational storage facilities and fulfillment depots with their assigned Store Admin personnel.
           </CardDescription>
         </CardHeader>
 
         <CardContent className="p-0">
           {warehousesQuery.isLoading ? (
-            <div className="p-8"><LoadingState message="Loading warehouses..." /></div>
+            <div className="p-8">
+              <LoadingState message="Loading warehouses..." />
+            </div>
           ) : filteredWarehouses.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400">
-              {warehouses.length === 0 ? 'No warehouses created yet.' : 'No warehouses match your search term.'}
+              {warehouses.length === 0
+                ? 'No warehouses created yet.'
+                : 'No warehouses match your search term.'}
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
               {filteredWarehouses.map((warehouse: ManagedWarehouse) => {
                 const isInactive = warehouse.status === 'INACTIVE';
+                const assignedAdmin = warehouse.storeAdmin;
 
                 return (
-                  <div key={warehouse.id} className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3">
+                  <div
+                    key={warehouse.id}
+                    className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3"
+                  >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -322,22 +362,33 @@ export function WarehousesManagement() {
                             {warehouse.status ?? 'ACTIVE'}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-                          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span>{warehouse.locationDescription || 'Location unassigned'}</span>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                          <div className="flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>{warehouse.locationDescription || 'Location unassigned'}</span>
+                          </div>
                           <span className="text-slate-300">·</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-slate-400">Assigned Admin:</span>
+                            {assignedAdmin ? (
+                              <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs flex items-center gap-1">
+                                👤 {assignedAdmin.username}
+                              </span>
+                            ) : (
+                              <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs italic">
+                                Unassigned
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Link href={`/inventory?locationId=${warehouse.id}&view=WAREHOUSE`}>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                          >
+                          <Button variant="primary" size="sm">
                             📦 View Depot Stock ➔
                           </Button>
                         </Link>
@@ -350,6 +401,7 @@ export function WarehousesManagement() {
                               name: warehouse.name,
                               status: warehouse.status ?? 'ACTIVE',
                               locationDescription: warehouse.locationDescription ?? '',
+                              storeAdminId: warehouse.storeAdminId ?? warehouse.storeAdmin?.id ?? null,
                             })
                           }
                         >
@@ -357,9 +409,6 @@ export function WarehousesManagement() {
                         </Button>
                       </div>
                     </div>
-
-                    {/* Fulfillment Capability Indicator */}
-
                   </div>
                 );
               })}
@@ -374,7 +423,7 @@ export function WarehousesManagement() {
           isOpen={Boolean(editing)}
           onClose={() => setEditing(null)}
           title="Edit Distribution Warehouse"
-          description="Update storage facility name, operational address, or active status."
+          description="Update storage facility name, operational address, active status, or assign Store Admin."
         >
           <form onSubmit={handleSaveEdit} className="space-y-4">
             <Input
@@ -395,9 +444,26 @@ export function WarehousesManagement() {
             />
 
             <Select
+              label="Assigned Store Admin"
+              value={editing.storeAdminId ?? ''}
+              onChange={(e) =>
+                setEditing({ ...editing, storeAdminId: e.target.value || null })
+              }
+            >
+              <option value="">Unassigned (No Store Admin)</option>
+              {storeAdmins.map((admin) => (
+                <option key={admin.id} value={admin.id}>
+                  {admin.username}
+                </option>
+              ))}
+            </Select>
+
+            <Select
               label="Operational Status"
               value={editing.status}
-              onChange={(e) => setEditing({ ...editing, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
+              onChange={(e) =>
+                setEditing({ ...editing, status: e.target.value as 'ACTIVE' | 'INACTIVE' })
+              }
             >
               <option value="ACTIVE">Active (In Service)</option>
               <option value="INACTIVE">Inactive (Decommissioned)</option>

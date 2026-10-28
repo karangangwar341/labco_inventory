@@ -267,13 +267,16 @@ model Warehouse {
   name                String             @unique
   locationDescription String?            @map("location_description")
   status              OrganizationStatus @default(ACTIVE)
+  storeAdminId        String?            @map("store_admin_id")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
 
-  users              User[]
+  storeAdmin          User?              @relation("WarehouseStoreAdmin", fields: [storeAdminId], references: [id], onDelete: SetNull)
+  users               User[]             @relation("UserLegacyWarehouse")
   projectAssignments ProjectWarehouseAssignment[]
   stockLocation      StockLocation?
 
+  @@index([storeAdminId])
   @@map("warehouses")
 }
 
@@ -522,7 +525,8 @@ model User {
   updatedAt           DateTime   @updatedAt @map("updated_at")
 
   project                        Project?                     @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  warehouse                      Warehouse?                   @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  warehouse                      Warehouse?                   @relation("UserLegacyWarehouse", fields: [warehouseId], references: [id], onDelete: SetNull)
+  managedWarehouses              Warehouse[]                  @relation("WarehouseStoreAdmin")
   sessions                       Session[]
   loginEvents                    LoginEvent[]
   assignmentChanges              ProjectWarehouseAssignment[] @relation("AssignmentChangedBy")
@@ -839,7 +843,9 @@ model DepartmentIssue {
   projectId                String                @map("project_id")
   issueBatchId             String?               @map("issue_batch_id")
   departmentId             String                @map("department_id")
+  indentNumber             String                @default("N/A") @map("indent_number")
   productId                String                @map("product_id")
+  requestedQuantity        Decimal               @default(0) @map("requested_quantity") @db.Decimal(18, 4)
   quantity                 Decimal               @db.Decimal(18, 4)
   unitId                   String                @map("unit_id")
   unitNameSnapshot         String                @map("unit_name_snapshot")
@@ -869,6 +875,7 @@ model DepartmentIssue {
   @@index([productId])
   @@index([status])
   @@index([issueBatchId])
+  @@index([indentNumber])
   @@map("department_issues")
 }
 

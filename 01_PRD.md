@@ -7,7 +7,7 @@ Provide an online system for a company to manage warehouse inventory, project su
 
 ## 2. Users and organizational model
 - **Super Admin:** company-wide administrator; creates/disables/resets accounts; manages warehouse/project assignments; manages company catalog and global settings; reviews and approves all inventory-affecting operations; can view company and project data.
-- **Store Admin:** operates their assigned warehouse; views stock/history/reports; submits stock-in/out, transfer and correction requests. Cannot create/edit product catalog or categories.
+- **Store Admin:** operates assigned warehouses (one Store Admin can manage one or more warehouses; each warehouse has at most one Store Admin assigned by Super Admin); views stock/history/reports for their assigned warehouses; submits stock-in/out, transfer and correction requests. Cannot create/edit product catalog or categories.
 - **Project Admin:** operates their project account; manages project products, manufacturing records, departments, project inventory transactions and daily reports as permitted by the approved workflow.
 - Accounts are provisioned only by Super Admin. A project account may be handed over to new personnel by resetting the same account's password. This shared-account model does not prove which individual used it; consider named accounts before production.
 
@@ -50,7 +50,7 @@ Provide an online system for a company to manage warehouse inventory, project su
 **REQ-018** Low-stock alerts remain visible until recovered; notify once when crossing below threshold and again only after recovery then a new crossing.
 **REQ-019** Daily automatic backups are retained 90 days. Backup failure retries automatically and alerts Super Admin persistently until success.
 **REQ-020** All workflows and data access are server-authorized; frontend visibility is not an authorization boundary.
-**REQ-021** Project Admins can maintain one open daily department-issue draft per project, containing multiple departments and products, and submit the complete set as one all-or-nothing decision.
+**REQ-021** Project Admins can maintain one open daily department-issue draft per project, containing multiple departments and products, and submit the complete set as one all-or-nothing decision. Issues to internal departments are conducted on the basis of physical indent forms provided to departments; Project Admins record the physical Indent Form Number, Requested Quantity (on the paper form), and Supplied Quantity (deducted from usable stock). Issues are displayed and tracked grouped by Indent Form Number in a tabular format.
 
 ## 5. Product catalog
 - The company catalog contains raw materials; each project has a separate catalog for manufactured products. Project Admins can create manufactured products only, using categories owned by their project. Super Admins create company raw materials. Existing products default to raw material. Product type is fixed after creation to preserve clear stock and production history.

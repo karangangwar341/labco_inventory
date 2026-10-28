@@ -43,7 +43,8 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 | GET | `/api/v1/me` | Current role and scope |
 | GET | `/api/v1/me/bootstrap` | Refresh the same minimal role-scoped startup data after a page reload or session restore |
 | GET/POST | `/api/v1/projects` | List/create project (Super Admin only for writes) |
-| GET/POST | `/api/v1/warehouses` | List/create warehouse |
+| GET/POST | `/api/v1/warehouses` | List/create warehouse. Payload supports optional storeAdminId; Store Admins view all assigned warehouses |
+| PUT | `/api/v1/warehouses/{id}` | Update warehouse name, location, and assign/unassign storeAdminId (Super Admin only) |
 | POST | `/api/v1/projects/{id}/warehouses` | Assign project to warehouse |
 | GET/POST | `/api/v1/products` | Scoped catalog; Store Admin receives approved company raw materials only |
 | GET | `/api/v1/products/manufacturing-options` | Project-only approved outputs and raw materials with current or historical stock at that project |
@@ -56,7 +57,8 @@ Keep the application modular: identity/access; organization; catalog; inventory 
 | POST | `/api/v1/stock-requests/{id}/reject` | Super Admin rejection/release reservation |
 | POST | `/api/v1/departments/issues/draft` | Get or create the Project Admin's one open daily issue draft |
 | GET | `/api/v1/departments/issues/batches` | List issue batches, scoped to the caller's project where applicable |
-| PATCH | `/api/v1/departments/issues/batches/{id}/lines` | Replace draft lines after full validation |
+| POST | `/api/v1/departments/issues` | Record department issue line or batch tracking physical indentNumber and requestedQuantity |
+| PATCH | `/api/v1/departments/issues/batches/{id}/lines` | Replace draft lines after full validation, preserving indentNumber and requestedQuantity |
 | POST | `/api/v1/departments/issues/batches/{id}/submit` | Atomically validate/reserve and submit or immediately post by configured policy |
 | POST | `/api/v1/departments/issues/batches/{id}/approve` | Super Admin approves/rejects the whole batch; posts all lines or none |
 | POST | `/api/v1/shipments/{id}/receive` | Record receipt |

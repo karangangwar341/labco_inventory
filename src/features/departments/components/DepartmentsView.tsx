@@ -63,10 +63,12 @@ export function DepartmentsView() {
 
   // New Department Form State
   const [deptName, setDeptName] = useState('');
+  const [issueIndentNumber, setIssueIndentNumber] = useState('');
   const [issueDepartmentId, setIssueDepartmentId] = useState('');
   const [issueProductId, setIssueProductId] = useState('');
   const [issueBalanceId, setIssueBalanceId] = useState('');
   const [issueUnitId, setIssueUnitId] = useState('');
+  const [issueRequestedQuantity, setIssueRequestedQuantity] = useState('');
   const [issueQuantity, setIssueQuantity] = useState('');
   const [issueNotes, setIssueNotes] = useState('');
   const [editingIssueId, setEditingIssueId] = useState<string | null>(null);
@@ -125,6 +127,22 @@ export function DepartmentsView() {
     enabled: role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN',
     staleTime: 0,
   });
+
+  const groupedDraftIssues = useMemo(() => {
+    const issues = issueDraftQuery.data?.issues || [];
+    const groups: { [key: string]: DepartmentIssue[] } = {};
+    for (const line of issues) {
+      const key = (line.indentNumber && line.indentNumber !== 'N/A') ? line.indentNumber : 'General Issue';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(line);
+    }
+    return Object.entries(groups).map(([indentNumber, items]) => ({
+      indentNumber,
+      items,
+      totalRequested: items.reduce((sum, item) => sum + Number(item.requestedQuantity || item.quantity || 0), 0),
+      totalSupplied: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    }));
+  }, [issueDraftQuery.data?.issues]);
 
   const {
     data: catalogProducts = [],
@@ -201,14 +219,18 @@ export function DepartmentsView() {
       const draft = issueDraftQuery.data ?? await departmentsService.getOpenIssueBatch();
       const currentLines = draft.issues.map((line) => ({
         departmentId: line.departmentId,
+        indentNumber: line.indentNumber || 'N/A',
         productId: line.productId,
+        requestedQuantity: Number(line.requestedQuantity ?? line.quantity),
         quantity: Number(line.quantity),
         unitId: line.unit?.id || (line as DepartmentIssue & { unitId?: string }).unitId,
         notes: line.notes || undefined,
       }));
       const nextLine = {
         departmentId: effectiveIssueDepartmentId,
+        indentNumber: issueIndentNumber.trim() || 'N/A',
         productId: effectiveIssueProductId,
+        requestedQuantity: Number(issueRequestedQuantity) || Number(issueQuantity),
         quantity: Number(issueQuantity),
         unitId: effectiveIssueUnitId,
         notes: issueNotes.trim() || undefined,
@@ -221,10 +243,12 @@ export function DepartmentsView() {
     onSuccess: async (draft) => {
       queryClient.setQueryData(queryKeys.departments.issueDraft(user?.projectId || user?.id), draft);
       setEditingIssueId(null);
+      setIssueIndentNumber('');
       setIssueDepartmentId('');
       setIssueProductId('');
       setIssueBalanceId('');
       setIssueUnitId('');
+      setIssueRequestedQuantity('');
       setIssueQuantity('');
       setIssueNotes('');
       setErrorMsg(null);
@@ -242,7 +266,9 @@ export function DepartmentsView() {
       if (!draft) return null;
       const lines = draft.issues.filter((line) => line.id !== lineId).map((line) => ({
         departmentId: line.departmentId,
+        indentNumber: line.indentNumber || 'N/A',
         productId: line.productId,
+        requestedQuantity: Number(line.requestedQuantity ?? line.quantity),
         quantity: Number(line.quantity),
         unitId: (line as DepartmentIssue & { unitId?: string }).unitId || line.unit?.id,
         notes: line.notes || undefined,
@@ -574,8 +600,22 @@ export function DepartmentsView() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 text-xs">
+                      {/* Indent Number */}
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
+                          Indent Form #
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Indent # (e.g. IND-01)"
+                          value={issueIndentNumber}
+                          onChange={(e) => setIssueIndentNumber(e.target.value)}
+                          className="w-full px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
+                        />
+                      </div>
+
                       {/* Department Select */}
-                      <div className="sm:col-span-3">
+                      <div className="sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
                           Receiving Dept
                         </label>
@@ -593,7 +633,7 @@ export function DepartmentsView() {
                       </div>
 
                       {/* Product Select */}
-                      <div className="sm:col-span-4">
+                      <div className="sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
                           Product / Item
                         </label>
@@ -614,16 +654,27 @@ export function DepartmentsView() {
                         </select>
                       </div>
 
-                      {/* Quantity & Unit Row */}
-                      <div className="sm:col-span-2">
+                      {/* Requested Qty & Supplied Qty with Unit */}
+                      <div className="sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
-                          Quantity &amp; Unit
+                          Req. / Supplied &amp; Unit
                         </label>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <input
                             type="number"
                             min="0.0001"
-                            placeholder="Qty"
+                            placeholder="Req"
+                            title="Requested Quantity from paper indent form"
+                            value={issueRequestedQuantity}
+                            onChange={(e) => setIssueRequestedQuantity(e.target.value)}
+                            className="w-16 px-1.5 py-2 sm:py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-medium text-slate-700 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-right min-h-[38px] sm:min-h-0"
+                          />
+                          <span className="text-slate-400 font-bold">/</span>
+                          <input
+                            type="number"
+                            min="0.0001"
+                            placeholder="Supply"
+                            title="Supplied Quantity (to issue from usable stock)"
                             value={issueQuantity}
                             onChange={(e) => setIssueQuantity(e.target.value)}
                             onKeyDown={(e) => {
@@ -632,12 +683,12 @@ export function DepartmentsView() {
                                 saveIssueLineMutation.mutate();
                               }
                             }}
-                            className="w-1/2 sm:w-20 px-2 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-right min-h-[38px] sm:min-h-0"
+                            className="w-16 px-1.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-900 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-right min-h-[38px] sm:min-h-0"
                           />
                           <select
                             value={effectiveIssueUnitId}
                             onChange={(e) => setIssueUnitId(e.target.value)}
-                            className="w-1/2 sm:flex-1 px-2 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
+                            className="flex-1 px-1.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
                           >
                             {issueUnits.map((u) => (
                               <option key={u.id} value={u.id}>
@@ -648,14 +699,14 @@ export function DepartmentsView() {
                         </div>
                       </div>
 
-                      {/* Notes / Clinical Purpose */}
-                      <div className="sm:col-span-2">
+                      {/* Notes */}
+                      <div className="sm:col-span-1">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 sm:hidden">
-                          Clinical Purpose / Notes (Optional)
+                          Notes
                         </label>
                         <input
                           type="text"
-                          placeholder="Purpose / notes"
+                          placeholder="Notes"
                           value={issueNotes}
                           onChange={(e) => setIssueNotes(e.target.value)}
                           onKeyDown={(e) => {
@@ -664,7 +715,7 @@ export function DepartmentsView() {
                               saveIssueLineMutation.mutate();
                             }
                           }}
-                          className="w-full px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
+                          className="w-full px-2 py-2 sm:py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 shadow-2xs focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[38px] sm:min-h-0"
                         />
                       </div>
 
@@ -686,131 +737,127 @@ export function DepartmentsView() {
                   </div>
                 )}
 
-                {issueDraftQuery.data?.issues?.length ? (
-                  <>
-                    {/* Mobile Card List (< md) */}
-                    <div className="block md:hidden divide-y divide-slate-100">
-                      {issueDraftQuery.data.issues.map((line) => (
-                        <div key={line.id} className="p-3.5 space-y-2 bg-white hover:bg-slate-50/50 transition-colors">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-sm text-[#172033] leading-snug">
-                                {line.product?.name || 'Product'}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="neutral" size="sm">
-                                  {line.department?.name || 'Department'}
-                                </Badge>
-                                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                                  {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
-                                </span>
-                              </div>
-                            </div>
+                {groupedDraftIssues.length > 0 ? (
+                  <div className="divide-y divide-slate-200">
+                    {groupedDraftIssues.map((group) => (
+                      <div key={group.indentNumber} className="space-y-2 p-3 sm:p-4 bg-slate-50/40">
+                        {/* Indent Form Header Banner */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                              📋 Indent Form: {group.indentNumber}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">
+                              {group.items.length} {group.items.length === 1 ? 'line' : 'lines'}
+                            </span>
                           </div>
-                          {line.notes && (
-                            <p className="text-xs text-slate-500 bg-slate-50/80 px-2.5 py-1.5 rounded-lg border border-slate-100">
-                              {line.notes}
-                            </p>
-                          )}
-                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              className="flex-1 justify-center min-h-[34px] text-xs font-medium"
-                              onClick={() => {
-                                setEditingIssueId(line.id);
-                                setIssueDepartmentId(line.departmentId);
-                                setIssueProductId(line.productId);
-                                setIssueUnitId(line.unit?.id || '');
-                                setIssueBalanceId(balances.find((b) => b.productId === line.productId)?.id || '');
-                                setIssueQuantity(String(line.quantity));
-                                setIssueNotes(line.notes || '');
-                                setIsIssueModalOpen(true);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="danger"
-                              size="sm"
-                              className="flex-1 justify-center min-h-[34px] text-xs font-medium"
-                              disabled={removeIssueLineMutation.isPending}
-                              onClick={() => removeIssueLineMutation.mutate(line.id)}
-                            >
-                              Remove
-                            </Button>
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className="text-slate-500">
+                              Requested: <strong className="font-mono text-slate-700">{group.totalRequested}</strong>
+                            </span>
+                            <span className="text-slate-300">·</span>
+                            <span className="text-slate-500">
+                              Supplied: <strong className="font-mono text-emerald-700">{group.totalSupplied}</strong>
+                            </span>
+                            {group.totalSupplied >= group.totalRequested ? (
+                              <Badge variant="success" size="sm">Fully Supplied</Badge>
+                            ) : (
+                              <Badge variant="warning" size="sm">Partial Fulfillment</Badge>
+                            )}
                           </div>
                         </div>
-                      ))}
-                    </div>
 
-                    {/* Desktop Table (>= md) */}
-                    <div className="hidden md:block">
-                      <Table>
-                        <TableHeader>
-                          <tr>
-                            <TableHead>Product</TableHead>
-                            <TableHead>Receiving Department</TableHead>
-                            <TableHead>Quantity</TableHead>
-                            <TableHead>Notes</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </tr>
-                        </TableHeader>
-                        <TableBody>
-                          {issueDraftQuery.data.issues.map((line) => (
-                            <TableRow key={line.id}>
-                              <TableCell className="font-semibold text-[#172033]">
-                                {line.product?.name || 'Product'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="neutral">
-                                  {line.department?.name || 'Department'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-[#172033]">
-                                {line.quantity} {line.unit?.unitName || line.unitNameSnapshot || 'units'}
-                              </TableCell>
-                              <TableCell className="text-xs text-[#5b6678]">
-                                {line.notes || '—'}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex justify-end gap-1.5">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingIssueId(line.id);
-                                      setIssueDepartmentId(line.departmentId);
-                                      setIssueProductId(line.productId);
-                                      setIssueUnitId(line.unit?.id || '');
-                                      setIssueBalanceId(balances.find((b) => b.productId === line.productId)?.id || '');
-                                      setIssueQuantity(String(line.quantity));
-                                      setIssueNotes(line.notes || '');
-                                      setIsIssueModalOpen(true);
-                                    }}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="danger"
-                                    size="sm"
-                                    disabled={removeIssueLineMutation.isPending}
-                                    onClick={() => removeIssueLineMutation.mutate(line.id)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
+                        {/* Tabular Layout for this Indent Form */}
+                        <div className="overflow-x-auto bg-white rounded-lg border border-slate-200 shadow-2xs">
+                          <Table className="min-w-[680px]">
+                            <TableHeader>
+                              <tr>
+                                <TableHead>Product</TableHead>
+                                <TableHead>Receiving Dept</TableHead>
+                                <TableHead className="text-right">Requested Qty</TableHead>
+                                <TableHead className="text-right">Supplied Qty</TableHead>
+                                <TableHead>Unit</TableHead>
+                                <TableHead>Fulfillment</TableHead>
+                                <TableHead>Notes</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </tr>
+                            </TableHeader>
+                            <TableBody>
+                              {group.items.map((line) => {
+                                const reqQty = Number(line.requestedQuantity ?? line.quantity);
+                                const supQty = Number(line.quantity);
+                                const isFull = supQty >= reqQty;
+
+                                return (
+                                  <TableRow key={line.id}>
+                                    <TableCell className="font-semibold text-[#172033]">
+                                      {line.product?.name || 'Product'}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="neutral">
+                                        {line.department?.name || 'Department'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-xs text-slate-600">
+                                      {reqQty}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-xs font-bold text-blue-700">
+                                      {supQty}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-[#5b6678]">
+                                      {line.unit?.unitName || line.unitNameSnapshot || 'units'}
+                                    </TableCell>
+                                    <TableCell>
+                                      {isFull ? (
+                                        <Badge variant="success" size="sm">Full ({supQty}/{reqQty})</Badge>
+                                      ) : (
+                                        <Badge variant="warning" size="sm">Partial ({supQty}/{reqQty})</Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-xs text-[#5b6678] max-w-[160px] truncate">
+                                      <span title={line.notes || undefined}>{line.notes || '—'}</span>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-1.5">
+                                        <Button
+                                          type="button"
+                                          variant="secondary"
+                                          size="sm"
+                                          onClick={() => {
+                                            setEditingIssueId(line.id);
+                                            setIssueIndentNumber(line.indentNumber || '');
+                                            setIssueDepartmentId(line.departmentId);
+                                            setIssueProductId(line.productId);
+                                            setIssueUnitId(line.unit?.id || '');
+                                            setIssueBalanceId(balances.find((b) => b.productId === line.productId)?.id || '');
+                                            setIssueRequestedQuantity(String(line.requestedQuantity ?? line.quantity));
+                                            setIssueQuantity(String(line.quantity));
+                                            setIssueNotes(line.notes || '');
+                                            setIsIssueModalOpen(true);
+                                          }}
+                                        >
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="danger"
+                                          size="sm"
+                                          disabled={removeIssueLineMutation.isPending}
+                                          onClick={() => removeIssueLineMutation.mutate(line.id)}
+                                        >
+                                          Remove
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <div className="py-8 text-center text-xs text-[#5b6678]">
                     <p className="font-medium text-[#172033]">No products in today’s stock out draft yet.</p>
@@ -948,8 +995,9 @@ export function DepartmentsView() {
                         <TableHeader sticky>
                           <tr>
                             <TableHead>Issue #</TableHead>
+                            <TableHead>Indent Form #</TableHead>
                             <TableHead>Department</TableHead>
-                            <TableHead>Product and quantity</TableHead>
+                            <TableHead>Product &amp; Quantities</TableHead>
                             <TableHead>Note</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Time</TableHead>
@@ -961,12 +1009,18 @@ export function DepartmentsView() {
                               <TableCell className="font-mono font-medium text-[#172033]">
                                 {tx.issueNumber || 'Department issue'}
                               </TableCell>
+                              <TableCell className="font-mono text-xs font-semibold text-blue-700">
+                                {tx.indentNumber || 'N/A'}
+                              </TableCell>
                               <TableCell className="font-semibold text-[#172033]">
                                 {tx.department?.name || tx.departmentName || 'Department'}
                               </TableCell>
                               <TableCell>
-                                <span className="block text-xs text-[#172033]">
-                                  {tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'} · {tx.product?.name || tx.productName || 'Product'}
+                                <span className="block text-xs font-semibold text-[#172033]">
+                                  {tx.product?.name || tx.productName || 'Product'}
+                                </span>
+                                <span className="block text-[11px] text-[#5b6678]">
+                                  Req: <strong className="font-mono text-slate-700">{Number(tx.requestedQuantity ?? tx.quantity)}</strong> · Supplied: <strong className="font-mono text-emerald-700">{tx.quantity} {tx.unit?.unitName || tx.unitNameSnapshot || 'units'}</strong>
                                 </span>
                               </TableCell>
                               <TableCell className="text-[#5b6678] text-xs">
@@ -1039,19 +1093,33 @@ export function DepartmentsView() {
           }}
           className="space-y-3 text-xs"
         >
-          <p className="text-[#5b6678]">{editingIssueId ? 'Modify this item’s department, product, or quantity.' : 'Select a manufactured product from available stock, assign which department receives it, and specify the quantity.'}</p>
-          <div>
-            <label htmlFor="issue-department" className="mb-1 block font-medium text-[#172033]">Department</label>
-            <select
-              id="issue-department"
-              value={effectiveIssueDepartmentId}
-              onChange={(event) => setIssueDepartmentId(event.target.value)}
-              required
-              className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]"
-            >
-              <option value="">Choose a department</option>
-              {activeDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-            </select>
+          <p className="text-[#5b6678]">{editingIssueId ? 'Modify this item’s indent form, department, product, or quantities.' : 'Enter details from the department’s physical indent form, including requested and supplied quantities.'}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="issue-indent" className="mb-1 block font-medium text-[#172033]">Physical Indent Form Number</label>
+              <input
+                id="issue-indent"
+                type="text"
+                placeholder="e.g. IND-2026-001"
+                value={issueIndentNumber}
+                onChange={(e) => setIssueIndentNumber(e.target.value)}
+                required
+                className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]"
+              />
+            </div>
+            <div>
+              <label htmlFor="issue-department" className="mb-1 block font-medium text-[#172033]">Receiving Department</label>
+              <select
+                id="issue-department"
+                value={effectiveIssueDepartmentId}
+                onChange={(event) => setIssueDepartmentId(event.target.value)}
+                required
+                className="w-full rounded-md border border-[#dbe3ee] bg-white px-3 py-2 text-xs text-[#172033]"
+              >
+                <option value="">Choose a department</option>
+                {activeDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label htmlFor="issue-product" className="mb-1 block font-medium text-[#172033]">Manufactured product</label>
@@ -1079,10 +1147,21 @@ export function DepartmentsView() {
             <p className="rounded-md bg-amber-50 p-2 text-amber-800">There are no approved manufactured products with available project stock to send to a department.</p>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input
-                  label="Quantity"
+                  label="Requested Quantity"
                   type="number"
+                  placeholder="Requested on paper"
+                  value={issueRequestedQuantity}
+                  onChange={(event) => setIssueRequestedQuantity(event.target.value)}
+                  min={selectedIssueProduct?.quantityPrecision === 0 ? 1 : 0.01}
+                  step={selectedIssueProduct?.quantityPrecision === 0 ? 1 : 'any'}
+                  required
+                />
+                <Input
+                  label="Supplied Quantity"
+                  type="number"
+                  placeholder="To issue from stock"
                   value={issueQuantity}
                   onChange={(event) => setIssueQuantity(event.target.value)}
                   min={selectedIssueProduct?.quantityPrecision === 0 ? 1 : 0.01}

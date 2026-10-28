@@ -14,12 +14,23 @@ export class CreateDepartmentIssueDto {
   @IsNotEmpty()
   departmentId!: string;
 
+  @ApiPropertyOptional({ example: 'IND-2026-001', description: 'Physical Indent Form Number' })
+  @IsOptional()
+  @IsString()
+  indentNumber?: string;
+
   @ApiProperty({ description: 'Product UUID to issue' })
   @IsUUID('4')
   @IsNotEmpty()
   productId!: string;
 
-  @ApiProperty({ example: 10, description: 'Quantity to issue' })
+  @ApiPropertyOptional({ example: 10, description: 'Quantity requested on the physical indent form' })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  requestedQuantity?: number;
+
+  @ApiProperty({ example: 10, description: 'Supplied / issued quantity' })
   @IsNumber()
   @IsPositive()
   quantity!: number;

@@ -196,7 +196,17 @@ export class ShipmentsService {
       }
     } else if (user.role === UserRole.STORE_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (shipment.destinationLocation.warehouseId !== dbUser?.warehouseId) {
+      const managedWarehouses = await this.prisma.warehouse.findMany({
+        where: {
+          OR: [
+            { storeAdminId: user.id },
+            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      const warehouseIds = new Set(managedWarehouses.map((w) => w.id));
+      if (!shipment.destinationLocation.warehouseId || !warehouseIds.has(shipment.destinationLocation.warehouseId)) {
         throw new ForbiddenException('Cannot receive shipment for another warehouse');
       }
     }
@@ -581,14 +591,25 @@ export class ShipmentsService {
 
     if (user.role === UserRole.STORE_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      if (!dbUser?.warehouseId) return [];
-      const location = await this.prisma.stockLocation.findUnique({
-        where: { warehouseId: dbUser.warehouseId },
+      const managedWarehouses = await this.prisma.warehouse.findMany({
+        where: {
+          OR: [
+            { storeAdminId: user.id },
+            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId }] : []),
+          ],
+        },
+        select: { id: true },
       });
-      if (!location) return [];
+      const warehouseIds = managedWarehouses.map((w) => w.id);
+      if (warehouseIds.length === 0) return [];
+      const locations = await this.prisma.stockLocation.findMany({
+        where: { warehouseId: { in: warehouseIds } },
+      });
+      if (locations.length === 0) return [];
+      const locationIds = locations.map((l) => l.id);
       where.OR = [
-        { sourceLocationId: location.id },
-        { destinationLocationId: location.id },
+        { sourceLocationId: { in: locationIds } },
+        { destinationLocationId: { in: locationIds } },
       ];
     } else if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
@@ -653,12 +674,23 @@ export class ShipmentsService {
     // Tenancy checks
     if (user.role === UserRole.STORE_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
-      const location = await this.prisma.stockLocation.findUnique({
-        where: { warehouseId: dbUser?.warehouseId || '' },
+      const managedWarehouses = await this.prisma.warehouse.findMany({
+        where: {
+          OR: [
+            { storeAdminId: user.id },
+            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId }] : []),
+          ],
+        },
+        select: { id: true },
       });
+      const warehouseIds = managedWarehouses.map((w) => w.id);
+      const locations = await this.prisma.stockLocation.findMany({
+        where: { warehouseId: { in: warehouseIds } },
+      });
+      const locationIds = new Set(locations.map((l) => l.id));
       if (
-        shipment.sourceLocationId !== location?.id &&
-        shipment.destinationLocationId !== location?.id
+        !locationIds.has(shipment.sourceLocationId) &&
+        !locationIds.has(shipment.destinationLocationId)
       ) {
         throw new ForbiddenException('Access denied to shipment from another warehouse');
       }

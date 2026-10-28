@@ -62,13 +62,45 @@ paths:
         "201": { description: Project created }
   /warehouses:
     get:
-      summary: List warehouses within caller scope.
+      summary: List warehouses within caller scope (Super Admin sees all; Store Admin sees all assigned warehouses).
       responses:
         "200": { description: Warehouse list }
     post:
       summary: Create a warehouse; Super Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                locationDescription: { type: string }
+                storeAdminId: { type: string, format: uuid, nullable: true }
       responses:
         "201": { description: Warehouse created }
+  /warehouses/{id}:
+    put:
+      summary: Update warehouse details and assign/reassign Store Admin; Super Admin only.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                locationDescription: { type: string }
+                storeAdminId: { type: string, format: uuid, nullable: true }
+      responses:
+        "200": { description: Warehouse updated }
+        "403": { description: Super Admin only }
   /products:
     get:
       summary: List catalog products within caller scope.
@@ -315,9 +347,28 @@ paths:
           schema: { type: string, enum: [DRAFT, PENDING_APPROVAL, APPROVED, POSTED, REJECTED] }
       responses:
         "200": { description: Scoped issue batches }
+  /departments/issues:
+    post:
+      summary: Record department issue line tracking physical indentNumber and requestedQuantity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [departmentId, productId, quantity]
+              properties:
+                departmentId: { type: string, format: uuid }
+                productId: { type: string, format: uuid }
+                quantity: { type: number, description: "Supplied quantity drawn from usable stock" }
+                requestedQuantity: { type: number, description: "Requested quantity on physical indent form" }
+                indentNumber: { type: string, description: "Physical indent form tracking number" }
+                notes: { type: string }
+      responses:
+        "201": { description: Issue created or added to daily draft }
   /departments/issues/batches/{id}/lines:
     patch:
-      summary: Replace a Project Admin's draft stock-out lines. Each line names an active department and an approved product available to that project. Revalidates all lines; no stock is changed.
+      summary: Replace a Project Admin's draft stock-out lines. Each line names an active department, an approved product, physical indentNumber, and requestedQuantity vs supplied quantity. Revalidates all lines; no stock is changed.
       parameters:
         - in: path
           name: id
@@ -361,7 +412,22 @@ paths:
         "403": { description: Super Admin only }
   /import-batches:
     post:
-      summary: Create a private import draft; must not post inventory.
+      summary: Create a private import draft from Excel (.xlsx/.xls) or CSV; must not post inventory or mutate catalog directly.
+      description: Supports import types STOCK_IN, STOCK_OUT, and PRODUCT_CATALOG (bulk creation of products, main categories, subcategories, and base units).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [importType, sourceFilename, fileContent]
+              properties:
+                importType: { type: string, enum: [STOCK_IN, STOCK_OUT, PRODUCT_CATALOG] }
+                sourceFilename: { type: string }
+                fileContent: { type: string, description: "Raw CSV/JSON text or base64 Excel data URL" }
+                mimeType: { type: string }
+                defaultLocationId: { type: string, format: uuid, nullable: true }
+                approvalMode: { type: string, enum: [ALL_OR_NOTHING, PARTIAL], default: PARTIAL }
       responses:
         "201": { description: Import draft created }
   /import-batches/{batchId}/validate:

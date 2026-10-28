@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProjectsService } from './projects.service';
 import { WarehousesService } from './warehouses.service';
-import { UserRole, OrganizationStatus } from '@prisma/client';
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { UserRole, OrganizationStatus, UserStatus } from '@prisma/client';
+import { ConflictException, BadRequestException } from '@nestjs/common';
 
 describe('Organization Services (Projects & Warehouses)', () => {
   let projectsService: ProjectsService;
@@ -14,18 +14,16 @@ describe('Organization Services (Projects & Warehouses)', () => {
       project: {
         findUnique: vi.fn(),
         create: vi.fn(),
-        findMany: vi.fn(),
         update: vi.fn(),
       },
       warehouse: {
         findUnique: vi.fn(),
-        create: vi.fn(),
         findMany: vi.fn(),
+        create: vi.fn(),
         update: vi.fn(),
       },
       projectWarehouseAssignment: {
         findFirst: vi.fn(),
-        findMany: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
       },
@@ -43,20 +41,23 @@ describe('Organization Services (Projects & Warehouses)', () => {
       mockPrisma.project.findUnique.mockResolvedValue(null);
       mockPrisma.project.create.mockResolvedValue({
         id: 'c-1',
-        name: 'Apex Manufacturing',
+        name: 'Metro Hospital',
         status: OrganizationStatus.ACTIVE,
       });
 
-      const res = await projectsService.create({ name: '  Apex Manufacturing  ' });
-
-      expect(mockPrisma.project.findUnique).toHaveBeenCalledWith({ where: { name: 'Apex Manufacturing' } });
-      expect(res.name).toBe('Apex Manufacturing');
+      const res = await projectsService.create({ name: ' Metro Hospital ' });
+      expect(res.name).toBe('Metro Hospital');
+      expect(mockPrisma.project.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ name: 'Metro Hospital' }),
+      });
     });
 
     it('throws ConflictException on duplicate project name', async () => {
-      mockPrisma.project.findUnique.mockResolvedValue({ id: 'c-1', name: 'Apex Manufacturing' });
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'c-1', name: 'Metro Hospital' });
 
-      await expect(projectsService.create({ name: 'Apex Manufacturing' })).rejects.toThrow(ConflictException);
+      await expect(projectsService.create({ name: 'Metro Hospital' })).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('assigns warehouse to project', async () => {
@@ -71,7 +72,6 @@ describe('Organization Services (Projects & Warehouses)', () => {
       });
 
       const res = await projectsService.assignWarehouse('c-1', 'w-1', 'admin-id');
-
       expect(res.isActive).toBe(true);
       expect(mockPrisma.projectWarehouseAssignment.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -122,7 +122,7 @@ describe('Organization Services (Projects & Warehouses)', () => {
       expect(res.name).toBe('Main Depot');
     });
 
-    it('scopes warehouse list for Store Admin to assigned warehouse only', async () => {
+    it('scopes warehouse list for Store Admin to assigned warehouses', async () => {
       const storeAdminUser = {
         id: 'u-store',
         username: 'store_mgr',
@@ -133,16 +133,62 @@ describe('Organization Services (Projects & Warehouses)', () => {
       };
 
       mockPrisma.user.findUnique.mockResolvedValue({ warehouseId: 'w-assigned-1' });
-      mockPrisma.warehouse.findMany.mockResolvedValue([{ id: 'w-assigned-1', name: 'Assigned Depot' }]);
+      mockPrisma.warehouse.findMany.mockResolvedValue([
+        { id: 'w-assigned-1', name: 'Assigned Depot 1', storeAdminId: 'u-store' },
+        { id: 'w-assigned-2', name: 'Assigned Depot 2', storeAdminId: 'u-store' },
+      ]);
 
       const result = await warehousesService.findAll(storeAdminUser);
 
       expect(mockPrisma.warehouse.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'w-assigned-1' },
+          where: {
+            OR: [
+              { storeAdminId: 'u-store' },
+              { id: 'w-assigned-1' },
+            ],
+          },
         }),
       );
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(2);
+    });
+
+    it('allows Super Admin to assign warehouse to any active Store Admin', async () => {
+      mockPrisma.warehouse.findUnique.mockResolvedValue({ id: 'w-1', name: 'Depot 1' });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-store-2',
+        username: 'store_admin_2',
+        role: UserRole.STORE_ADMIN,
+        status: UserStatus.ACTIVE,
+      });
+      mockPrisma.warehouse.update.mockResolvedValue({
+        id: 'w-1',
+        name: 'Depot 1',
+        storeAdminId: 'u-store-2',
+      });
+
+      const updated = await warehousesService.update('w-1', { storeAdminId: 'u-store-2' });
+      expect(mockPrisma.warehouse.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'w-1' },
+          data: expect.objectContaining({ storeAdminId: 'u-store-2' }),
+        }),
+      );
+      expect(updated.storeAdminId).toBe('u-store-2');
+    });
+
+    it('rejects assigning a warehouse to a non-STORE_ADMIN user', async () => {
+      mockPrisma.warehouse.findUnique.mockResolvedValue({ id: 'w-1', name: 'Depot 1' });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-proj-admin',
+        username: 'proj_admin',
+        role: UserRole.PROJECT_ADMIN,
+        status: UserStatus.ACTIVE,
+      });
+
+      await expect(
+        warehousesService.update('w-1', { storeAdminId: 'u-proj-admin' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

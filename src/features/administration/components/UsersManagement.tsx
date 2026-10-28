@@ -120,7 +120,13 @@ export function UsersManagement() {
               <TableRow key={user.id}>
                 <TableCell className="font-medium text-[#172033]">{user.username}</TableCell>
                 <TableCell><Badge variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}>{user.role.replaceAll('_', ' ')}</Badge></TableCell>
-                <TableCell className="text-[#5b6678]">{user.warehouse?.name ?? user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}</TableCell>
+                <TableCell className="text-[#5b6678]">
+                  {user.role === 'STORE_ADMIN'
+                    ? user.managedWarehouses && user.managedWarehouses.length > 0
+                      ? user.managedWarehouses.map((w) => w.name).join(', ')
+                      : user.warehouse?.name ?? 'Unassigned'
+                    : user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}
+                </TableCell>
                 <TableCell><Badge variant={user.status === 'ACTIVE' ? 'success' : 'danger'}>{user.status.replaceAll('_', ' ')}</Badge></TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
@@ -143,9 +149,9 @@ export function UsersManagement() {
               <option value="STORE_ADMIN">Store Admin</option><option value="PROJECT_ADMIN">Project Admin</option><option value="SUPER_ADMIN">Super Admin</option>
             </select>
           </label>
-          {newRole === 'STORE_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Warehouse
-            <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} required disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
-              <option value="">Choose a warehouse</option>{(warehousesQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {newRole === 'STORE_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Initial Warehouse (Optional)
+            <select value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)} disabled={organizationsLoading} className="min-h-11 w-full rounded-md border border-[#dbe3ee] bg-white px-3 text-sm">
+              <option value="">Choose a warehouse (optional, can assign later)</option>{(warehousesQuery.data ?? []).filter((item) => !item.status || item.status === 'ACTIVE').map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>}
           {newRole === 'PROJECT_ADMIN' && <label className="block space-y-1 text-sm font-medium text-[#172033]">Project

@@ -9,7 +9,7 @@ Legend: **A** = allowed; **R** = request/submit only; **V** = view; **—** = no
 | View own warehouse stock/history | A | V/A* | — |
 | View own project inventory/history | A | — | V/A* |
 | Create/disable/reset accounts | A | — | — |
-| Manage warehouses | A | — | — |
+| Manage warehouses and assign Store Admins | A | — | — |
 | Assign projects to warehouses | A | — | — |
 | Create/edit company product catalog/categories | A | — | — |
 | Create/edit project product catalog | V/approve | — | R/A* |
@@ -18,7 +18,7 @@ Legend: **A** = allowed; **R** = request/submit only; **V** = view; **—** = no
 | Submit warehouse transfer | V/approve | R/A* | — |
 | Submit stock corrections/counts | V/approve | R/A* | R/A* |
 | Submit direct project stock-in | V/approve | — | R/A* |
-| Submit project stock-out/department issue | V/approve | — | R/A* (department issues may be accumulated in own daily draft) |
+| Submit project stock-out/department issue | V/approve | — | R/A* (department issues tracked by Indent Form # and accumulated in daily draft) |
 | Manage departments | V/approve | — | R/A* |
 | Submit department returns | V/approve | — | R/A* |
 | Submit manufacturing runs | V/approve | — | R/A* |
@@ -37,7 +37,7 @@ Legend: **A** = allowed; **R** = request/submit only; **V** = view; **—** = no
 
 ## Enforcement rules
 1. Every object lookup is scoped by role and organization, not only by UI filters.
-2. Store Admin requests may only originate from that Store Admin's warehouse.
+2. Store Admin requests and queries are scoped to all warehouses assigned to that Store Admin (via warehouses.store_admin_id or legacy user.warehouse_id). A warehouse may have at most one Store Admin; a Store Admin may manage multiple warehouses.
 3. Project Admin cannot see source warehouse identity for inbound shipments.
 4. Project Admin cannot transact with pending/rejected products.
 5. Only Super Admin may approve or reject requests.
@@ -46,3 +46,4 @@ Legend: **A** = allowed; **R** = request/submit only; **V** = view; **—** = no
 8. Store Admin does not create products/categories and does not receive low-stock notifications under current policy.
 9. Shared project credentials identify the account, not a named human; audit should not falsely claim otherwise.
 10. Some Project Admin permissions (e.g. exact report/export and draft import scope) must be confirmed before production.
+11. Issues to internal departments are conducted against physical indent forms, tracking Indent Form Number and comparing requested vs supplied quantities in a grouped tabular format.

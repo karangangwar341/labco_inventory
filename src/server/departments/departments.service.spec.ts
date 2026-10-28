@@ -201,6 +201,24 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       expect(mockPrisma.departmentIssueBatch.findFirst).not.toHaveBeenCalled();
     });
 
+    it('records physical indent form number and requested quantity on issue lines', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', projectId: 'project-123', status: DepartmentStatus.ACTIVE });
+      mockPrisma.product.findUnique.mockResolvedValue({ ...testProduct, projectId: 'project-123' });
+
+      const line = await (departmentsService as any).prepareIssueLine({
+        departmentId: 'dept-1',
+        indentNumber: 'IND-2026-001',
+        productId: 'prod-1',
+        requestedQuantity: 15,
+        quantity: 10,
+        unitId: 'unit-piece',
+      }, projectAdminUser, 'project-123');
+
+      expect(line.indentNumber).toBe('IND-2026-001');
+      expect(line.requestedQuantity.toNumber()).toBe(15);
+      expect(line.quantity.toNumber()).toBe(10);
+    });
+
     it('auto-posts a submitted batch and records an audit event when approval is disabled', async () => {
       const issue = {
         id: 'issue-1', issueBatchId: 'issue-batch-1', productId: 'prod-1', departmentId: 'dept-1', unitId: 'unit-piece', batchId: null,

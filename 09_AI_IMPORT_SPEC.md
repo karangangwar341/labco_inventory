@@ -5,9 +5,9 @@
 AI may classify/extract data from uploaded product images, scans, PDFs and supported tabular documents and propose mappings to system fields. AI is not authorized to approve requests, post inventory, resolve duplicate products automatically, or execute natural-language commands.
 
 ## 2. Supported import intents
-- Prepare company product creation.
-- Prepare project product creation.
-- Prepare stock-in, stock-out, opening stock and physical adjustment drafts.
+- Prepare company product creation (including bulk categories, subcategories, units, and products from Excel (.xlsx/.xls) and CSV).
+- Prepare project product creation (manufactured products within project scope).
+- Prepare stock-in, stock-out, and opening stock inventory movement drafts from Excel (.xlsx/.xls) and CSV.
 - Prepare project manufacturing input/output draft where explicitly supported by the selected workflow.
 - CSV/XLSX import with deterministic parsing and validation.
 

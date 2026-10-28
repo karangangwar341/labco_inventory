@@ -16,12 +16,14 @@ export interface DepartmentIssueDto {
   id: string;
   issueBatchId?: string | null;
   issueNumber: string;
+  indentNumber: string;
   departmentId: string;
   departmentName?: string;
   department?: { id: string; name: string };
   productId: string;
   productName?: string;
   product?: { id: string; name: string };
+  requestedQuantity: number | string;
   quantity: number | string;
   unitNameSnapshot?: string;
   unit?: { id: string; unitName: string };
@@ -48,9 +50,12 @@ export interface CreateDepartmentDto {
 
 export interface CreateDepartmentIssueDto {
   departmentId: string;
+  indentNumber?: string;
   productId: string;
+  requestedQuantity?: number;
   quantity: number;
   unitId?: string;
+  unitName?: string;
   notes?: string;
 }
 

@@ -15,7 +15,7 @@
 
 ## Phase 2 — Identity and organization
 - Login, lockout, single-session policy, seven-day inactivity timeout.
-- User/role management, projects, warehouses, assignments.
+- User/role management, projects, warehouses, assignments, and Store Admin multi-warehouse assignment (1:N Store Admin to Warehouse; 1:0..1 Warehouse to Store Admin).
 - Server authorization tests.
 **Exit:** all role-scope and session tests pass.
 
@@ -42,7 +42,7 @@
 **Exit:** warehouse lifecycle tests pass.
 
 ## Phase 7 — Project operations
-- Direct project stock-in/out, manufacturing linked/separate, department issue/return, daily batches.
+- Direct project stock-in/out, manufacturing linked/separate, department issue/return (with physical indent form tracking and tabular grouping), daily batches.
 **Exit:** atomic manufacturing and project scope tests pass.
 
 ## Phase 8 — Bulk imports and AI extraction

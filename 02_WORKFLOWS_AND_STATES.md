@@ -29,6 +29,11 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 - Define source types in configurable master data; initial suggested types: direct purchase, opening stock, department return, donation, other.
 
 ## 5. Warehouse-to-project dispatch
+### Warehouse assignment and Store Admin scoping
+- Super Admin assigns warehouses to Store Admins.
+- Cardinality: One Store Admin may manage one or more warehouses (`1 Store Admin : N Warehouses`). Each warehouse has at most one Store Admin assigned (`1 Warehouse : 0..1 Store Admin`).
+- Store Admin queries, balance views, stock requests, shipments, and inventory movements are strictly scoped to all warehouses assigned to the authenticated Store Admin.
+
 1. Store Admin requests dispatch from their own warehouse to an assigned project.
 2. Super Admin approves dispatch.
 3. Approval deducts warehouse stock and creates shipment/in-transit record atomically.
@@ -61,7 +66,11 @@ If 100 usable units exist, request A reserves 90, leaving 10 available. A second
 
 ## 9. Department issue and return
 - Project Admin maintains department list; create/edit/deactivate requires Super Admin approval.
-- Project Admin maintains one open daily department-issue draft per project and can add/edit/remove lines across departments and approved manufactured products with project stock throughout the day. This is the project stock-out flow; each line selects its department. Saving the draft has no inventory effect.
+- Issue to internal departments is conducted on the basis of physical indent forms provided to departments.
+- Each department fills out a physical indent form with an Indent Form Number, receiving department name, required products, and requested quantities.
+- Project Admin receives the physical indent form and inputs the lines into the daily department-issue draft, recording the physical `indent_number`, `requested_quantity` (written on paper), and `quantity` (supplied quantity to be deducted from usable project stock).
+- Project Admin maintains one open daily department-issue draft per project and can add/edit/remove lines across departments and approved manufactured products with project stock throughout the day. This is the project stock-out flow; each line selects its department and associated Indent Form Number. Saving the draft has no inventory effect.
+- All draft and posted department issues are presented grouped by Indent Form Number in a tabular layout, displaying requested quantity vs supplied quantity, unit, fulfillment status (`Full` if supplied >= requested, `Partial` if supplied < requested), notes, and line actions.
 - Submitting the daily draft revalidates every line and reserves all required usable stock atomically. If any line fails validation or availability, nothing is submitted or reserved.
 - If department-issue approval is enabled (default), the entire submitted draft is one Super Admin decision. Rejection releases all reservations; approval consumes all reservations and posts every line in one transaction. No department stock balance is maintained.
 - If approval is disabled in Super Admin settings, submission validates and posts every line atomically, marks the batch `POSTED`, and records an audit event. It never creates an unreviewed partial posting.

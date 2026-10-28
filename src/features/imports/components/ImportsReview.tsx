@@ -28,7 +28,7 @@ export function ImportsReview() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [importIntent, setImportIntent] = useState<'STOCK_IN' | 'STOCK_OUT'>('STOCK_IN');
+  const [importIntent, setImportIntent] = useState<'STOCK_IN' | 'STOCK_OUT' | 'PRODUCT_CATALOG'>('STOCK_IN');
   const [locations, setLocations] = useState<Awaited<ReturnType<typeof inventoryService.getLocations>>>([]);
   const [defaultLocationId, setDefaultLocationId] = useState('');
   const [approvalMode, setApprovalMode] = useState<'ALL_OR_NOTHING' | 'PARTIAL'>('ALL_OR_NOTHING');
@@ -122,14 +122,15 @@ export function ImportsReview() {
       let mimeType = file.type || 'text/csv';
 
       if (isExcel) {
-        const buffer = await file.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const firstSheetName = wb.SheetNames[0];
-        if (!firstSheetName || !wb.Sheets[firstSheetName]) {
-          throw new Error('Excel workbook contains no readable sheets');
-        }
-        text = XLSX.utils.sheet_to_csv(wb.Sheets[firstSheetName]);
-        mimeType = 'text/csv';
+        text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read Excel file'));
+          reader.readAsDataURL(file);
+        });
+        mimeType = file.name.endsWith('.xlsx')
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/vnd.ms-excel';
       } else {
         text = await file.text();
       }
@@ -153,6 +154,69 @@ export function ImportsReview() {
   };
 
   const handleDownloadSample = (format: 'csv' | 'xlsx') => {
+    if (importIntent === 'PRODUCT_CATALOG') {
+      const sampleHeaders = [
+        'category',
+        'subcategory',
+        'productName',
+        'brand',
+        'unitName',
+        'description',
+        'quantityPrecision',
+        'allowFractional',
+      ];
+      const sampleRows = [
+        [
+          'Medical Consumables',
+          'Gloves',
+          'Latex Examination Gloves Medium',
+          'SafeTouch',
+          'BOX',
+          'Box of 100 powder-free latex gloves',
+          0,
+          'FALSE',
+        ],
+        [
+          'Laboratory Reagents',
+          'Acids',
+          'Hydrochloric Acid 37% AR',
+          'Merck',
+          'BOTTLE',
+          '500ml analytical reagent grade',
+          2,
+          'TRUE',
+        ],
+        [
+          'Diagnostic Equipment',
+          'Analyzers',
+          'Centrifuge 5000 RPM',
+          'Eppendorf',
+          'PIECE',
+          'High speed benchtop centrifuge',
+          0,
+          'FALSE',
+        ],
+      ];
+
+      if (format === 'csv') {
+        const csv = [sampleHeaders.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'product_catalog_import_template.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet([sampleHeaders, ...sampleRows]);
+        ws['!cols'] = sampleHeaders.map((h) => ({ wch: Math.max(h.length + 4, 18) }));
+        XLSX.utils.book_append_sheet(wb, ws, 'CatalogTemplate');
+        XLSX.writeFile(wb, 'product_catalog_import_template.xlsx');
+      }
+      return;
+    }
+
     const sampleHeaders = ['productName', 'quantity', 'unitName', 'condition'];
     const sampleRows = [
       ['Diagnostic Cartridge A', 50, 'PIECE', 'USABLE'],
@@ -413,26 +477,39 @@ export function ImportsReview() {
             onChange={(e) => setImportIntent(e.target.value as any)}
             className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
           >
-            <option value="STOCK_IN">📥 Stock In (Supplier Delivery / Adding Items)</option>
-            <option value="STOCK_OUT">📤 Stock Out (Dispatch / Sending Items)</option>
+            <option value="STOCK_IN">📥 Stock In (Supplier Delivery / Adding Inventory)</option>
+            <option value="STOCK_OUT">📤 Stock Out (Dispatch / Issuing Inventory)</option>
+            <option value="PRODUCT_CATALOG">📦 Product Catalog (Create Products, Categories &amp; Subcategories)</option>
           </select>
           <p className="text-[11px] text-slate-500">
             Choose whether this document is for receiving or dispatching.
           </p>
         </div>
 
-        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
-          <label className="text-xs font-semibold text-slate-800 block">Store Location</label>
-          <select
-            value={defaultLocationId}
-            onChange={(e) => setDefaultLocationId(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
-          >
-            <option value="">Choose your store or warehouse...</option>
-            {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
-          </select>
-          <p className="text-[11px] text-slate-500">Where should these items be placed once approved?</p>
-        </div>
+        {importIntent !== 'PRODUCT_CATALOG' ? (
+          <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
+            <label className="text-xs font-semibold text-slate-800 block">Store Location</label>
+            <select
+              value={defaultLocationId}
+              onChange={(e) => setDefaultLocationId(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+            >
+              <option value="">Choose your store or warehouse...</option>
+              {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-500">Where should these items be placed once approved?</p>
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
+            <label className="text-xs font-semibold text-slate-800 block">Scope &amp; Catalog</label>
+            <div className="p-2 bg-blue-50/70 rounded-lg text-xs text-blue-800 font-medium">
+              📦 Catalog Master Data
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Products, categories and subcategories will be created and become available across the organization.
+            </p>
+          </div>
+        )}
         <div className="p-4 rounded-xl bg-white border border-[#dbe3ee] space-y-2 shadow-xs">
           <label className="text-[11px] font-semibold text-[#5b6678] uppercase tracking-wider block">
             Approval Mode
@@ -537,9 +614,21 @@ export function ImportsReview() {
               <thead>
                 <tr className="bg-[#f8fafc] text-[#5b6678] border-b border-[#dbe3ee]">
                   <th className="py-2.5 px-3.5 font-semibold w-10 text-center">#</th>
-                  <th className="py-2.5 px-3.5 font-semibold">Product Name / Identifier</th>
-                  <th className="py-2.5 px-3.5 font-semibold">Quantity</th>
-                  <th className="py-2.5 px-3.5 font-semibold">Unit</th>
+                  <th className="py-2.5 px-3.5 font-semibold">Product Name</th>
+                  {activeBatch.importType === 'PRODUCT_CATALOG' ? (
+                    <>
+                      <th className="py-2.5 px-3.5 font-semibold">Main Category</th>
+                      <th className="py-2.5 px-3.5 font-semibold">Subcategory</th>
+                      <th className="py-2.5 px-3.5 font-semibold">Brand</th>
+                      <th className="py-2.5 px-3.5 font-semibold">Unit</th>
+                      <th className="py-2.5 px-3.5 font-semibold">Decimals</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="py-2.5 px-3.5 font-semibold">Quantity</th>
+                      <th className="py-2.5 px-3.5 font-semibold">Unit</th>
+                    </>
+                  )}
                   <th className="py-2.5 px-3.5 font-semibold">Status</th>
                 </tr>
               </thead>
@@ -547,17 +636,22 @@ export function ImportsReview() {
                 {activeBatch.rows.map((row: ImportRow) => {
                   const mapped = (row.mappedData || {}) as Record<string, any>;
                   const raw = (row.rawData || {}) as Record<string, any>;
-                  const productName = mapped.productName || raw.productName || raw.item || raw.description || '—';
+                  const productName = mapped.productName || raw.productName || raw.item || raw.name || '—';
                   const quantity = mapped.quantity ?? raw.quantity ?? raw.qty ?? 0;
-                  const unitName = mapped.unitName || raw.unit || 'PIECE';
+                  const unitName = mapped.unitName || raw.unitName || raw.unit || 'PIECE';
+                  const category = mapped.category || raw.category || raw.mainCategory || '';
+                  const subcategory = mapped.subcategory || raw.subcategory || raw.subCategory || '';
+                  const brand = mapped.brand || raw.brand || '';
+                  const precision = mapped.quantityPrecision ?? raw.quantityPrecision ?? 0;
                   const hasErrors = (row.validationErrors && row.validationErrors.length > 0) || row.status === 'ERROR';
+                  const colSpanCount = activeBatch.importType === 'PRODUCT_CATALOG' ? 8 : 5;
 
                   return (
                     <React.Fragment key={row.id}>
                       <tr className={`hover:bg-[#f8fafc] transition ${hasErrors ? 'bg-[#fef3f2]/40' : ''}`}>
                         <td className="py-2.5 px-3.5 text-center font-mono text-[#5b6678]">{row.rowIndex}</td>
 
-                        <td className="py-2.5 px-3.5 font-medium">
+                        <td className="py-2.5 px-3.5 font-medium min-w-[140px]">
                           <input
                             type="text"
                             value={productName}
@@ -567,25 +661,81 @@ export function ImportsReview() {
                           />
                         </td>
 
-                        <td className="py-2.5 px-3.5">
-                          <input
-                            type="number"
-                            value={quantity}
-                            disabled={!editableBatch}
-                            onChange={(e) => handleCellChange(row.id, 'quantity', Number(e.target.value))}
-                            className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-20 text-[#172033] font-mono"
-                          />
-                        </td>
-
-                        <td className="py-2.5 px-3.5 text-[#5b6678]">
-                          <input
-                            type="text"
-                            value={unitName}
-                            disabled={!editableBatch}
-                            onChange={(e) => handleCellChange(row.id, 'unitName', e.target.value)}
-                            className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-16 text-[#172033]"
-                          />
-                        </td>
+                        {activeBatch.importType === 'PRODUCT_CATALOG' ? (
+                          <>
+                            <td className="py-2.5 px-3.5">
+                              <input
+                                type="text"
+                                value={category}
+                                placeholder="Main category"
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'category', e.target.value)}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-full text-[#172033]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3.5">
+                              <input
+                                type="text"
+                                value={subcategory}
+                                placeholder="Subcategory"
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'subcategory', e.target.value)}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-full text-[#172033]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3.5">
+                              <input
+                                type="text"
+                                value={brand}
+                                placeholder="Brand"
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'brand', e.target.value)}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-24 text-[#172033]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3.5 text-[#5b6678]">
+                              <input
+                                type="text"
+                                value={unitName}
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'unitName', e.target.value)}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-16 text-[#172033]"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3.5 text-[#5b6678]">
+                              <input
+                                type="number"
+                                min={0}
+                                max={2}
+                                value={precision}
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'quantityPrecision', Number(e.target.value))}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-12 text-[#172033] font-mono text-center"
+                              />
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2.5 px-3.5">
+                              <input
+                                type="number"
+                                value={quantity}
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'quantity', Number(e.target.value))}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-20 text-[#172033] font-mono"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3.5 text-[#5b6678]">
+                              <input
+                                type="text"
+                                value={unitName}
+                                disabled={!editableBatch}
+                                onChange={(e) => handleCellChange(row.id, 'unitName', e.target.value)}
+                                className="bg-transparent border-b border-transparent hover:border-[#dbe3ee] focus:border-[#2563eb] focus:outline-none w-16 text-[#172033]"
+                              />
+                            </td>
+                          </>
+                        )}
 
                         <td className="py-2.5 px-3.5">
                           <Badge
@@ -604,7 +754,7 @@ export function ImportsReview() {
 
                       {row.isDuplicate && (
                         <tr className="bg-[#fffbeb] border-b border-[#fef3c7]">
-                          <td colSpan={7} className="py-2 px-4">
+                          <td colSpan={colSpanCount} className="py-2 px-4">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[#a15c00]">
                               <div className="flex items-center gap-1.5">
                                 <span className="font-bold">⚠️ DUPLICATE SIGNATURE:</span>
@@ -617,7 +767,7 @@ export function ImportsReview() {
 
                       {hasErrors && !row.isDuplicate && (
                         <tr className="bg-[#fef3f2] border-b border-[#fee4e2]">
-                          <td colSpan={7} className="py-2 px-4 text-[#b42318] text-[11px]">
+                          <td colSpan={colSpanCount} className="py-2 px-4 text-[#b42318] text-[11px]">
                             <strong>Validation Error:</strong>{' '}
                             {row.validationErrors?.join(' • ') || 'Server schema validation failed'}
                           </td>

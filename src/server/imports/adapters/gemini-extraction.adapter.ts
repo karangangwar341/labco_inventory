@@ -20,34 +20,38 @@ export class GeminiExtractionAdapter implements AiExtractionAdapter {
     const safeMime = (mimeType || '').toLowerCase();
 
     // 0. If Excel (.xlsx or .xls)
-    const isExcel =
+    const isExcelMime =
       safeMime.includes('spreadsheet') ||
       safeMime.includes('excel') ||
       safeMime.includes('xlsx') ||
       safeMime.includes('xls');
 
-    if (isExcel) {
-      try {
-        let buf: Buffer;
-        if (Buffer.isBuffer(content)) {
-          buf = content;
-        } else if (typeof content === 'string') {
-          if (content.startsWith('data:')) {
-            const base64Data = content.split(',')[1] || '';
-            buf = Buffer.from(base64Data, 'base64');
-          } else {
-            // Try base64 decoding first, fallback to utf-8 buffer
-            try {
-              buf = Buffer.from(content, 'base64');
-            } catch {
-              buf = Buffer.from(content, 'utf-8');
-            }
-          }
-        } else {
-          buf = Buffer.from('');
-        }
+    let excelBuf: Buffer | null = null;
+    if (Buffer.isBuffer(content)) {
+      if (
+        (content.length >= 4 && content[0] === 0x50 && content[1] === 0x4b) || // PK zip header
+        (content.length >= 8 && content[0] === 0xd0 && content[1] === 0xcf) || // OLE2 xls header
+        isExcelMime
+      ) {
+        excelBuf = content;
+      }
+    } else if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (trimmed.startsWith('data:')) {
+        const base64Data = trimmed.split(',')[1] || '';
+        try {
+          excelBuf = Buffer.from(base64Data, 'base64');
+        } catch {}
+      } else if (isExcelMime || /^(UEsDB|0M8R4)/.test(trimmed)) {
+        try {
+          excelBuf = Buffer.from(trimmed, 'base64');
+        } catch {}
+      }
+    }
 
-        const workbook = XLSX.read(buf, { type: 'buffer' });
+    if (excelBuf && excelBuf.length > 0) {
+      try {
+        const workbook = XLSX.read(excelBuf, { type: 'buffer' });
         const firstSheetName = workbook.SheetNames[0];
         if (firstSheetName && workbook.Sheets[firstSheetName]) {
           const sheetCsv = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
@@ -201,26 +205,94 @@ export class GeminiExtractionAdapter implements AiExtractionAdapter {
 
     // Field candidate matchers
     const matchers: Record<string, { patterns: RegExp[]; defaultConfidence: number }> = {
-      productName: { patterns: [/product/i, /item/i, /name/i, /sku_name/i, /description/i], defaultConfidence: 0.95 },
-      productId: { patterns: [/product_?id/i, /prod_?id/i], defaultConfidence: 0.98 },
-      quantity: { patterns: [/qty/i, /quantity/i, /units/i, /amount/i, /count/i], defaultConfidence: 0.95 },
-      unitName: { patterns: [/unit/i, /uom/i, /measure/i, /package/i], defaultConfidence: 0.9 },
-      locationId: { patterns: [/location_?id/i, /warehouse_?id/i, /project_?id/i], defaultConfidence: 0.95 },
-      locationName: { patterns: [/location/i, /warehouse/i, /site/i], defaultConfidence: 0.9 },
-      condition: { patterns: [/condition/i, /quality/i, /status/i], defaultConfidence: 0.9 },
-      brand: { patterns: [/brand/i, /manufacturer/i], defaultConfidence: 0.85 },
-      category: { patterns: [/category/i, /group/i], defaultConfidence: 0.85 },
+      subcategory: {
+        patterns: [/sub_?category/i, /sub_?cat/i, /subgroup/i, /child_?category/i],
+        defaultConfidence: 0.9,
+      },
+      category: {
+        patterns: [/^(main_?)?category/i, /category_?name/i, /^cat$/i, /^group$/i],
+        defaultConfidence: 0.9,
+      },
+      productName: {
+        patterns: [/product_?name/i, /item_?name/i, /^product$/i, /^item$/i, /^name$/i, /sku_name/i, /material_?name/i],
+        defaultConfidence: 0.95,
+      },
+      productId: {
+        patterns: [/product_?id/i, /prod_?id/i, /item_?id/i],
+        defaultConfidence: 0.98,
+      },
+      brand: {
+        patterns: [/brand/i, /manufacturer/i, /make/i],
+        defaultConfidence: 0.85,
+      },
+      description: {
+        patterns: [/description/i, /desc/i, /details/i, /specification/i, /specs/i],
+        defaultConfidence: 0.85,
+      },
+      kind: {
+        patterns: [/product_?kind/i, /product_?type/i, /^kind$/i, /^type$/i],
+        defaultConfidence: 0.85,
+      },
+      quantity: {
+        patterns: [/qty/i, /quantity/i, /units_?count/i, /amount/i, /^count$/i],
+        defaultConfidence: 0.95,
+      },
+      unitName: {
+        patterns: [/unit/i, /uom/i, /base_?unit/i, /measure/i, /package/i],
+        defaultConfidence: 0.9,
+      },
+      quantityPrecision: {
+        patterns: [/quantity_?precision/i, /precision/i, /^decimal(s)?$/i],
+        defaultConfidence: 0.9,
+      },
+      allowFractional: {
+        patterns: [/allow_?fractional/i, /fractional/i, /is_?fractional/i],
+        defaultConfidence: 0.9,
+      },
+      minQuantity: {
+        patterns: [/min_?qty/i, /min_?quantity/i, /threshold/i, /reorder_?level/i],
+        defaultConfidence: 0.85,
+      },
+      minOrderQuantity: {
+        patterns: [/min_?order/i, /moq/i],
+        defaultConfidence: 0.85,
+      },
+      locationId: {
+        patterns: [/location_?id/i, /warehouse_?id/i, /project_?id/i],
+        defaultConfidence: 0.95,
+      },
+      locationName: {
+        patterns: [/location/i, /warehouse/i, /site/i],
+        defaultConfidence: 0.9,
+      },
+      condition: {
+        patterns: [/condition/i, /quality/i, /stock_?status/i],
+        defaultConfidence: 0.9,
+      },
     };
 
     // Match raw keys to canonical fields
     for (const [canonicalField, rule] of Object.entries(matchers)) {
       for (const [rawKey, rawVal] of Object.entries(raw)) {
+        // Prevent 'subcategory' column from matching 'category' matcher
+        if (canonicalField === 'category' && /sub/i.test(rawKey)) continue;
+        // Prevent 'productName' from matching 'description' or 'category'
+        if (canonicalField === 'productName' && (/desc/i.test(rawKey) || /cat/i.test(rawKey))) continue;
+
         if (rule.patterns.some((p) => p.test(rawKey))) {
           if (!fields[canonicalField] && rawVal !== undefined && rawVal !== '') {
             let parsedVal: any = typeof rawVal === 'string' ? rawVal.trim() : rawVal;
-            if (canonicalField === 'quantity') {
+            if (
+              canonicalField === 'quantity' ||
+              canonicalField === 'quantityPrecision' ||
+              canonicalField === 'minQuantity' ||
+              canonicalField === 'minOrderQuantity'
+            ) {
               const num = Number(parsedVal);
               if (!isNaN(num)) parsedVal = num;
+            }
+            if (canonicalField === 'allowFractional') {
+              parsedVal = parsedVal === true || String(parsedVal).toLowerCase() === 'true';
             }
 
             const confidence = rule.defaultConfidence;
@@ -250,6 +322,9 @@ export class GeminiExtractionAdapter implements AiExtractionAdapter {
     }
     if (!fields.quantity && intent !== ImportType.PRODUCT_CATALOG) {
       rowWarnings.push('Missing quantity');
+    }
+    if (!fields.category && intent === ImportType.PRODUCT_CATALOG) {
+      rowWarnings.push('Missing category');
     }
 
     const overallConfidence = fieldCount > 0 ? Number((confidenceSum / fieldCount).toFixed(4)) : 0.5;

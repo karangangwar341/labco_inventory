@@ -73,6 +73,13 @@ export class UsersService {
       },
     });
 
+    if (dto.role === UserRole.STORE_ADMIN && dto.warehouseId) {
+      await this.prisma.warehouse.update({
+        where: { id: dto.warehouseId },
+        data: { storeAdminId: user.id },
+      });
+    }
+
     return user;
   }
 
@@ -90,6 +97,7 @@ export class UsersService {
         createdAt: true,
         disabledAt: true,
         warehouse: { select: { id: true, name: true } },
+        managedWarehouses: { select: { id: true, name: true, status: true } },
         project: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -111,6 +119,7 @@ export class UsersService {
         createdAt: true,
         disabledAt: true,
         warehouse: { select: { id: true, name: true } },
+        managedWarehouses: { select: { id: true, name: true, status: true } },
         project: { select: { id: true, name: true } },
       },
     });

@@ -11,4 +11,9 @@ export class CreateWarehouseDto {
   @IsOptional()
   @IsString()
   locationDescription?: string;
+
+  @ApiPropertyOptional({ example: 'user-uuid-1', description: 'Assigned Store Admin user ID' })
+  @IsOptional()
+  @IsString()
+  storeAdminId?: string | null;
 }

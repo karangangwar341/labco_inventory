@@ -391,7 +391,9 @@ export class DepartmentsService {
     if (!batch.issues.length) throw new BadRequestException('Add at least one department issue before submitting');
     const revalidated = await Promise.all((batch.issues as any[]).map((line: any) => this.prepareIssueLine({
       departmentId: line.departmentId,
+      indentNumber: line.indentNumber,
       productId: line.productId,
+      requestedQuantity: line.requestedQuantity ? Number(line.requestedQuantity) : undefined,
       quantity: line.quantity.toNumber(),
       unitId: line.unitId,
       notes: line.notes ?? undefined,
@@ -533,9 +535,13 @@ export class DepartmentsService {
     const conversion = new Prisma.Decimal(unit.conversionToBase);
     const baseQuantity = quantity.mul(conversion);
     if (product.quantityPrecision === 0 && !baseQuantity.isInteger()) throw new BadRequestException(`Product "${product.name}" requires whole units`);
+    const indentNumber = dto.indentNumber?.trim() || 'N/A';
+    const requestedQuantity = dto.requestedQuantity !== undefined && dto.requestedQuantity !== null
+      ? new Prisma.Decimal(dto.requestedQuantity)
+      : quantity;
     return {
-      projectId, departmentId: department.id, productId: product.id,
-      quantity, unitId: unit.id, unitNameSnapshot: unit.unitName,
+      projectId, departmentId: department.id, indentNumber, productId: product.id,
+      requestedQuantity, quantity, unitId: unit.id, unitNameSnapshot: unit.unitName,
       conversionToBaseSnapshot: conversion, baseQuantity, notes: dto.notes?.trim() || null,
       issuedById: user.id,
     };
@@ -637,11 +643,18 @@ export class DepartmentsService {
       );
     }
 
+    const indentNumber = dto.indentNumber?.trim() || 'N/A';
+    const requestedQuantity = dto.requestedQuantity !== undefined && dto.requestedQuantity !== null
+      ? new Prisma.Decimal(dto.requestedQuantity)
+      : originalQtyDec;
+
     const issue = await this.prisma.departmentIssue.create({
       data: {
         projectId,
         departmentId: department.id,
+        indentNumber,
         productId: product.id,
+        requestedQuantity,
         quantity: originalQtyDec,
         unitId: unit.id,
         unitNameSnapshot: unit.unitName,

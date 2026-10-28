@@ -271,32 +271,61 @@ export class RequestsService {
 
     // Role-scoped location validation
     if (user.role === UserRole.STORE_ADMIN) {
-      const warehouseId = user.warehouseId !== undefined
-        ? user.warehouseId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
-      if (!warehouseId) {
+      let warehouseIds: string[] = [];
+      if (this.prisma.warehouse?.findMany) {
+        const managedWarehouses = await this.prisma.warehouse.findMany({
+          where: {
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        warehouseIds = managedWarehouses.map((w) => w.id);
+      }
+      if (warehouseIds.length === 0 && user.warehouseId) {
+        warehouseIds = [user.warehouseId];
+      }
+      if (warehouseIds.length === 0 && this.prisma.user?.findUnique) {
+        const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+        if (dbUser?.warehouseId) {
+          warehouseIds = [dbUser.warehouseId];
+        }
+      }
+      if (warehouseIds.length === 0) {
         throw new ForbiddenException('Store Admin is not assigned to any warehouse');
       }
-      const warehouseLocation = await this.prisma.stockLocation.findUnique({
-        where: { warehouseId },
-      });
-      if (!warehouseLocation) {
+      let warehouseLocations: any[] = [];
+      if (this.prisma.stockLocation.findMany) {
+        warehouseLocations = await this.prisma.stockLocation.findMany({
+          where: { warehouseId: { in: warehouseIds } },
+        });
+      } else {
+        const locs = await Promise.all(
+          warehouseIds.map((wid) => this.prisma.stockLocation.findUnique({ where: { warehouseId: wid } }))
+        );
+        warehouseLocations = locs.filter(Boolean);
+      }
+      if (warehouseLocations.length === 0) {
         throw new ForbiddenException('Assigned warehouse has no stock location');
       }
-      if (dto.sourceLocationId && dto.sourceLocationId !== warehouseLocation.id) {
+      const warehouseLocationIds = new Set(warehouseLocations.map((loc) => loc.id));
+
+      if (dto.sourceLocationId && !warehouseLocationIds.has(dto.sourceLocationId) && dto.requestType !== RequestType.STOCK_IN) {
         throw new ForbiddenException('Stock requests must use your assigned warehouse');
       }
       if (dto.requestType === RequestType.STOCK_IN) {
         const targetLocId = dto.destinationLocationId || dto.sourceLocationId;
-        if (targetLocId && targetLocId !== warehouseLocation.id) {
+        if (targetLocId && !warehouseLocationIds.has(targetLocId)) {
           throw new ForbiddenException('Stock-in must be added to your assigned warehouse');
         }
       }
-      if (dto.requestType === RequestType.STOCK_OUT && dto.sourceLocationId !== warehouseLocation.id) {
+      if (dto.requestType === RequestType.STOCK_OUT && (!dto.sourceLocationId || !warehouseLocationIds.has(dto.sourceLocationId))) {
         throw new ForbiddenException('Stock-out must come from your assigned warehouse');
       }
       if (dto.requestType === RequestType.DISPATCH) {
-        if (dto.sourceLocationId !== warehouseLocation.id) {
+        if (!dto.sourceLocationId || !warehouseLocationIds.has(dto.sourceLocationId)) {
           throw new ForbiddenException('Dispatch must come from your assigned warehouse');
         }
         const destination = dto.destinationLocationId
@@ -308,19 +337,19 @@ export class RequestsService {
         // Any warehouse can transfer to any project; warehouse-project mapping is not required.
       }
       if (dto.requestType === RequestType.TRANSFER) {
-        if (dto.sourceLocationId !== warehouseLocation.id) {
+        if (!dto.sourceLocationId || !warehouseLocationIds.has(dto.sourceLocationId)) {
           throw new ForbiddenException('Transfer must come from your assigned warehouse');
         }
         const destination = dto.destinationLocationId
           ? await this.prisma.stockLocation.findUnique({ where: { id: dto.destinationLocationId } })
           : null;
-        if (!destination?.warehouseId || destination.id === warehouseLocation.id) {
+        if (!destination?.warehouseId || destination.id === dto.sourceLocationId) {
           throw new ForbiddenException('Choose another warehouse as the transfer destination');
         }
       }
       if (dto.requestType === RequestType.ADJUSTMENT &&
-        dto.sourceLocationId !== warehouseLocation.id &&
-        dto.destinationLocationId !== warehouseLocation.id) {
+        (!dto.sourceLocationId || !warehouseLocationIds.has(dto.sourceLocationId)) &&
+        (!dto.destinationLocationId || !warehouseLocationIds.has(dto.destinationLocationId))) {
         throw new ForbiddenException('Stock adjustment must use your assigned warehouse');
       }
     } else if (user.role === UserRole.PROJECT_ADMIN) {
@@ -974,13 +1003,32 @@ export class RequestsService {
     }
 
     if (user.role === UserRole.STORE_ADMIN) {
-      const warehouseId = user.warehouseId !== undefined
-        ? user.warehouseId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
-      if (!warehouseId) return [];
+      let warehouseIds: string[] = [];
+      if (this.prisma.warehouse?.findMany) {
+        const managedWarehouses = await this.prisma.warehouse.findMany({
+          where: {
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        warehouseIds = managedWarehouses.map((w) => w.id);
+      }
+      if (warehouseIds.length === 0 && user.warehouseId) {
+        warehouseIds = [user.warehouseId];
+      }
+      if (warehouseIds.length === 0 && this.prisma.user?.findUnique) {
+        const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+        if (dbUser?.warehouseId) {
+          warehouseIds = [dbUser.warehouseId];
+        }
+      }
+      if (warehouseIds.length === 0) return [];
       where.OR = [
-        { sourceLocation: { warehouseId } },
-        { destinationLocation: { warehouseId } },
+        { sourceLocation: { warehouseId: { in: warehouseIds } } },
+        { destinationLocation: { warehouseId: { in: warehouseIds } } },
       ];
       if (filterProjectId) {
         where.projectId = filterProjectId;
@@ -1169,14 +1217,36 @@ export class RequestsService {
 
     // Tenancy checks without redundant DB queries
     if (user.role === UserRole.STORE_ADMIN) {
-      const warehouseId = user.warehouseId !== undefined
-        ? user.warehouseId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
-      if (!warehouseId) {
+      let warehouseIds: string[] = [];
+      if (this.prisma.warehouse?.findMany) {
+        const managedWarehouses = await this.prisma.warehouse.findMany({
+          where: {
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        warehouseIds = managedWarehouses.map((w) => w.id);
+      }
+      if (warehouseIds.length === 0 && user.warehouseId) {
+        warehouseIds = [user.warehouseId];
+      }
+      if (warehouseIds.length === 0 && this.prisma.user?.findUnique) {
+        const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+        if (dbUser?.warehouseId) {
+          warehouseIds = [dbUser.warehouseId];
+        }
+      }
+      if (warehouseIds.length === 0) {
         throw new ForbiddenException('Store Admin is not assigned to any warehouse');
       }
-      const isSourceMatch = request.sourceLocation?.warehouseId === warehouseId || request.sourceLocation?.warehouse?.id === warehouseId;
-      const isDestMatch = request.destinationLocation?.warehouseId === warehouseId || request.destinationLocation?.warehouse?.id === warehouseId;
+      const warehouseIdsSet = new Set(warehouseIds);
+      const sourceWhId = request.sourceLocation?.warehouseId || request.sourceLocation?.warehouse?.id;
+      const destWhId = request.destinationLocation?.warehouseId || request.destinationLocation?.warehouse?.id;
+      const isSourceMatch = Boolean(sourceWhId && warehouseIdsSet.has(sourceWhId));
+      const isDestMatch = Boolean(destWhId && warehouseIdsSet.has(destWhId));
       if (!isSourceMatch && !isDestMatch) {
         throw new ForbiddenException('Access denied to requests from another warehouse');
       }

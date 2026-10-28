@@ -3,16 +3,31 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
-import { UserRole, OrganizationStatus } from '@prisma/client';
+import { UserRole, OrganizationStatus, UserStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
 export class WarehousesService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async validateStoreAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+    if (user.role !== UserRole.STORE_ADMIN) {
+      throw new BadRequestException(`User ${user.username} is not a STORE_ADMIN`);
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new BadRequestException(`Store Admin ${user.username} is not ACTIVE`);
+    }
+    return user;
+  }
 
   async create(dto: CreateWarehouseDto) {
     const normalizedName = dto.name.trim();
@@ -25,11 +40,19 @@ export class WarehousesService {
       throw new ConflictException(`Warehouse with name "${normalizedName}" already exists`);
     }
 
+    if (dto.storeAdminId) {
+      await this.validateStoreAdmin(dto.storeAdminId);
+    }
+
     return this.prisma.warehouse.create({
       data: {
         name: normalizedName,
         locationDescription: dto.locationDescription?.trim() || null,
         status: OrganizationStatus.ACTIVE,
+        storeAdminId: dto.storeAdminId || null,
+      },
+      include: {
+        storeAdmin: { select: { id: true, username: true, status: true } },
       },
     });
   }
@@ -39,6 +62,7 @@ export class WarehousesService {
       return this.prisma.warehouse.findMany({
         orderBy: { name: 'asc' },
         include: {
+          storeAdmin: { select: { id: true, username: true, status: true } },
           projectAssignments: {
             where: { isActive: true },
             include: { project: true },
@@ -49,17 +73,21 @@ export class WarehousesService {
 
     if (currentUser.role === UserRole.STORE_ADMIN) {
       const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (!user?.warehouseId) {
-        return [];
-      }
       return this.prisma.warehouse.findMany({
-        where: { id: user.warehouseId },
+        where: {
+          OR: [
+            { storeAdminId: currentUser.id },
+            ...(user?.warehouseId ? [{ id: user.warehouseId }] : []),
+          ],
+        },
         include: {
+          storeAdmin: { select: { id: true, username: true, status: true } },
           projectAssignments: {
             where: { isActive: true },
             include: { project: true },
           },
         },
+        orderBy: { name: 'asc' },
       });
     }
 
@@ -75,16 +103,10 @@ export class WarehousesService {
   }
 
   async findById(id: string, currentUser: AuthenticatedUser) {
-    if (currentUser.role === UserRole.STORE_ADMIN) {
-      const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
-      if (user?.warehouseId !== id) {
-        throw new ForbiddenException('Store Admin cannot view other warehouses');
-      }
-    }
-
     const warehouse = await this.prisma.warehouse.findUnique({
       where: { id },
       include: {
+        storeAdmin: { select: { id: true, username: true, status: true } },
         projectAssignments: {
           where: { isActive: true },
           include: { project: true },
@@ -94,6 +116,16 @@ export class WarehousesService {
 
     if (!warehouse) {
       throw new NotFoundException(`Warehouse not found`);
+    }
+
+    if (currentUser.role === UserRole.STORE_ADMIN) {
+      const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
+      const isAssigned =
+        warehouse.storeAdminId === currentUser.id ||
+        (user?.warehouseId && user.warehouseId === id);
+      if (!isAssigned) {
+        throw new ForbiddenException('Store Admin cannot view other warehouses');
+      }
     }
 
     return warehouse;
@@ -113,12 +145,24 @@ export class WarehousesService {
       }
     }
 
+    if (dto.storeAdminId !== undefined && dto.storeAdminId !== null) {
+      await this.validateStoreAdmin(dto.storeAdminId);
+    }
+
     return this.prisma.warehouse.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
         locationDescription: dto.locationDescription?.trim(),
         status: dto.status,
+        ...(dto.storeAdminId !== undefined ? { storeAdminId: dto.storeAdminId } : {}),
+      },
+      include: {
+        storeAdmin: { select: { id: true, username: true, status: true } },
+        projectAssignments: {
+          where: { isActive: true },
+          include: { project: true },
+        },
       },
     });
   }

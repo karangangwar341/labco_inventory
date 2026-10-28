@@ -17,4 +17,9 @@ export class UpdateWarehouseDto {
   @IsOptional()
   @IsEnum(OrganizationStatus)
   status?: OrganizationStatus;
+
+  @ApiPropertyOptional({ example: 'user-uuid-1', description: 'Assigned Store Admin user ID, or null to unassign' })
+  @IsOptional()
+  @IsString()
+  storeAdminId?: string | null;
 }

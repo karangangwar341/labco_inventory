@@ -10,6 +10,7 @@ export interface UserAccount {
   warehouseId?: string | null;
   project?: { id: string; name: string };
   warehouse?: { id: string; name: string };
+  managedWarehouses?: Array<{ id: string; name: string; status?: 'ACTIVE' | 'INACTIVE' }>;
   createdAt: string;
 }
 
@@ -25,6 +26,8 @@ export interface ManagedProject extends OrganizationOption {
 
 export interface ManagedWarehouse extends OrganizationOption {
   locationDescription?: string | null;
+  storeAdminId?: string | null;
+  storeAdmin?: { id: string; username: string; status?: string } | null;
   projectAssignments?: Array<{ id: string; projectId: string; isActive: boolean; project: OrganizationOption }>;
 }
 
@@ -71,11 +74,11 @@ export const administrationService = {
     return apiClient.patch(endpoints.organization.updateProject(id), payload);
   },
 
-  createWarehouse: async (payload: { name: string; locationDescription?: string }): Promise<ManagedWarehouse> => {
+  createWarehouse: async (payload: { name: string; locationDescription?: string; storeAdminId?: string | null }): Promise<ManagedWarehouse> => {
     return apiClient.post(endpoints.organization.createWarehouse(), payload);
   },
 
-  updateWarehouse: async (id: string, payload: { name?: string; locationDescription?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<ManagedWarehouse> => {
+  updateWarehouse: async (id: string, payload: { name?: string; locationDescription?: string; status?: 'ACTIVE' | 'INACTIVE'; storeAdminId?: string | null }): Promise<ManagedWarehouse> => {
     return apiClient.patch(endpoints.organization.updateWarehouse(id), payload);
   },
 

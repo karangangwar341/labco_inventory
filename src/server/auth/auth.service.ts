@@ -211,6 +211,26 @@ export class AuthService {
   /** Small, role-scoped reference set used to render the first workspace screen. */
   async getBootstrap(user: { id: string; username: string; role: string; status: string; projectId?: string | null; warehouseId?: string | null }) {
     const role = user.role as UserRole;
+    let storeAdminWarehouseIds: string[] = [];
+    if (role === UserRole.STORE_ADMIN) {
+      if (this.prisma.warehouse?.findMany) {
+        const managed = await this.prisma.warehouse.findMany({
+          where: {
+            status: OrganizationStatus.ACTIVE,
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        storeAdminWarehouseIds = managed.map((w) => w.id);
+      }
+      if (storeAdminWarehouseIds.length === 0 && user.warehouseId) {
+        storeAdminWarehouseIds = [user.warehouseId];
+      }
+    }
+
     const productScope = role === UserRole.SUPER_ADMIN
       ? { status: ProductStatus.APPROVED }
       : role === UserRole.STORE_ADMIN
@@ -221,7 +241,9 @@ export class AuthService {
             balances: {
               some: {
                 location: {
-                  warehouseId: user.warehouseId ?? '__unassigned__',
+                  warehouseId: storeAdminWarehouseIds.length === 1
+                    ? storeAdminWarehouseIds[0]
+                    : { in: storeAdminWarehouseIds.length > 0 ? storeAdminWarehouseIds : ['__unassigned__'] },
                 },
               },
             },
@@ -253,7 +275,7 @@ export class AuthService {
         ? this.prisma.stockLocation.findMany({
             where: {
               OR: [
-                { warehouseId: user.warehouseId ?? '__unassigned__', warehouse: { status: OrganizationStatus.ACTIVE } },
+                { warehouseId: { in: storeAdminWarehouseIds.length > 0 ? storeAdminWarehouseIds : ['__unassigned__'] }, warehouse: { status: OrganizationStatus.ACTIVE } },
                 { locationType: LocationType.PROJECT, project: { status: OrganizationStatus.ACTIVE } },
               ],
             },
@@ -281,7 +303,15 @@ export class AuthService {
     ]);
 
     return {
-      user: { id: user.id, username: user.username, role: user.role, status: user.status, projectId: user.projectId, warehouseId: user.warehouseId },
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        status: user.status,
+        projectId: user.projectId,
+        warehouseId: user.warehouseId ?? storeAdminWarehouseIds[0] ?? null,
+        warehouseIds: storeAdminWarehouseIds,
+      },
       products,
       categories,
       locations: locations.map((location) => ({
