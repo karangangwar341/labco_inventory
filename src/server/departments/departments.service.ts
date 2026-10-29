@@ -305,7 +305,7 @@ export class DepartmentsService {
       ? (targetProjectId || (await this.prisma.project.findFirst({ where: { status: 'ACTIVE' } }))?.id || null)
       : await this.getProjectForUser(user);
     if (!projectId) throw new ForbiddenException('Project account is not assigned to an organization');
-    const include = { issues: { include: { department: true, product: true, unit: true, batch: true }, orderBy: { createdAt: 'asc' as const } } };
+    const include = { issues: { include: { department: true, product: true, unit: true, issueBatch: true }, orderBy: { createdAt: 'asc' as const } } };
     const existing = await this.prisma.departmentIssueBatch.findFirst({
       where: { projectId, status: DepartmentIssueBatchStatus.DRAFT }, include,
     });

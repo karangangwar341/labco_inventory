@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +38,27 @@ import {
 
 type ReportRow = Record<string, unknown>;
 type ReportResponse = { data: ReportRow[]; rowCount: number };
+
+type IndentItem = {
+  product: string;
+  requestedQuantity: number;
+  quantity: number;
+  unit: string;
+  notes?: string;
+  status?: string;
+};
+
+type IndentGroupType = {
+  indentKey: string;
+  indentNumber: string;
+  department: string;
+  date: string;
+  items: IndentItem[];
+  totalRequested: number;
+  totalProvided: number;
+  fulfillmentRate: number;
+  isFullyFulfilled: boolean;
+};
 
 type SubTab = "OVERVIEW" | "MANUFACTURING" | "STAFF" | "DEPARTMENTS" | "LEDGER";
 
@@ -86,6 +107,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
   const [deptDateFilter, setDeptDateFilter] = useState<DateQuickFilter>("TODAY");
   const [deptCustomStart, setDeptCustomStart] = useState("");
   const [deptCustomEnd, setDeptCustomEnd] = useState("");
+  const [expandedIndents, setExpandedIndents] = useState<Record<string, boolean>>({});
 
   const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
   const [ledgerCustomStart, setLedgerCustomStart] = useState("");
@@ -179,31 +201,22 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
   // Department counts
   const departments = new Map<
     string,
-    { issues: number; returns: number; issuedQty: number; returnedQty: number }
+    { issues: number; issuedQty: number }
   >();
   for (const row of departmentActivity) {
+    if (row.type === "DEPARTMENT_RETURN") continue;
     const name = getText(row, "department", "General");
     const counts = departments.get(name) ?? {
       issues: 0,
-      returns: 0,
       issuedQty: 0,
-      returnedQty: 0,
     };
-    if (row.type === "DEPARTMENT_RETURN") {
-      counts.returns += 1;
-      counts.returnedQty += getNumber(row, "baseQuantity");
-    } else {
-      counts.issues += 1;
-      counts.issuedQty += getNumber(row, "baseQuantity");
-    }
+    counts.issues += 1;
+    counts.issuedQty += getNumber(row, "baseQuantity");
     departments.set(name, counts);
   }
   const maxActivity = Math.max(
     1,
-    ...Array.from(departments.values()).flatMap((counts) => [
-      counts.issuedQty,
-      counts.returnedQty,
-    ]),
+    ...Array.from(departments.values()).map((counts) => counts.issuedQty),
   );
   const activeProducts = Array.from(stockByProduct.values()).filter(
     (row) => getNumber(row, "availableQuantity") > 0,
@@ -240,6 +253,69 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
       deptCustomEnd,
     ),
   );
+
+  const indentRequisitionGroups = useMemo(() => {
+    const groups = new Map<string, IndentGroupType>();
+
+    for (const row of visibleDeptActivity) {
+      if (row.type !== "DEPARTMENT_ISSUE") continue;
+      const indentNumber = getText(row, "indentNumber", "N/A");
+      const department = getText(row, "department", "General");
+      const date = getText(row, "date", "");
+      const key = `${indentNumber}__${department}__${date}`;
+      const product = getText(row, "product", "Product");
+      const requested = getNumber(row, "requestedQuantity") || getNumber(row, "quantity");
+      const provided = getNumber(row, "quantity");
+      const unit = getText(row, "unit", "");
+      const notes = row.notes ? String(row.notes) : undefined;
+      const status = row.status ? String(row.status) : undefined;
+
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          indentKey: key,
+          indentNumber,
+          department,
+          date,
+          items: [],
+          totalRequested: 0,
+          totalProvided: 0,
+          fulfillmentRate: 100,
+          isFullyFulfilled: true,
+        };
+        groups.set(key, group);
+      }
+      group.items.push({
+        product,
+        requestedQuantity: requested,
+        quantity: provided,
+        unit,
+        notes,
+        status,
+      });
+      group.totalRequested += requested;
+      group.totalProvided += provided;
+    }
+
+    for (const group of groups.values()) {
+      group.fulfillmentRate =
+        group.totalRequested > 0
+          ? Math.min(100, Math.round((group.totalProvided / group.totalRequested) * 100))
+          : 100;
+      group.isFullyFulfilled = group.totalProvided >= group.totalRequested;
+    }
+
+    return Array.from(groups.values());
+  }, [visibleDeptActivity]);
+
+  const totalIndentsCount = indentRequisitionGroups.length;
+  const totalIndentItemsCount = indentRequisitionGroups.reduce((acc: number, g: IndentGroupType) => acc + g.items.length, 0);
+  const totalUnitsRequested = indentRequisitionGroups.reduce((acc: number, g: IndentGroupType) => acc + g.totalRequested, 0);
+  const totalUnitsProvided = indentRequisitionGroups.reduce((acc: number, g: IndentGroupType) => acc + g.totalProvided, 0);
+  const overallIndentFulfillmentRate =
+    totalUnitsRequested > 0
+      ? Math.min(100, Math.round((totalUnitsProvided / totalUnitsRequested) * 100))
+      : 100;
 
 
   const olderLedgerCount = manufacturingMovements.filter(
@@ -604,137 +680,357 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
 
       {/* Sub-Tab 4: DEPARTMENTS */}
       {activeTab === "DEPARTMENTS" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Department Use &amp; Clinical Returns</CardTitle>
-            <CardDescription>
-              Activity distribution of issues and returns grouped by department.
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            {departments.size === 0 ? (
-              <p className="py-4 text-center text-xs text-slate-400">
-                No department issues or returns have been recorded.
-              </p>
-            ) : (
-              <div className="space-y-3.5 p-2 bg-slate-50/70 border border-slate-200/80 rounded-xl">
-                {Array.from(departments.entries()).map(([name, counts]) => (
-                  <div
-                    key={name}
-                    className="grid gap-2 sm:grid-cols-[10rem_1fr] items-center"
+        <div className="space-y-4">
+          {/* Indent-Wise Requisitions & Fulfillment Card */}
+          <Card>
+            <CardHeader
+              action={
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={overallIndentFulfillmentRate === 100 ? "success" : "warning"}
+                    size="sm"
                   >
-                    <p className="truncate text-xs font-semibold text-slate-900">
-                      {name}
-                    </p>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-3">
-                        <span className="w-28 text-[11px] text-slate-500">
-                          Issued: {counts.issuedQty.toLocaleString()} base units
-                        </span>
-                        <div className="h-2 flex-1 rounded-full bg-slate-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-blue-600 transition-all duration-300"
-                            style={{
-                              width: `${(counts.issuedQty / maxActivity) * 100}%`,
-                            }}
-                          />
+                    {overallIndentFulfillmentRate}% Requisition Fulfillment
+                  </Badge>
+                </div>
+              }
+            >
+              <CardTitle>Department Indent Requisitions &amp; Stock-Out Fulfillment</CardTitle>
+              <CardDescription>
+                Track physical department requisition slips (indents), comparing what each department requested vs what was provided from inventory.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {/* Date Filter Bar */}
+              <DateQuickFilterBar
+                activeFilter={deptDateFilter}
+                onFilterChange={setDeptDateFilter}
+                customStart={deptCustomStart}
+                customEnd={deptCustomEnd}
+                onCustomStartChange={setDeptCustomStart}
+                onCustomEndChange={setDeptCustomEnd}
+                totalOlderCount={olderDeptCount}
+                onViewAll={() => setDeptDateFilter("ALL")}
+              />
+
+              {/* Metrics Summary Strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Indent Forms
+                  </span>
+                  <p className="text-xl font-bold font-mono text-slate-900 mt-0.5">
+                    {totalIndentsCount}
+                  </p>
+                  <span className="text-[11px] text-slate-400">
+                    {totalIndentItemsCount} line {totalIndentItemsCount === 1 ? "item" : "items"}
+                  </span>
+                </div>
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Total Requested
+                  </span>
+                  <p className="text-xl font-bold font-mono text-slate-800 mt-0.5">
+                    {totalUnitsRequested.toLocaleString()}
+                  </p>
+                  <span className="text-[11px] text-slate-400">from indent slips</span>
+                </div>
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Total Provided
+                  </span>
+                  <p className="text-xl font-bold font-mono text-emerald-700 mt-0.5">
+                    {totalUnitsProvided.toLocaleString()}
+                  </p>
+                  <span className="text-[11px] text-slate-400">issued from stock</span>
+                </div>
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Fulfillment Rate
+                  </span>
+                  <p
+                    className={`text-xl font-bold font-mono mt-0.5 ${
+                      overallIndentFulfillmentRate === 100
+                        ? "text-emerald-700"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    {overallIndentFulfillmentRate}%
+                  </p>
+                  <span className="text-[11px] text-slate-400">
+                    {totalUnitsProvided < totalUnitsRequested
+                      ? `${(totalUnitsRequested - totalUnitsProvided).toLocaleString()} short`
+                      : "100% satisfied"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Indents List */}
+              {indentRequisitionGroups.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-slate-200/70">
+                  No department indents recorded for the selected date range.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {indentRequisitionGroups.map((group: IndentGroupType) => {
+                    const isExpanded = !!expandedIndents[group.indentKey];
+                    return (
+                      <div
+                        key={group.indentKey}
+                        className="border border-slate-200/90 rounded-xl overflow-hidden bg-white shadow-2xs"
+                      >
+                        {/* Indent Header Banner */}
+                        <div className="p-3.5 bg-slate-50/90 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                              📋 Indent #{group.indentNumber}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900">
+                                  {group.department}
+                                </span>
+                                <Badge variant="neutral" size="sm">
+                                  {group.items.length} {group.items.length === 1 ? "line" : "lines"}
+                                </Badge>
+                              </div>
+                              <span className="text-[11px] font-mono text-slate-400">
+                                Issued: {group.date}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="text-right text-xs">
+                              <span className="text-slate-500">Requested: </span>
+                              <strong className="font-mono text-slate-800">
+                                {group.totalRequested.toLocaleString()}
+                              </strong>
+                              <span className="text-slate-300 mx-1.5">|</span>
+                              <span className="text-slate-500">Provided: </span>
+                              <strong className="font-mono text-emerald-700">
+                                {group.totalProvided.toLocaleString()}
+                              </strong>
+                            </div>
+
+                            {group.isFullyFulfilled ? (
+                              <Badge variant="success" size="sm">
+                                Fully Fulfilled (100%)
+                              </Badge>
+                            ) : (
+                              <Badge variant="warning" size="sm">
+                                Partial ({group.totalProvided}/{group.totalRequested} · {group.fulfillmentRate}%)
+                              </Badge>
+                            )}
+
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              className="text-xs px-2.5 py-1 h-auto"
+                              onClick={() =>
+                                setExpandedIndents((prev) => ({
+                                  ...prev,
+                                  [group.indentKey]: !prev[group.indentKey],
+                                }))
+                              }
+                            >
+                              {isExpanded ? "Hide items ▲" : "View items ▼"}
+                            </Button>
+                          </div>
                         </div>
+
+                        {/* Collapsible Items Table */}
+                        {isExpanded && (
+                          <div className="overflow-x-auto p-3">
+                            <Table className="min-w-[600px] border-0 shadow-none text-xs">
+                              <TableHeader>
+                                <tr>
+                                  <TableHead>Product</TableHead>
+                                  <TableHead align="right">Requested</TableHead>
+                                  <TableHead align="right">Provided</TableHead>
+                                  <TableHead>Unit</TableHead>
+                                  <TableHead>Fulfillment</TableHead>
+                                  <TableHead>Notes</TableHead>
+                                </tr>
+                              </TableHeader>
+                              <TableBody>
+                                {group.items.map((item: IndentItem, idx: number) => {
+                                  const itemFull = item.quantity >= item.requestedQuantity;
+                                  return (
+                                    <TableRow key={`${item.product}-${idx}`}>
+                                      <TableCell className="font-medium text-slate-900">
+                                        {item.product}
+                                      </TableCell>
+                                      <TableCell align="right" mono className="text-slate-700">
+                                        {item.requestedQuantity}
+                                      </TableCell>
+                                      <TableCell align="right" mono className="font-bold text-emerald-700">
+                                        {item.quantity}
+                                      </TableCell>
+                                      <TableCell className="text-slate-500">
+                                        {item.unit || "units"}
+                                      </TableCell>
+                                      <TableCell>
+                                        {itemFull ? (
+                                          <Badge variant="success" size="sm">
+                                            100% Fulfilled
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="warning" size="sm">
+                                            Partial ({item.quantity}/{item.requestedQuantity})
+                                          </Badge>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-slate-400 text-[11px] truncate max-w-[160px]">
+                                        {item.notes || "—"}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="w-28 text-[11px] text-slate-500">
-                          Returned: {counts.returnedQty.toLocaleString()} base units
-                        </span>
-                        <div className="h-2 flex-1 rounded-full bg-slate-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-emerald-600 transition-all duration-300"
-                            style={{
-                              width: `${(counts.returnedQty / maxActivity) * 100}%`,
-                            }}
-                          />
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Department Usage Distribution & Raw Logs Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Department Stock-Out Distribution &amp; History</CardTitle>
+              <CardDescription>
+                Activity distribution of stock issued to clinical and hospital departments.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {departments.size === 0 ? (
+                <p className="py-4 text-center text-xs text-slate-400">
+                  No department stock-out issues have been recorded.
+                </p>
+              ) : (
+                <div className="space-y-3.5 p-2 bg-slate-50/70 border border-slate-200/80 rounded-xl">
+                  {Array.from(departments.entries()).map(([name, counts]) => (
+                    <div
+                      key={name}
+                      className="grid gap-2 sm:grid-cols-[10rem_1fr] items-center"
+                    >
+                      <p className="truncate text-xs font-semibold text-slate-900">
+                        {name}
+                      </p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-3">
+                          <span className="w-28 text-[11px] text-slate-500">
+                            Stock-Out: {counts.issuedQty.toLocaleString()} base units
+                          </span>
+                          <div className="h-2 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                              style={{
+                                width: `${(counts.issuedQty / maxActivity) * 100}%`,
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {departmentActivity.length > 0 && (
-              <div className="pt-2 border-t border-slate-100 space-y-3">
-                <DateQuickFilterBar
-                  activeFilter={deptDateFilter}
-                  onFilterChange={setDeptDateFilter}
-                  customStart={deptCustomStart}
-                  customEnd={deptCustomEnd}
-                  onCustomStartChange={setDeptCustomStart}
-                  onCustomEndChange={setDeptCustomEnd}
-                  totalOlderCount={olderDeptCount}
-                  onViewAll={() => setDeptDateFilter("ALL")}
-                />
-
-                {visibleDeptActivity.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-lg border border-slate-200/60">
-                    No department issues or returns match the selected date filter.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table className="border-0 shadow-none">
-                      <TableHeader>
-                        <tr>
-                          <TableHead>Activity</TableHead>
-                          <TableHead>Department</TableHead>
-                          <TableHead>Product</TableHead>
-                          <TableHead align="right">Quantity</TableHead>
-                          <TableHead align="right">Date</TableHead>
-                        </tr>
-                      </TableHeader>
-                      <TableBody>
-                        {visibleDeptActivity.map((row, index) => (
-                          <TableRow key={`${getText(row, "type")}-${index}`}>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  row.type === "DEPARTMENT_RETURN"
-                                    ? "success"
-                                    : "primary"
-                                }
-                                size="sm"
-                              >
-                                {getText(row, "type").replaceAll("_", " ")}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-slate-700 font-medium">
-                              {getText(row, "department")}
-                            </TableCell>
-                            <TableCell className="text-slate-900 font-semibold">
-                              {getText(row, "product")}
-                            </TableCell>
-                            <TableCell align="right" numeric>
-                              {getText(row, "quantity")}{" "}
-                              <span className="text-[10px] text-slate-400 font-sans">
-                                {getText(row, "unit", "")}
-                              </span>
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              mono
-                              className="text-slate-500 text-[11px]"
-                            >
-                              {getText(row, "date")}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
+              {departmentActivity.length > 0 && (
+                <div className="pt-2 border-t border-slate-100 space-y-3">
+                  {visibleDeptActivity.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400 bg-slate-50/50 rounded-lg border border-slate-200/60">
+                      No department stock-out issues match the selected date filter.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table className="border-0 shadow-none">
+                        <TableHeader>
+                          <tr>
+                            <TableHead>Activity</TableHead>
+                            <TableHead>Indent #</TableHead>
+                            <TableHead>Department</TableHead>
+                            <TableHead>Product</TableHead>
+                            <TableHead align="right">Req. / Supplied</TableHead>
+                            <TableHead align="right">Date</TableHead>
+                          </tr>
+                        </TableHeader>
+                        <TableBody>
+                          {visibleDeptActivity.filter((r) => r.type === "DEPARTMENT_ISSUE").map((row, index) => {
+                            const reqQty = getNumber(row, "requestedQuantity") || getNumber(row, "quantity");
+                            const supQty = getNumber(row, "quantity");
+                            return (
+                              <TableRow key={`${getText(row, "type")}-${index}`}>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      row.type === "DEPARTMENT_RETURN"
+                                        ? "success"
+                                        : "primary"
+                                    }
+                                    size="sm"
+                                  >
+                                    {getText(row, "type").replaceAll("_", " ")}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="font-mono text-xs font-semibold text-blue-700">
+                                  {getText(row, "indentNumber", "N/A")}
+                                </TableCell>
+                                <TableCell className="text-slate-700 font-medium">
+                                  {getText(row, "department")}
+                                </TableCell>
+                                <TableCell className="text-slate-900 font-semibold">
+                                  {getText(row, "product")}
+                                </TableCell>
+                                <TableCell align="right" numeric>
+                                  {row.type === "DEPARTMENT_ISSUE" ? (
+                                    <span className="font-mono">
+                                      <span className="text-slate-500 font-normal">{reqQty} / </span>
+                                      <span className="font-bold text-emerald-700">{supQty}</span>
+                                      {" "}
+                                      <span className="text-[10px] text-slate-400 font-sans">
+                                        {getText(row, "unit", "")}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      {supQty}{" "}
+                                      <span className="text-[10px] text-slate-400 font-sans">
+                                        {getText(row, "unit", "")}
+                                      </span>
+                                    </span>
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  align="right"
+                                  mono
+                                  className="text-slate-500 text-[11px]"
+                                >
+                                  {getText(row, "date")}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Sub-Tab 5: LEDGER */}
       {activeTab === "LEDGER" && (
         <Card>

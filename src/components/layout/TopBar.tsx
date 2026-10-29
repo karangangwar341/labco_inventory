@@ -273,8 +273,8 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                       n.title.toLowerCase().includes('department return')
                     ) {
                       targetLink = {
-                        href: '/departments?tab=RETURNS',
-                        label: role === 'SUPER_ADMIN' ? 'Review Department Return' : 'View Department Returns',
+                        href: '/departments?tab=ISSUES',
+                        label: role === 'SUPER_ADMIN' ? 'Review Department Issue' : 'View Stock Out',
                       };
                     } else if (n.entityType === 'DEPARTMENT') {
                       targetLink = n.entityId

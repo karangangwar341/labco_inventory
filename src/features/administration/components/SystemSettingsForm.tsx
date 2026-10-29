@@ -33,7 +33,6 @@ const APPROVAL_LABELS = [
   ['shipmentReceipt', 'Shipment receipt confirmation'],
   ['manufacturing', 'Manufacturing runs'],
   ['departmentIssue', 'Department issue batches'],
-  ['departmentReturn', 'Department returns'],
   ['imports.stockIn', 'Stock-in imports'],
   ['imports.stockOut', 'Stock-out imports'],
 ] as const;

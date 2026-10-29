@@ -389,8 +389,10 @@ export class ReportsService {
     issues.forEach((i) => {
       result.push({
         type: 'DEPARTMENT_ISSUE',
+        indentNumber: i.indentNumber || 'N/A',
         department: i.department.name,
         product: i.product.name,
+        requestedQuantity: (i.requestedQuantity ?? i.quantity).toNumber(),
         quantity: i.quantity.toNumber(),
         unit: i.unitNameSnapshot,
         baseQuantity: i.baseQuantity.toNumber(),
@@ -662,9 +664,9 @@ export class ReportsService {
     },
     [ReportType.PROJECT_CONSUMPTION]: {
       title: 'Clinical Department Consumption & Usage',
-      description: 'Internal clinical and department stock issues and return activities.',
+      description: 'Internal clinical and department stock issues and consumption activities.',
       deltaExplanation:
-        'Quantity reflects clinical dispensing or return to department in selected packaging units and base quantity.',
+        'Quantity reflects clinical dispensing to departments in selected packaging units and base quantity.',
     },
     [ReportType.PRODUCTION_RUNS]: {
       title: 'Manufacturing & Formulation Runs',
