@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto, ProposeProductVersionDto } from './dto/create-product.dto';
+import { CreateBulkProductsDto } from './dto/create-bulk-products.dto';
 import { ApproveProductDto } from './dto/approve-product.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -38,6 +39,15 @@ export class ProductsController {
   @ApiResponse({ status: 409, description: 'Duplicate product detected' })
   create(@Body() dto: CreateProductDto, @CurrentUser() user: AuthenticatedUser) {
     return this.productsService.create(dto, user);
+  }
+
+
+  @Post('bulk')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Bulk create catalog products and project products' })
+  @ApiResponse({ status: 201, description: 'Products bulk created successfully' })
+  createBulk(@Body() dto: CreateBulkProductsDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.productsService.createBulk(dto, user);
   }
 
   @Patch(':id')

@@ -313,5 +313,58 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         }),
       );
     });
-  });
+  
+    it('creates categories in bulk for Super Admin', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.category.findFirst.mockResolvedValue(null);
+      mockPrisma.category.create.mockImplementation(({ data }: any) => ({
+        id: 'cat-' + Math.random(),
+        ...data,
+      }));
+
+      const res = await categoriesService.createBulk({
+        items: [
+          { name: 'Reagents' },
+          { name: 'Acids', parentName: 'Reagents' },
+        ],
+      }, superAdmin);
+
+      expect(res.totalCreated).toBeGreaterThanOrEqual(2);
+      expect(mockPrisma.category.create).toHaveBeenCalled();
+    });
+
+    it('creates products in bulk with immediate approval for Super Admin', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.category.findFirst.mockResolvedValue({ id: 'cat-reagents' });
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      mockPrisma.product.create.mockImplementation(({ data }: any) => ({
+        id: 'prod-new',
+        ...data,
+      }));
+      mockPrisma.productVersion.create = vi.fn().mockResolvedValue({ id: 'pv-1' });
+
+      const res = await productsService.createBulk({
+        items: [
+          {
+            name: 'Hydrochloric Acid 37%',
+            categoryName: 'Reagents',
+            subcategoryName: 'Acids',
+            brand: 'Merck',
+            unitName: 'BOTTLE',
+            minQuantity: 10,
+          },
+        ],
+      }, superAdmin);
+
+      expect(res.totalCreated).toBe(1);
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: ProductStatus.APPROVED,
+            name: 'Hydrochloric Acid 37%',
+          }),
+        }),
+      );
+    });
+});
 });

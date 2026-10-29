@@ -28,6 +28,7 @@ import { administrationService } from "../administration.service";
 import { reportsService } from "@/features/reports/reports.service";
 import { catalogService } from "@/features/catalog/catalog.service";
 import type { CatalogProduct } from "@/features/catalog/catalog.types";
+import { BulkCatalogModal } from "@/features/catalog/components/BulkCatalogModal";
 import { ManufacturingView } from "@/features/manufacturing/components/ManufacturingView";
 import { StaffManagementView } from "@/features/staff/components/StaffManagementView";
 import {
@@ -108,6 +109,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
   const [deptCustomStart, setDeptCustomStart] = useState("");
   const [deptCustomEnd, setDeptCustomEnd] = useState("");
   const [expandedIndents, setExpandedIndents] = useState<Record<string, boolean>>({});
+  const [showBulkCatalogModal, setShowBulkCatalogModal] = useState(false);
 
   const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
   const [ledgerCustomStart, setLedgerCustomStart] = useState("");
@@ -523,9 +525,19 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
           <Card>
             <CardHeader
               action={
-                <span className="text-xs text-slate-500">
-                  {manufacturedProducts.length} products
-                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowBulkCatalogModal(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    ⚡ Bulk Add Project Products
+                  </Button>
+                  <span className="text-xs text-slate-500">
+                    {manufacturedProducts.length} products
+                  </span>
+                </div>
               }
             >
               <CardTitle>Manufactured products</CardTitle>
@@ -1109,6 +1121,11 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
           </CardContent>
         </Card>
       )}
+      <BulkCatalogModal
+        isOpen={showBulkCatalogModal}
+        onClose={() => setShowBulkCatalogModal(false)}
+        initialProjectId={projectId}
+      />
     </div>
   );
 }

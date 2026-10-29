@@ -20,6 +20,7 @@ import { catalogService } from '../catalog.service';
 import { CatalogProduct, CategoryDto } from '../catalog.types';
 import { inventoryService } from '@/features/inventory/inventory.service';
 import { UnitsDirectory } from './UnitsDirectory';
+import { BulkCatalogModal } from './BulkCatalogModal';
 
 type CatalogTab = 'PRODUCTS' | 'TAXONOMY' | 'UNITS';
 
@@ -61,6 +62,7 @@ export function CatalogView() {
   const [brandName, setBrandName] = useState('');
   const [brandParentId, setBrandParentId] = useState('');
   const [brandError, setBrandError] = useState<string | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   const canCreate = role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 
@@ -607,6 +609,13 @@ export function CatalogView() {
         actions={
           canCreate ? (
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => setShowBulkModal(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                ⚡ Bulk Add / Import
+              </Button>
               <Button
                 variant="secondary"
                 onClick={() => {

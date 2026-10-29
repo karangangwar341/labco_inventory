@@ -11,6 +11,7 @@ describe('Organization Services (Projects & Warehouses)', () => {
 
   beforeEach(() => {
     mockPrisma = {
+      $transaction: vi.fn().mockImplementation((cb) => cb(mockPrisma)),
       project: {
         findUnique: vi.fn(),
         create: vi.fn(),
@@ -189,6 +190,26 @@ describe('Organization Services (Projects & Warehouses)', () => {
       await expect(
         warehousesService.update('w-1', { storeAdminId: 'u-proj-admin' }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('creates projects in bulk for Super Admin', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.project.findUnique.mockResolvedValue(null);
+      mockPrisma.project.create.mockImplementation(({ data }: any) => ({
+        id: 'proj-' + Math.random(),
+        ...data,
+      }));
+      mockPrisma.projectWarehouseAssignment.create = vi.fn().mockResolvedValue({ id: 'pwa-1' });
+
+      const res = await projectsService.createBulk({
+        items: [
+          { name: 'Apex Lab' },
+          { name: 'Central Lab', warehouseIds: ['wh-1'] },
+        ],
+      }, superAdmin);
+
+      expect(res.totalCreated).toBe(2);
+      expect(mockPrisma.project.create).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { CreateBulkCategoriesDto } from './dto/create-bulk-categories.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -24,6 +25,15 @@ export class CategoriesController {
   @ApiResponse({ status: 201, description: 'Category created' })
   create(@Body() dto: CreateCategoryDto, @CurrentUser() user: AuthenticatedUser) {
     return this.categoriesService.create(dto, user);
+  }
+
+
+  @Post('bulk')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.PROJECT_ADMIN)
+  @ApiOperation({ summary: 'Bulk create product categories and subcategories' })
+  @ApiResponse({ status: 201, description: 'Bulk categories created' })
+  createBulk(@Body() dto: CreateBulkCategoriesDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.categoriesService.createBulk(dto, user);
   }
 
   @Get()

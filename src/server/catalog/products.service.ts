@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProductDto, ProposeProductVersionDto } from './dto/create-product.dto';
+import { CreateBulkProductsDto } from './dto/create-bulk-products.dto';
 import { ApproveProductDto, ApprovalDecision } from './dto/approve-product.dto';
 import { UserRole, CatalogScope, ProductKind, ProductStatus, ProductVersionStatus, UnitStatus, Prisma } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
@@ -236,6 +237,236 @@ export class ProductsService {
     }
     this.invalidateCache();
     return created;
+  }
+
+
+  async createBulk(dto: CreateBulkProductsDto, user: AuthenticatedUser) {
+    if (user.role === UserRole.STORE_ADMIN) {
+      throw new ForbiddenException('Store Admin cannot create or edit products');
+    }
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      for (const item of dto.items) {
+        if (item.kind && item.kind !== 'MANUFACTURED_PRODUCT') {
+          throw new BadRequestException('Project Admins can create manufactured products only');
+        }
+      }
+    }
+
+    let defaultOwnerScope: CatalogScope = CatalogScope.COMPANY;
+    let defaultProjectId: string | null = null;
+    let defaultStatus: ProductStatus = ProductStatus.APPROVED;
+
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      defaultOwnerScope = CatalogScope.PROJECT;
+      defaultStatus = ProductStatus.PENDING_APPROVAL;
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { projectId: true },
+      });
+      if (!dbUser?.projectId) {
+        throw new ForbiddenException('Project Admin must belong to an organization');
+      }
+      defaultProjectId = dbUser.projectId;
+    }
+
+    const created: any[] = [];
+    const skipped: { name: string; reason: string }[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const productName = item.name?.trim();
+        if (!productName) continue;
+
+        let itemOwnerScope = defaultOwnerScope;
+        let itemProjectId = defaultProjectId;
+        let itemStatus = defaultStatus;
+
+        if (user.role === UserRole.SUPER_ADMIN) {
+          if (item.projectId) {
+            itemOwnerScope = CatalogScope.PROJECT;
+            itemProjectId = item.projectId;
+          } else if (item.ownerScope === CatalogScope.PROJECT) {
+            itemOwnerScope = CatalogScope.PROJECT;
+            if (!itemProjectId) {
+              const firstProject = await tx.project.findFirst({
+                where: { status: 'ACTIVE' },
+                orderBy: { createdAt: 'asc' },
+              });
+              itemProjectId = firstProject?.id || null;
+            }
+          }
+        }
+
+        let targetCategoryId = item.categoryId;
+
+        if (!targetCategoryId && item.categoryName?.trim()) {
+          const catName = item.categoryName.trim();
+          let mainCategory = await tx.category.findFirst({
+            where: {
+              name: { equals: catName, mode: 'insensitive' },
+              parentId: null,
+              ownerScope: itemOwnerScope,
+              projectId: itemProjectId,
+            },
+          });
+          if (!mainCategory) {
+            mainCategory = await tx.category.create({
+              data: {
+                name: catName,
+                parentId: null,
+                ownerScope: itemOwnerScope,
+                projectId: itemProjectId,
+              },
+            });
+          }
+          targetCategoryId = mainCategory.id;
+
+          if (item.subcategoryName?.trim()) {
+            const subName = item.subcategoryName.trim();
+            let subcategory = await tx.category.findFirst({
+              where: {
+                name: { equals: subName, mode: 'insensitive' },
+                parentId: mainCategory.id,
+                ownerScope: itemOwnerScope,
+                projectId: itemProjectId,
+              },
+            });
+            if (!subcategory) {
+              subcategory = await tx.category.create({
+                data: {
+                  name: subName,
+                  parentId: mainCategory.id,
+                  ownerScope: itemOwnerScope,
+                  projectId: itemProjectId,
+                },
+              });
+            }
+            targetCategoryId = subcategory.id;
+          }
+        }
+
+        if (!targetCategoryId) {
+          let defaultCat = await tx.category.findFirst({
+            where: {
+              ownerScope: itemOwnerScope,
+              projectId: itemProjectId,
+            },
+          });
+          if (!defaultCat) {
+            defaultCat = await tx.category.create({
+              data: {
+                name: 'General',
+                parentId: null,
+                ownerScope: itemOwnerScope,
+                projectId: itemProjectId,
+              },
+            });
+          }
+          targetCategoryId = defaultCat.id;
+        }
+
+        const baseUnitName = (item.unitName || 'PIECE').trim().toUpperCase();
+        const precision = Number(item.quantityPrecision ?? 0);
+        const allowFractional = Boolean(item.allowFractional);
+        const minQty = Number(item.minQuantity ?? 0);
+        const minOrderQty = Number(item.minOrderQuantity ?? 1);
+        const brand = item.brand?.trim() || null;
+        const description = item.description?.trim() || null;
+        const productKind: ProductKind = itemOwnerScope === CatalogScope.PROJECT
+          ? (item.kind || ProductKind.MANUFACTURED_PRODUCT)
+          : (item.kind || ProductKind.RAW_MATERIAL);
+
+        const duplicateKey = computeDuplicateKey({
+          ownerScope: itemOwnerScope,
+          projectId: itemProjectId,
+          name: productName,
+          categoryId: targetCategoryId,
+          brand,
+          attributes: [],
+        });
+
+        const existing = await tx.product.findUnique({
+          where: { duplicateKey },
+        });
+
+        if (existing) {
+          skipped.push({ name: productName, reason: 'Duplicate product already exists in scope' });
+          continue;
+        }
+
+        const isApproved = itemStatus === ProductStatus.APPROVED;
+
+        const product = await tx.product.create({
+          data: {
+            ownerScope: itemOwnerScope,
+            projectId: itemProjectId,
+            categoryId: targetCategoryId,
+            name: productName,
+            brand,
+            description,
+            kind: productKind,
+            status: itemStatus,
+            quantityPrecision: precision,
+            allowFractional,
+            minQuantity: new Prisma.Decimal(minQty),
+            minOrderQuantity: new Prisma.Decimal(minOrderQty),
+            duplicateKey,
+            approvedById: isApproved ? user.id : null,
+            approvedAt: isApproved ? new Date() : null,
+            units: {
+              create: [
+                {
+                  unitName: baseUnitName,
+                  isBaseUnit: true,
+                  conversionToBase: new Prisma.Decimal(1),
+                  status: 'ACTIVE',
+                },
+              ],
+            },
+          },
+          include: {
+            category: true,
+            units: true,
+            project: true,
+          },
+        });
+
+        await tx.productVersion.create({
+          data: {
+            productId: product.id,
+            versionNumber: 1,
+            status: isApproved ? ProductVersionStatus.APPROVED : ProductVersionStatus.PENDING_APPROVAL,
+            specification: {
+              name: product.name,
+              kind: product.kind,
+              brand: product.brand,
+              description: product.description,
+              categoryId: product.categoryId,
+              quantityPrecision: product.quantityPrecision,
+              allowFractional: product.allowFractional,
+              minQuantity: String(product.minQuantity),
+              minOrderQuantity: String(product.minOrderQuantity),
+              attributes: [],
+              units: [{ unitName: baseUnitName, isBaseUnit: true, conversionToBase: '1' }],
+            },
+            submittedById: user.id,
+            reviewedById: isApproved ? user.id : null,
+            reviewedAt: isApproved ? new Date() : null,
+            effectiveFrom: isApproved ? new Date() : null,
+          },
+        });
+
+        created.push(product);
+      }
+    });
+
+    this.invalidateCache();
+    return {
+      totalCreated: created.length,
+      totalSkipped: skipped.length,
+      created,
+      skipped,
+    };
   }
 
   async proposeVersion(id: string, dto: ProposeProductVersionDto, user: AuthenticatedUser) {

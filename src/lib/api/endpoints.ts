@@ -83,11 +83,13 @@ export const endpoints = {
 
   catalog: {
     products: () => "/products",
+    productsBulk: () => "/products/bulk",
     productById: (id: string) => `/products/${id}`,
     reviewProduct: (id: string) => `/products/${id}/review`,
     reviewProductVersion: (id: string, versionId: string) =>
       `/products/${id}/versions/${versionId}/review`,
     categories: () => "/categories",
+    categoriesBulk: () => "/categories/bulk",
     units: () => "/units",
     unitByName: (name: string) => `/units/${encodeURIComponent(name)}`,
   },
@@ -258,6 +260,7 @@ export const endpoints = {
     projects: () => "/projects",
     projectById: (id: string) => `/projects/${id}`,
     createProject: () => "/projects",
+    createProjectsBulk: () => "/projects/bulk",
     updateProject: (id: string) => `/projects/${id}`,
     projectWarehouses: (id: string) => `/projects/${id}/warehouses`,
     projectWarehouseAssignment: (projectId: string, warehouseId: string) =>

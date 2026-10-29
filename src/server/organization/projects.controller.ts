@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { CreateBulkProjectsDto } from './dto/create-bulk-projects.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { AssignWarehouseDto } from './dto/assign-warehouse.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -34,6 +35,15 @@ export class ProjectsController {
   @ApiResponse({ status: 201, description: 'Project created successfully' })
   create(@Body() dto: CreateProjectDto) {
     return this.projectsService.create(dto);
+  }
+
+
+  @Post('bulk')
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Bulk create project organizations (Super Admin only)' })
+  @ApiResponse({ status: 201, description: 'Projects bulk created successfully' })
+  createBulk(@Body() dto: CreateBulkProjectsDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.projectsService.createBulk(dto, user);
   }
 
   @Get()

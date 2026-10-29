@@ -13,6 +13,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { administrationService, ManagedProject } from '../administration.service';
+import { BulkProjectsModal } from './BulkProjectsModal';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 type ProjectEdit = {
@@ -28,6 +29,7 @@ export function ProjectsManagement() {
   const [editing, setEditing] = useState<ProjectEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showBulkProjectsModal, setShowBulkProjectsModal] = useState(false);
 
   const projectsQuery = useQuery({
     queryKey: queryKeys.administration.projects(),
@@ -327,6 +329,11 @@ export function ProjectsManagement() {
           )}
         </CardContent>
       </Card>
+
+      <BulkProjectsModal
+        isOpen={showBulkProjectsModal}
+        onClose={() => setShowBulkProjectsModal(false)}
+      />
 
       {/* Edit Project Modal */}
       {editing && (

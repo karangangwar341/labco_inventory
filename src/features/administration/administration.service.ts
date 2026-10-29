@@ -66,6 +66,15 @@ export const administrationService = {
     return apiClient.get<ManagedWarehouse[]>(endpoints.organization.warehouses());
   },
 
+
+  createBulkProjects: async (items: Array<{ name: string; warehouseIds?: string[] }>): Promise<{
+    totalCreated: number;
+    totalSkipped: number;
+    created: ManagedProject[];
+    skipped: Array<{ name: string; reason: string }>;
+  }> => {
+    return apiClient.post(endpoints.organization.createProjectsBulk(), { items });
+  },
   createProject: async (name: string): Promise<ManagedProject> => {
     return apiClient.post(endpoints.organization.createProject(), { name });
   },

@@ -56,6 +56,42 @@ export const catalogService = {
     return apiClient.post(endpoints.catalog.reviewProductVersion(id, versionId), payload);
   },
 
+
+  createBulkCategories: async (items: Array<{
+    name: string;
+    parentName?: string;
+    parentId?: string;
+    ownerScope?: 'COMPANY' | 'PROJECT';
+    projectId?: string;
+  }>): Promise<{ totalCreated: number; totalSkipped: number; created: CategoryDto[]; skipped: Array<{ name: string; reason: string }> }> => {
+    return apiClient.post(endpoints.catalog.categoriesBulk(), { items });
+  },
+
+  createBulkProducts: async (items: Array<{
+    name: string;
+    categoryName?: string;
+    subcategoryName?: string;
+    categoryId?: string;
+    brand?: string;
+    description?: string;
+    kind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT' | 'CONSUMABLE';
+    unitName?: string;
+    minQuantity?: number;
+    minOrderQuantity?: number;
+    quantityPrecision?: number;
+    allowFractional?: boolean;
+    ownerScope?: 'COMPANY' | 'PROJECT';
+    projectId?: string;
+  }>): Promise<{ totalCreated: number; totalSkipped: number; created: CatalogProduct[]; skipped: Array<{ name: string; reason: string }> }> => {
+    const res = await apiClient.post<{ totalCreated: number; totalSkipped: number; created: CatalogProduct[]; skipped: Array<{ name: string; reason: string }> }>(
+      endpoints.catalog.productsBulk(),
+      { items }
+    );
+    return {
+      ...res,
+      created: (res?.created || []).map(normalizeProduct),
+    };
+  },
   createCategory: async (payload: { name: string; parentId?: string }): Promise<CategoryDto> => {
     return apiClient.post<CategoryDto>(endpoints.catalog.categories(), payload);
   },

@@ -84,7 +84,7 @@ export function ProjectAdminDashboard() {
                 </span>
               </Button>
             </Link>
-            <Link href="/departments?tab=ISSUES&action=new-issue">
+            <Link href="/departments?tab=ISSUES">
               <Button variant="primary">
                 <span className="flex items-center gap-1.5">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -114,7 +114,7 @@ export function ProjectAdminDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Link href="/departments?tab=ISSUES&action=new-issue">
+          <Link href="/departments?tab=ISSUES">
             <Button variant="primary" size="sm" className="whitespace-nowrap">
               <span>+ Issue Reagents to Department</span>
             </Button>

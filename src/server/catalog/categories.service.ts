@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { CreateBulkCategoriesDto } from './dto/create-bulk-categories.dto';
 import { UserRole, CatalogScope } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
@@ -83,6 +84,110 @@ export class CategoriesService {
   }
 
   private categoriesCache = new Map<string, { data: any[]; expiresAt: number }>();
+
+  
+  async createBulk(dto: CreateBulkCategoriesDto, user: AuthenticatedUser) {
+    if (user.role === UserRole.STORE_ADMIN) {
+      throw new ForbiddenException('Store Admin cannot create product categories');
+    }
+
+    let defaultOwnerScope: CatalogScope = CatalogScope.COMPANY;
+    let defaultProjectId: string | null = null;
+
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      defaultOwnerScope = CatalogScope.PROJECT;
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { projectId: true },
+      });
+      if (!dbUser?.projectId) {
+        throw new ForbiddenException('Project Admin must belong to an organization');
+      }
+      defaultProjectId = dbUser.projectId;
+    }
+
+    const created: any[] = [];
+    const skipped: { name: string; reason: string }[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const normalizedName = item.name?.trim();
+        if (!normalizedName) continue;
+
+        let itemOwnerScope = defaultOwnerScope;
+        let itemProjectId = defaultProjectId;
+
+        if (user.role === UserRole.SUPER_ADMIN) {
+          if (item.projectId) {
+            itemOwnerScope = CatalogScope.PROJECT;
+            itemProjectId = item.projectId;
+          } else if (item.ownerScope === CatalogScope.PROJECT) {
+            itemOwnerScope = CatalogScope.PROJECT;
+            itemProjectId = item.projectId || null;
+          }
+        }
+
+        let parentId: string | null = item.parentId || null;
+
+        if (item.parentName?.trim() && !parentId) {
+          const parentNorm = item.parentName.trim();
+          let parent = await tx.category.findFirst({
+            where: {
+              name: { equals: parentNorm, mode: 'insensitive' },
+              parentId: null,
+              ownerScope: itemOwnerScope,
+              projectId: itemProjectId,
+            },
+          });
+          if (!parent) {
+            parent = await tx.category.create({
+              data: {
+                name: parentNorm,
+                parentId: null,
+                ownerScope: itemOwnerScope,
+                projectId: itemProjectId,
+              },
+            });
+            created.push(parent);
+          }
+          parentId = parent.id;
+        }
+
+        const existing = await tx.category.findFirst({
+          where: {
+            name: { equals: normalizedName, mode: 'insensitive' },
+            parentId,
+            ownerScope: itemOwnerScope,
+            projectId: itemProjectId,
+          },
+        });
+
+        if (existing) {
+          skipped.push({ name: normalizedName, reason: 'Category already exists in scope' });
+          continue;
+        }
+
+        const cat = await tx.category.create({
+          data: {
+            name: normalizedName,
+            parentId,
+            ownerScope: itemOwnerScope,
+            projectId: itemProjectId,
+          },
+          include: { parent: true },
+        });
+        created.push(cat);
+      }
+    });
+
+    this.categoriesCache.clear();
+    return {
+      totalCreated: created.length,
+      totalSkipped: skipped.length,
+      created,
+      skipped,
+    };
+  }
 
   async findAll(user: AuthenticatedUser) {
     const cacheKey = `${user.role}_${user.id}_${user.projectId || ''}`;

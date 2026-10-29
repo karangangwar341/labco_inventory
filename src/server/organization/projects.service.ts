@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { CreateBulkProjectsDto } from './dto/create-bulk-projects.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UserRole, OrganizationStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
@@ -31,6 +32,61 @@ export class ProjectsService {
         status: OrganizationStatus.ACTIVE,
       },
     });
+  }
+
+
+  async createBulk(dto: CreateBulkProjectsDto, user: AuthenticatedUser) {
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Super Admin only can create projects');
+    }
+
+    const created: any[] = [];
+    const skipped: { name: string; reason: string }[] = [];
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const normalizedName = item.name?.trim();
+        if (!normalizedName) continue;
+
+        const existing = await tx.project.findUnique({
+          where: { name: normalizedName },
+        });
+
+        if (existing) {
+          skipped.push({ name: normalizedName, reason: 'Project name already exists' });
+          continue;
+        }
+
+        const project = await tx.project.create({
+          data: {
+            name: normalizedName,
+            status: OrganizationStatus.ACTIVE,
+          },
+        });
+
+        if (item.warehouseIds?.length) {
+          for (const whId of item.warehouseIds) {
+            await tx.projectWarehouseAssignment.create({
+              data: {
+                projectId: project.id,
+                warehouseId: whId,
+                isActive: true,
+                changedById: user.id,
+              },
+            });
+          }
+        }
+
+        created.push(project);
+      }
+    });
+
+    return {
+      totalCreated: created.length,
+      totalSkipped: skipped.length,
+      created,
+      skipped,
+    };
   }
 
   async findAll(currentUser: AuthenticatedUser) {

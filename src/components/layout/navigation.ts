@@ -76,7 +76,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     matchPaths: ['/manufacturing', '/departments'],
     subItems: [
       { href: '/manufacturing', label: 'Production Runs & Cycles' },
-      { href: '/departments', label: 'Departments & Returns', roles: ['PROJECT_ADMIN'] },
+      { href: '/departments', label: 'Departments', roles: ['PROJECT_ADMIN'] },
       { href: '/staff', label: 'Staff & Work Logs', roles: ['PROJECT_ADMIN'] },
     ],
   },

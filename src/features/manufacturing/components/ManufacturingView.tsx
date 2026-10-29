@@ -26,7 +26,6 @@ import { queryKeys } from "../../../lib/query/query-keys";
 import { useAuth } from "../../auth/auth.store";
 import { CyclesGridView } from "./CyclesGridView";
 import { ReRunCycleModal } from "./ReRunCycleModal";
-import { ManufacturingAnalyticsView } from "./ManufacturingAnalyticsView";
 import {
   DateQuickFilterBar,
   DateQuickFilter,
@@ -41,7 +40,7 @@ export interface ManufacturingViewProps {
 export function ManufacturingView({ projectId: propProjectId, hideHeader }: ManufacturingViewProps = {}) {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  const urlTab = searchParams.get("tab") as "CYCLES" | "RUNS" | "ANALYTICS" | null;
+  const urlTab = searchParams.get("tab") as "CYCLES" | "RUNS" | null;
   const urlStatus = searchParams.get("status");
   const urlRunId = searchParams.get("runId");
 
@@ -50,7 +49,6 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
   const isSuperAdmin = role === "SUPER_ADMIN";
   // Super Admin project filter for runs & analytics
   const [runsProjectId, setRunsProjectId] = useState<string>(propProjectId || "");
-  const [analyticsProjectId, setAnalyticsProjectId] = useState<string>("");
 
   const effectiveTargetProjectId = isProjectAdmin
     ? (user?.projectId ?? undefined)
@@ -58,8 +56,8 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
   const canCreateRuns = isProjectAdmin || (isSuperAdmin && Boolean(effectiveTargetProjectId));
 
   // Active top-level tab
-  const [activeTab, setActiveTab] = useState<"CYCLES" | "RUNS" | "ANALYTICS">(() => {
-    if (urlTab && ["CYCLES", "RUNS", "ANALYTICS"].includes(urlTab)) {
+  const [activeTab, setActiveTab] = useState<"CYCLES" | "RUNS">(() => {
+    if (urlTab && ["CYCLES", "RUNS"].includes(urlTab)) {
       return urlTab;
     }
     if (urlRunId || urlStatus) {
@@ -84,7 +82,6 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
   useEffect(() => {
     if (propProjectId) {
       setRunsProjectId(propProjectId);
-      setAnalyticsProjectId(propProjectId);
     }
   }, [propProjectId]);
 
@@ -146,7 +143,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
 
   // Synchronize top-level tab from URL parameters
   useEffect(() => {
-    if (urlTab && ["CYCLES", "RUNS", "ANALYTICS"].includes(urlTab)) {
+    if (urlTab && ["CYCLES", "RUNS"].includes(urlTab)) {
       setActiveTab(urlTab);
     } else if (urlRunId) {
       setActiveTab("RUNS");
@@ -204,23 +201,6 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
     }
     return map;
   }, [rawBalances]);
-
-  // Query: Analytics
-  const {
-    data: analytics,
-    isLoading: isLoadingAnalytics,
-    refetch: fetchAnalytics,
-  } = useQuery({
-    queryKey: queryKeys.manufacturing.analytics({
-      projectId: analyticsProjectId || undefined,
-    }),
-    queryFn: async () => {
-      return manufacturingService.getAnalytics({
-        projectId: analyticsProjectId || undefined,
-      });
-    },
-    staleTime: 2 * 60 * 1000,
-  });
 
   // Query: Projects for Super Admin filter
   const { data: projects = [] } = useQuery({
@@ -782,21 +762,6 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
             </span>
           )}
         </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("ANALYTICS")}
-          className={`flex items-center gap-2 border-b-2 px-3.5 sm:px-4 py-2.5 text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
-            activeTab === "ANALYTICS"
-              ? "border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-lg"
-              : "border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300"
-          }`}
-        >
-          <span>Analytics & Execution Ledger</span>
-          <span className="rounded-full bg-slate-200 px-1.5 py-0.2 text-[10px] text-slate-700">
-            Reports
-          </span>
-        </button>
       </div>
 
       {/* TAB 1: PRODUCTION CYCLES & RE-RUN */}
@@ -1340,23 +1305,6 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
           </>
         )}
         </div>
-      )}
-
-      {/* TAB 3: ANALYTICS & EXECUTION LEDGER */}
-      {activeTab === "ANALYTICS" && (
-        <ManufacturingAnalyticsView
-          analytics={analytics}
-          isLoading={isLoadingAnalytics}
-          role={role}
-          projects={projects}
-          selectedProjectId={analyticsProjectId}
-          onProjectChange={(id) => setAnalyticsProjectId(id)}
-          onReRunCycleId={handleReRunFromRunId}
-          onRefresh={() => {
-            void fetchAnalytics();
-            void fetchCycles();
-          }}
-        />
       )}
 
       {/* RE-RUN CYCLE MODAL */}
