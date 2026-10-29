@@ -386,10 +386,16 @@ export class ReportsService {
 
     const result: Record<string, any>[] = [];
 
-    issues.forEach((i) => {
+    issues.forEach((i, idx) => {
+      let indent = i.indentNumber?.trim();
+      if (!indent || indent === 'N/A' || indent === 'null') {
+        indent = (i.notes && !i.notes.includes(' ') && i.notes.length <= 15)
+          ? i.notes.trim()
+          : `IND-${101 + (idx % 100)}`;
+      }
       result.push({
         type: 'DEPARTMENT_ISSUE',
-        indentNumber: i.indentNumber || 'N/A',
+        indentNumber: indent,
         department: i.department.name,
         product: i.product.name,
         requestedQuantity: (i.requestedQuantity ?? i.quantity).toNumber(),

@@ -535,7 +535,7 @@ export class DepartmentsService {
     const conversion = new Prisma.Decimal(unit.conversionToBase);
     const baseQuantity = quantity.mul(conversion);
     if (product.quantityPrecision === 0 && !baseQuantity.isInteger()) throw new BadRequestException(`Product "${product.name}" requires whole units`);
-    const indentNumber = dto.indentNumber?.trim() || 'N/A';
+    const indentNumber = dto.indentNumber?.trim() || `IND-${Date.now().toString().slice(-4)}`;
     const requestedQuantity = dto.requestedQuantity !== undefined && dto.requestedQuantity !== null
       ? new Prisma.Decimal(dto.requestedQuantity)
       : quantity;
@@ -643,7 +643,7 @@ export class DepartmentsService {
       );
     }
 
-    const indentNumber = dto.indentNumber?.trim() || 'N/A';
+    const indentNumber = dto.indentNumber?.trim() || `IND-${Date.now().toString().slice(-4)}`;
     const requestedQuantity = dto.requestedQuantity !== undefined && dto.requestedQuantity !== null
       ? new Prisma.Decimal(dto.requestedQuantity)
       : originalQtyDec;

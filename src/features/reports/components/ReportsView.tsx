@@ -31,7 +31,7 @@ const LABELS: Record<string, string> = {
   productName: 'Product', locationName: 'Location', locationType: 'Location type',
   usableQuantity: 'Usable', reservedQuantity: 'Reserved', availableQuantity: 'Available',
   minThreshold: 'Min threshold',
-  lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source',
+  lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source', indentNumber: 'Indent slip #',
   condition: 'Condition', originalQuantity: 'Quantity', unitName: 'Unit', baseDelta: 'Stock delta',
   direction: 'Direction', postedBy: 'Recorded by', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
   baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', runId: 'Run ID', productionReference: 'Reference',
@@ -85,6 +85,19 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
       if (num < 0) return <span className="text-rose-600 font-mono font-semibold">{num.toLocaleString()}</span>;
       return <span className="text-slate-500 font-mono">0</span>;
     }
+  }
+
+  
+  if (column === 'indentNumber') {
+    const val = String(value ?? '').trim();
+    if (!val || val === 'N/A' || val === 'null' || val === 'undefined') {
+      return <span className="text-slate-400 font-mono text-xs italic">—</span>;
+    }
+    return (
+      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+        📋 {val}
+      </span>
+    );
   }
 
   // Workflow status

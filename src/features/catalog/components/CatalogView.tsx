@@ -404,7 +404,7 @@ export function CatalogView() {
       {
         id: 'name',
         header: 'Product & SKU',
-        width: role === 'PROJECT_ADMIN' ? '36%' : '26%',
+        width: '32%',
         minWidth: '200px',
         valign: 'top',
         cell: (product) => (
@@ -477,31 +477,6 @@ export function CatalogView() {
     }
 
     cols.push(
-      {
-        id: 'status',
-        header: 'Status',
-        width: '12%',
-        minWidth: '110px',
-        valign: 'top',
-        cell: (product) => {
-          const pendingVersion = product.versions?.find((version) => version.status === 'PENDING_APPROVAL');
-          return (
-            <Badge
-              variant={
-                pendingVersion || product.status === 'PENDING_APPROVAL'
-                  ? 'warning'
-                  : product.status === 'REJECTED'
-                  ? 'danger'
-                  : 'success'
-              }
-              size="sm"
-              withDot={Boolean(pendingVersion || product.status === 'PENDING_APPROVAL')}
-            >
-              {pendingVersion ? 'Change Pending' : (product.status || 'APPROVED').replaceAll('_', ' ')}
-            </Badge>
-          );
-        },
-      },
       {
         id: 'units',
         header: 'Active Units',
