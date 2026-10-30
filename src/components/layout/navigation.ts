@@ -47,7 +47,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     matchPaths: ['/', '/inventory', '/shipments'],
     subItems: [
       { href: '/', label: 'Overview', exact: true },
-      { href: '/inventory', label: 'Stock & Inventory' },
+      { href: '/inventory', label: 'Stock & Inventory', roles: ['SUPER_ADMIN', 'STORE_ADMIN'] },
       { href: '/shipments', label: 'Project Dispatches', roles: ['STORE_ADMIN'] },
       { href: '/shipments', label: 'Incoming Deliveries', roles: ['PROJECT_ADMIN'] },
       { href: '/shipments', label: 'Shipments & Deliveries', roles: ['SUPER_ADMIN'] },

@@ -164,7 +164,7 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
         {/* Low-Stock Threshold Permanent Badge Reminder */}
         {lowStockCount > 0 && (
           <Link
-            href="/inventory?filter=LOW_STOCK"
+            href={role === 'PROJECT_ADMIN' ? '/' : '/inventory?filter=LOW_STOCK'}
             className="group flex max-w-[7rem] items-center gap-1 rounded-full border border-rose-200/90 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-700 shadow-2xs transition-colors hover:bg-rose-100 sm:max-w-none sm:gap-1.5 sm:px-2.5 sm:text-[11px]"
             title={`${lowStockCount} item${lowStockCount > 1 ? 's' : ''} below minimum stock threshold! Click to view in inventory.`}
           >

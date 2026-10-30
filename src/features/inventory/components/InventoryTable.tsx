@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useAuth } from '../../auth/auth.store';
@@ -21,6 +22,13 @@ import { ErrorState } from '../../../components/feedback/ErrorState';
 
 export function InventoryTable() {
   const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user?.role === 'PROJECT_ADMIN') {
+      router.replace('/');
+    }
+  }, [user?.role, router]);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -223,6 +231,10 @@ export function InventoryTable() {
     setSelectedBrand('ALL');
     setShowLowStockOnly(false);
   };
+
+  if (user?.role === 'PROJECT_ADMIN') {
+    return <LoadingState message="Redirecting to Operations Overview..." />;
+  }
 
   if (isLoading) return <LoadingState message="Loading warehouse inventory balances…" />;
   if (error)
