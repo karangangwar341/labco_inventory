@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   approvalRequirements: {
     stockRequests: { STOCK_IN: true, STOCK_OUT: true, DISPATCH: true, TRANSFER: true, ADJUSTMENT: true },
     shipmentReceipt: true,
-    manufacturing: true,
+    manufacturing: false,
     departmentIssue: true,
     departmentReturn: true,
     imports: { stockIn: true, stockOut: true },

@@ -20,6 +20,7 @@ export type ProductionStatus =
   | 'DRAFT'
   | 'PENDING_APPROVAL'
   | 'APPROVED'
+  | 'POSTED'
   | 'COMPLETED'
   | 'CANCELLED';
 

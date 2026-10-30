@@ -533,7 +533,7 @@ export class ManufacturingService {
    */
   async submitProductionRun(user: AuthenticatedUser, runId: string) {
     const settings = await this.notificationsService.getSettings?.();
-    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
+    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? false;
     const submitted = await this.submitProductionRunInternal(user, runId);
     if (!requiresApproval) return this.approveProductionRun(user, runId, {}, true);
     await this.notificationsService.notifySuperAdmins(
@@ -559,7 +559,7 @@ export class ManufacturingService {
     }
 
     const settings = await this.notificationsService.getSettings?.();
-    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? true;
+    const requiresApproval = settings?.approvalRequirements?.manufacturing ?? false;
 
     const submittedRuns = [];
     for (const runId of dto.runIds) {
@@ -700,7 +700,10 @@ export class ManufacturingService {
       return run;
     }
 
-    if (run.status !== ProductionStatus.PENDING_APPROVAL) {
+    if (
+      run.status !== ProductionStatus.PENDING_APPROVAL &&
+      !(automated && run.status === ProductionStatus.DRAFT)
+    ) {
       throw new ConflictException(
         `Production run ${runId} is not awaiting approval (status: ${run.status})`,
       );

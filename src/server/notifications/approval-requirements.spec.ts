@@ -14,7 +14,7 @@ describe('approval requirements settings', () => {
       Object.values(DEFAULT_APPROVAL_REQUIREMENTS.stockRequests),
     );
     expect(requirements.shipmentReceipt).toBe(true);
-    expect(requirements.manufacturing).toBe(true);
+    expect(requirements.manufacturing).toBe(false);
     expect(requirements.departmentIssue).toBe(true);
     expect(requirements.departmentReturn).toBe(true);
     expect(requirements.imports).toEqual({ stockIn: true, stockOut: true });

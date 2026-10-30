@@ -291,7 +291,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
         current ? { ...current, status: updated.status } : current,
       );
       setActionSuccess(
-        "Production run submitted for Super Admin review. Inventory changes only after approval.",
+        updated?.status === "POSTED" || updated?.status === "APPROVED" ? "Production run completed and posted to inventory! Raw materials consumed and finished goods added." : "Production run submitted for review.",
       );
       await invalidateAll();
       setTimeout(() => setActionSuccess(null), 5000);
@@ -1258,7 +1258,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
                             submitMutation.mutate(selectedRun.id);
                           }}
                         >
-                          Submit for approval
+                          Execute & Post Run
                         </Button>
                       </div>
                     )}

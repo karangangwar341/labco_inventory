@@ -103,12 +103,16 @@ describe('Manufacturing Service (T-010: Project Manufacturing Linked & Separate 
       user: {
         findUnique: vi.fn(),
       },
+      auditEvent: {
+        create: vi.fn(),
+      },
     };
 
     mockLedgerService = {
       postTransaction: vi.fn(),
     };
     mockNotificationsService = {
+      getSettings: vi.fn().mockResolvedValue({ approvalRequirements: { manufacturing: true } }),
       notifySuperAdmins: vi.fn(),
       notifyProjectAdmins: vi.fn(),
       notifyUser: vi.fn(),
@@ -283,6 +287,56 @@ describe('Manufacturing Service (T-010: Project Manufacturing Linked & Separate 
 
       const res = await manufacturingService.submitProductionRun(projectAdminUser, 'run-batched-1');
       expect(res.status).toBe(ProductionStatus.PENDING_APPROVAL);
+    });
+
+    it('auto-approves and posts immediately when manufacturing approval is not required', async () => {
+      mockNotificationsService.getSettings.mockResolvedValue({
+        approvalRequirements: { manufacturing: false },
+      });
+
+      const draftRun = {
+        id: 'run-auto-1',
+        projectId: 'project-123',
+        status: ProductionStatus.DRAFT,
+        submittedById: projectAdminUser.id,
+        actualOutput: new Prisma.Decimal(25),
+        inputs: [
+          {
+            productId: 'prod-raw',
+            baseQuantity: new Prisma.Decimal(10),
+            quantity: new Prisma.Decimal(10),
+            unitNameSnapshot: 'LITER',
+          },
+        ],
+        outputs: [
+          {
+            productId: 'prod-finished',
+            quantity: new Prisma.Decimal(25),
+            unitNameSnapshot: 'KIT',
+          },
+        ],
+      };
+      mockPrisma.productionRun.findUnique.mockResolvedValue(draftRun);
+      mockPrisma.stockLocation.findUnique.mockResolvedValue({ id: 'loc-project-1' });
+      mockPrisma.inventoryBalance.findFirst.mockResolvedValue({
+        id: 'bal-1',
+        locationId: 'loc-project-1',
+        productId: 'prod-raw',
+        usableQty: new Prisma.Decimal(50),
+        reservedQty: new Prisma.Decimal(0),
+      });
+      mockPrisma.productionRun.update.mockResolvedValue({
+        id: 'run-auto-1',
+        status: ProductionStatus.POSTED,
+      });
+      mockPrisma.product.findMany.mockResolvedValue([
+        rawMaterialProduct,
+        finishedGoodProduct,
+      ]);
+
+      await manufacturingService.submitProductionRun(projectAdminUser, 'run-auto-1');
+      expect(mockLedgerService.postTransaction).toHaveBeenCalledTimes(2);
+      expect(mockNotificationsService.notifySuperAdmins).not.toHaveBeenCalled();
     });
   });
 

@@ -21,7 +21,7 @@ export const DEFAULT_APPROVAL_REQUIREMENTS: ApprovalRequirements = {
     ADJUSTMENT: true,
   },
   shipmentReceipt: true,
-  manufacturing: true,
+  manufacturing: false,
   departmentIssue: true,
   departmentReturn: true,
   imports: {

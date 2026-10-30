@@ -1508,6 +1508,11 @@ export function CatalogView() {
           </div>
         </div>
       </Modal>
+
+      <BulkCatalogModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+      />
     </div>
   );
 }

@@ -382,7 +382,7 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
       onClose={onClose}
       title="⚡ Bulk Catalog & Taxonomy Manager"
       description="Quickly register multiple products, categories, subcategories, brands, and project products directly into the database."
-      
+      maxWidth="2xl"
     >
       <div className="space-y-5">
         {/* Scope Selector Header */}
