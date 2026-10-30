@@ -28,23 +28,19 @@ export const approvalsService = {
     const queue: Record<ApprovalTab, QueueItem[]> = {
       REQUESTS: [],
       SHIPMENTS: [],
-      MANUFACTURING: [],
       DEPARTMENTS: [],
       CORRECTIONS: [],
     };
 
     try {
       // Execute independent queue queries concurrently (P-005 / Phase 2)
-      const [requestsRes, shipmentsRes, productionRunsRes, departmentIssuesRes, departmentBatchesRes] =
+      const [requestsRes, shipmentsRes, departmentIssuesRes, departmentBatchesRes] =
         await Promise.all([
           apiClient
             .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL' }))
             .catch(() => []),
           apiClient
             .get<any[]>(endpoints.shipments.list({ status: 'AWAITING_RECEIPT_APPROVAL' }))
-            .catch(() => []),
-          apiClient
-            .get<any[]>(endpoints.manufacturing.productionRuns({ status: 'PENDING_APPROVAL' }))
             .catch(() => []),
           apiClient
             .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL' }))
@@ -106,37 +102,6 @@ export const approvalsService = {
         priority: 'URGENT',
       }));
 
-      queue.MANUFACTURING = (Array.isArray(productionRunsRes) ? productionRunsRes : []).map((p) => {
-        const inputs = (p.inputs || []).map((line: any, index: number) => ({
-          id: line.id || `input-${index}`,
-          productName: line.product?.name || line.productName || `Input ${index + 1}`,
-          quantity: asDisplayQuantity(line.quantity),
-          unitName: line.unitNameSnapshot,
-          label: 'Input',
-        }));
-        const outputs = (p.outputs || []).map((line: any, index: number) => ({
-          id: line.id || `output-${index}`,
-          productName: line.product?.name || line.productName || `Output ${index + 1}`,
-          quantity: asDisplayQuantity(line.quantity),
-          unitName: line.unitNameSnapshot,
-          label: 'Output',
-        }));
-        return {
-          id: p.id,
-          type: `PRODUCTION_RUN${p.runNumber || p.productionReference ? ` (${p.runNumber || p.productionReference})` : ''}`,
-          requester: p.submittedBy?.username || p.project?.name || 'Project Admin',
-          location: p.project?.name || 'Project location',
-          projectId: p.projectId || p.project?.id,
-          projectName: p.project?.name,
-          details: p.notes || `Review the production plan${p.plannedOutput ? ` for ${asDisplayQuantity(p.plannedOutput)} units` : ''}.`,
-          quantitySummary: `${inputs.length} inputs · ${outputs.length} outputs`,
-          lineItems: [...inputs, ...outputs],
-          createdAt: p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Recent',
-          createdAtRaw: p.submittedAt || p.createdAt,
-          priority: 'NORMAL',
-        };
-      });
-
       queue.DEPARTMENTS = (Array.isArray(departmentIssuesRes) ? departmentIssuesRes : []).map((d) => ({
         id: d.id,
         type: 'DEPARTMENT_ISSUE',
@@ -193,8 +158,6 @@ export const approvalsService = {
         await apiClient.post(endpoints.stockRequests.approve(id), {}, { idempotencyKey });
       } else if (tab === 'SHIPMENTS') {
         await apiClient.post(endpoints.shipments.approveReceipt(id), {}, { idempotencyKey });
-      } else if (tab === 'MANUFACTURING') {
-        await apiClient.post(endpoints.manufacturing.approve(id), {}, { idempotencyKey });
       } else if (tab === 'DEPARTMENTS') {
         if (id.startsWith('batch:')) {
           await apiClient.post(endpoints.departments.approveIssueBatch(id.slice(6)), {}, { idempotencyKey });
@@ -215,9 +178,7 @@ export const approvalsService = {
   ): Promise<void> => {
     if (tab === 'REQUESTS') {
       await apiClient.post(endpoints.stockRequests.reject(id), { reason });
-    } else if (tab === 'MANUFACTURING') {
-      await apiClient.post(endpoints.manufacturing.reject(id), { reason });
-    } else if (tab === 'DEPARTMENTS') {
+        } else if (tab === 'DEPARTMENTS') {
       if (id.startsWith('batch:')) {
         await apiClient.post(endpoints.departments.rejectIssueBatch(id.slice(6)), { reason });
       } else {

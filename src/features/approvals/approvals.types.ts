@@ -1,7 +1,6 @@
 export type ApprovalTab =
   | 'REQUESTS'
   | 'SHIPMENTS'
-  | 'MANUFACTURING'
   | 'DEPARTMENTS'
   | 'CORRECTIONS';
 

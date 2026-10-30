@@ -20,7 +20,6 @@ import { ApprovalTab, QueueItem } from '@/features/approvals/approvals.types';
 const EMPTY_APPROVAL_QUEUE: Record<ApprovalTab, QueueItem[]> = {
   REQUESTS: [],
   SHIPMENTS: [],
-  MANUFACTURING: [],
   DEPARTMENTS: [],
   CORRECTIONS: [],
 };
@@ -53,9 +52,7 @@ export function SuperAdminDashboard() {
   const firstUrgentItem = urgentItems[0];
   const urgentTab: ApprovalTab = firstUrgentItem?.type.startsWith('SHIPMENT')
     ? 'SHIPMENTS'
-    : firstUrgentItem?.type.startsWith('PRODUCTION_RUN')
-      ? 'MANUFACTURING'
-      : firstUrgentItem?.type.startsWith('DEPARTMENT_ISSUE')
+          : firstUrgentItem?.type.startsWith('DEPARTMENT_ISSUE')
         ? 'DEPARTMENTS'
         : firstUrgentItem?.type.startsWith('LEDGER_CORRECTION')
           ? 'CORRECTIONS'

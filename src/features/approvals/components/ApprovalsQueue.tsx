@@ -27,12 +27,11 @@ import {
 const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
   REQUESTS: [],
   SHIPMENTS: [],
-  MANUFACTURING: [],
   DEPARTMENTS: [],
   CORRECTIONS: [],
 };
 
-const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'MANUFACTURING', 'DEPARTMENTS', 'CORRECTIONS'];
+const VALID_TABS: ApprovalTab[] = ['REQUESTS', 'SHIPMENTS', 'DEPARTMENTS', 'CORRECTIONS'];
 
 const QUICK_REJECTION_REASONS = [
   'Insufficient available stock at facility',
@@ -252,7 +251,6 @@ export function ApprovalsQueue() {
   const tabs: { key: ApprovalTab; label: string; count: number }[] = [
     { key: 'REQUESTS', label: 'Stock Requests', count: items.REQUESTS?.length || 0 },
     { key: 'SHIPMENTS', label: 'Shipments & Receipts', count: items.SHIPMENTS?.length || 0 },
-    { key: 'MANUFACTURING', label: 'Project Manufacturing', count: items.MANUFACTURING?.length || 0 },
     { key: 'DEPARTMENTS', label: 'Department Issues', count: items.DEPARTMENTS?.length || 0 },
     { key: 'CORRECTIONS', label: 'Ledger Corrections', count: items.CORRECTIONS?.length || 0 },
   ];
@@ -281,10 +279,6 @@ export function ApprovalsQueue() {
     setErrorMsg(null);
 
     try {
-      if (activeTab === 'MANUFACTURING') {
-        const res = await approvalsService.approveManufacturingBatch(selectedIds, 'Approved batch runs');
-        setActionSuccess(`Batch approved! ${res.count} production run(s) approved and inventory updated.`);
-      } else {
         let successCount = 0;
         const failures: string[] = [];
         for (const id of selectedIds) {
@@ -302,7 +296,6 @@ export function ApprovalsQueue() {
         } else {
           setActionSuccess(`Successfully approved and posted all ${successCount} transactions.`);
         }
-      }
       setSelectedIds([]);
       invalidation.afterInventoryApproval(queryClient);
       setTimeout(() => setActionSuccess(null), 5000);
@@ -680,32 +673,7 @@ export function ApprovalsQueue() {
         </div>
       </div>
 
-      {/* Day-End Manufacturing Batch Approval Banner */}
-      {activeTab === 'MANUFACTURING' && currentTabItems.length > 0 && (
-        <div className="p-3.5 bg-gradient-to-r from-blue-50 via-indigo-50 to-slate-50 border border-blue-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-sm">
-                🏭 Continuous Production Day-End Batch ({currentTabItems.length} runs pending)
-              </span>
-              <Badge variant="warning">Day-End Queue</Badge>
-            </div>
-            <p className="text-slate-600 mt-0.5">
-              Continuous diagnostic production cycles submitted today. Approve individual runs below, or execute a single consolidated approval for all {currentTabItems.length} runs.
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            isLoading={batchApproveMutation.isPending}
-            onClick={() => {
-              batchApproveMutation.mutate(currentTabItems.map((item) => item.id));
-            }}
-          >
-            ✓ Approve All ({currentTabItems.length}) Runs
-          </Button>
-        </div>
-      )}
+      
 
       {/* Floating Multi-Row Batch Action Bar */}
       {selectedIds.length > 0 && (

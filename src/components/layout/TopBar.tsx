@@ -245,12 +245,9 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
                       targetLink = {
                         href:
                           role === 'SUPER_ADMIN'
-                            ? `/approvals?tab=MANUFACTURING${n.entityId ? `&id=${encodeURIComponent(n.entityId)}` : ''}`
+                            ? `/admin/projects`
                             : `/manufacturing?tab=RUNS${n.entityId ? `&runId=${encodeURIComponent(n.entityId)}` : ''}`,
-                        label:
-                          role === 'SUPER_ADMIN'
-                            ? 'Review Production Run'
-                            : 'View Production Run',
+                        label: 'View Production Run',
                       };
                     } else if (
                       n.entityType === 'DEPARTMENT_ISSUE_BATCH' ||
