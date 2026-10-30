@@ -118,7 +118,7 @@ export function DateQuickFilterBar({
     <div className={`space-y-2 ${className}`}>
       <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 text-xs">
         <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 sm:pb-0 sm:flex-wrap flex-1 min-w-0">
-          <span className="text-slate-500 font-medium mr-1 text-[11px] uppercase tracking-wider shrink-0">
+          <span className="text-slate-500 font-medium mr-1.5 text-xs shrink-0">
             Date:
           </span>
           {options.map((opt) => {
@@ -135,10 +135,10 @@ export function DateQuickFilterBar({
                     setShowCustomInputs(false);
                   }
                 }}
-                className={`px-3 py-1.5 sm:py-1 rounded-lg text-xs font-medium shrink-0 transition-all min-h-[32px] sm:min-h-0 flex items-center cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-xs font-medium shrink-0 transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-blue-600 text-white shadow-xs font-semibold'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 hover:text-slate-900'
+                    ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                 }`}
               >
                 {opt.label}

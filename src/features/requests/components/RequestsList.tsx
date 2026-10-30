@@ -591,12 +591,17 @@ export function RequestsList() {
         </div>
       </div>
 
-      {/* Primary Status Navigation Tabs */}
-      <Card>
-        <CardContent className="p-3.5 space-y-3">
-          {/* Top Status Tabs */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 w-full sm:w-auto" role="tablist" aria-label="Filter requests by status">
+      {/* Primary Status & Filter Controls */}
+      <Card className="border border-slate-200/80 shadow-xs">
+        <CardContent className="p-4 space-y-3.5">
+          {/* Row 1: Status Tabs + Search Input + Reset Button */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            {/* Status Tabs */}
+            <div
+              className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-none pb-1 md:pb-0"
+              role="tablist"
+              aria-label="Filter requests by status"
+            >
               {(
                 [
                   ['ALL', 'All Requests', counts.all],
@@ -614,7 +619,7 @@ export function RequestsList() {
                     role="tab"
                     aria-selected={isSelected}
                     onClick={() => setStatusFilter(value)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg shrink-0 whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg shrink-0 whitespace-nowrap transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer ${
                       isSelected
                         ? 'bg-blue-50 text-blue-700 font-semibold shadow-2xs border border-blue-200/90'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -622,7 +627,7 @@ export function RequestsList() {
                   >
                     <span>{label}</span>
                     <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-medium ${
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-medium ${
                         isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200/80 text-slate-700'
                       }`}
                     >
@@ -633,22 +638,54 @@ export function RequestsList() {
               })}
             </div>
 
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1 shrink-0 self-end sm:self-center"
-              >
-                <span>Reset Filters</span>
-                <span>✕</span>
-              </button>
-            )}
+            {/* Universal Search Bar & Reset Filter */}
+            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+              <div className="relative w-full md:w-64 lg:w-72">
+                <input
+                  type="text"
+                  placeholder="Search ref, item, project..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15 transition-all"
+                />
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors shrink-0 font-medium cursor-pointer"
+                  title="Reset all active filters"
+                >
+                  <span>Reset</span>
+                  <span className="text-[10px]">✕</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Granular Filters: Request Type, Project, Warehouse, and Search */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-1">
-            {/* Request Type Pills */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs overflow-x-auto whitespace-nowrap scrollbar-none max-w-full">
+          {/* Row 2: Type Filter Pills & Location Scope Dropdowns */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Request Type Segmented Pills */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-xs shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
               {(
                 [
                   ['ALL', 'All Types'],
@@ -664,7 +701,7 @@ export function RequestsList() {
                     key={value}
                     type="button"
                     onClick={() => setTypeFilter(value)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 whitespace-nowrap transition-colors ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium shrink-0 whitespace-nowrap transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-white text-blue-700 shadow-2xs font-semibold'
                         : 'text-slate-600 hover:text-slate-900'
@@ -676,78 +713,56 @@ export function RequestsList() {
               })}
             </div>
 
-            {/* Dropdown Filters and Search Bar */}
-            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5">
-              {/* Project Filter (for Super Admin & Store Admin) */}
+            {/* Scope Dropdowns (Project & Warehouse) */}
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              {/* Project Filter */}
               {(isSuperAdmin || isStoreAdmin) && projects.length > 0 && (
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Project:</span>
+                <div className="relative flex-1 sm:flex-initial">
                   <select
                     value={selectedProjectId}
                     onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                    aria-label="Filter by project"
+                    className="w-full sm:w-48 appearance-none pl-3 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs cursor-pointer hover:border-slate-300 transition-colors"
                   >
-                    <option value="">All Projects</option>
+                    <option value="">🏢 All Projects</option>
                     {projects.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                  <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               )}
 
               {/* Warehouse Filter */}
               {warehouses.length > 0 && (
-                <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                  <span className="text-[11px] font-medium text-slate-500 shrink-0">Warehouse:</span>
+                <div className="relative flex-1 sm:flex-initial">
                   <select
                     value={selectedWarehouseId}
                     onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                    className="w-full sm:w-auto px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                    aria-label="Filter by warehouse"
+                    className="w-full sm:w-48 appearance-none pl-3 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs cursor-pointer hover:border-slate-300 transition-colors"
                   >
-                    <option value="">All Warehouses</option>
+                    <option value="">🏬 All Warehouses</option>
                     {warehouses.map((w) => (
                       <option key={w.id} value={w.id}>
                         {w.name}
                       </option>
                     ))}
                   </select>
+                  <svg className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               )}
-
-              {/* Text Search */}
-              <div className="w-full sm:w-60 relative">
-                <input
-                  type="text"
-                  placeholder="Search ref, item, project..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-                />
-                <svg
-                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
             </div>
           </div>
 
-          {/* Date Quick Filter Bar (Defaults to Today) */}
-          <div className="border-t border-slate-100 pt-2.5">
+          {/* Row 3: Date Quick Filter Bar */}
+          <div className="border-t border-slate-100 pt-3">
             <DateQuickFilterBar
               activeFilter={dateFilter}
               onFilterChange={setDateFilter}
