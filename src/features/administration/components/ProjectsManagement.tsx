@@ -147,24 +147,7 @@ export function ProjectsManagement() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Supply Network
-              </span>
-              <div className="text-xl font-bold font-mono text-emerald-600">
-                Universal
-              </div>
-              <p className="text-[11px] text-slate-500">Direct fulfillment from any depot</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </CardContent>
-        </Card>
+
 
         <Card>
           <CardContent className="p-4 flex items-center justify-between">
@@ -315,13 +298,7 @@ export function ProjectsManagement() {
                     </div>
 
                     {/* Fulfillment Eligibility Tag */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-medium text-xs border border-blue-200/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        Universal Fulfillment Eligible · Direct supply transfers authorized from any warehouse
-                      </span>
-                      
-                    </div>
+
                   </div>
                 );
               })}
