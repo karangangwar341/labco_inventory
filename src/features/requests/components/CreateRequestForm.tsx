@@ -506,7 +506,7 @@ export function CreateRequestForm() {
           {savedDraftId && (
             <div className="pl-6 pt-1">
               <Link href={`/requests/${savedDraftId}`} className="font-semibold underline text-rose-700">
-                Open Saved Draft #{savedDraftId.slice(0, 8).toUpperCase()} →
+                Open Saved Draft →
               </Link>
             </div>
           )}

@@ -333,7 +333,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
     onSuccess: async (newRun) => {
       setReRunModalCycle(null);
       setActionSuccess(
-        `New production run created for cycle: RUN-${newRun.id.substring(0, 8).toUpperCase()}. Formula recipe intact.`,
+        `New production run created for cycle: ${newRun.productionReference || "Cycle"}. Formula recipe intact.`,
       );
       await invalidateAll();
       setSelectedRun(newRun);
@@ -1074,7 +1074,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
                     <div className="border-b border-slate-200 pb-3 flex items-start justify-between gap-2">
                       <div>
                         <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
-                          Run Details ({selectedRun.id.substring(0, 8).toUpperCase()})
+                          Run Details
                         </span>
                         <h3 className="text-sm font-bold text-slate-900 mt-0.5">
                           {selectedRun.yieldProductName || "Production run"}

@@ -222,7 +222,6 @@ export class ReportsService {
           : b.location.project?.name ?? 'Project';
 
       return {
-        productId: b.product.id,
         productName: b.product.name,
         baseUnit,
         locationName,
@@ -308,7 +307,6 @@ export class ReportsService {
         timestamp: e.transaction.postedAt.toISOString(),
         transactionType: e.transaction.transactionType,
         sourceRefType: e.transaction.sourceRefType || 'DIRECT',
-        sourceRefId: e.transaction.sourceRefId || null,
         productName: e.product.name,
         condition: e.condition,
         reason: e.transaction.reason,
@@ -465,7 +463,6 @@ export class ReportsService {
 
     return runs.map((r) => {
       return {
-        runId: r.id,
         productionReference: r.productionReference || 'N/A',
         projectName: r.project.name,
         mode: r.mode,
@@ -569,7 +566,6 @@ export class ReportsService {
       const totalQty = s.lines.reduce((sum, l) => sum + l.dispatchedQty.toNumber(), 0);
 
       return {
-        shipmentId: s.id,
         shipmentType: s.shipmentType,
         status: s.status,
         sourceLocation: sourceName,
@@ -639,7 +635,6 @@ export class ReportsService {
     return [...totals.entries()]
       .sort((a, b) => a[1].productName.localeCompare(b[1].productName))
       .map(([productId, value]) => ({
-        productId,
         productName: value.productName,
         missingQuantity: value.quantity.toNumber(),
         unit: value.unit,

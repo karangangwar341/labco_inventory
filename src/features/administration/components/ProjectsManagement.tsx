@@ -320,7 +320,7 @@ export function ProjectsManagement() {
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                         Universal Fulfillment Eligible · Direct supply transfers authorized from any warehouse
                       </span>
-                      <span className="text-[11px] text-slate-400">ID: {project.id.slice(0, 8)}</span>
+                      
                     </div>
                   </div>
                 );

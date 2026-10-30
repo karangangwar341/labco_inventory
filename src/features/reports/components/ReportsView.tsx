@@ -34,10 +34,10 @@ const LABELS: Record<string, string> = {
   lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source', indentNumber: 'Indent slip #',
   condition: 'Condition', originalQuantity: 'Quantity', unitName: 'Unit', baseDelta: 'Stock delta',
   direction: 'Direction', postedBy: 'Recorded by', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
-  baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', runId: 'Run ID', productionReference: 'Reference',
+  baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', productionReference: 'Reference',
   projectName: 'Project', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
-  shipmentId: 'Shipment ID', shipmentType: 'Shipment type', sourceLocation: 'Source location',
+  shipmentType: 'Shipment type', sourceLocation: 'Source location',
   destinationLocation: 'Destination location', dispatchedQuantity: 'Dispatched qty',
   dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at',
   missingQuantity: 'Missing quantity', shipmentCount: 'Shipments',
@@ -52,7 +52,7 @@ const NUMERIC_COLUMNS = new Set([
 ]);
 
 const MONO_COLUMNS = new Set([
-  'runId', 'productionReference', 'shipmentId', 'timestamp', 'date', 'createdAt',
+  'productionReference', 'timestamp', 'date', 'createdAt',
 ]);
 
 function formatCellValue(column: string, value: unknown): React.ReactNode {
@@ -74,8 +74,8 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
     return dir === 'IN' || dir === 'STOCK_IN'
       ? <Badge variant="success" size="sm">IN</Badge>
       : dir === 'OUT' || dir === 'STOCK_OUT'
-      ? <Badge variant="primary" size="sm">OUT</Badge>
-      : <Badge variant="neutral" size="sm">{String(value)}</Badge>;
+        ? <Badge variant="primary" size="sm">OUT</Badge>
+        : <Badge variant="neutral" size="sm">{String(value)}</Badge>;
   }
 
   if (column === 'baseDelta') {
@@ -87,7 +87,7 @@ function formatCellValue(column: string, value: unknown): React.ReactNode {
     }
   }
 
-  
+
   if (column === 'indentNumber') {
     const val = String(value ?? '').trim();
     if (!val || val === 'N/A' || val === 'null' || val === 'undefined') {
@@ -239,7 +239,30 @@ export function ReportsView() {
     onError: (error) => setExportError(error instanceof Error ? error.message : 'Could not export Excel spreadsheet.'),
   });
 
-  const rows = reportQuery.data?.data ?? [];
+  const rawRows = reportQuery.data?.data ?? [];
+  const isIdField = (key: string) => {
+    const k = key.toLowerCase();
+    return (
+      k === 'id' ||
+      k.endsWith('id') ||
+      k.endsWith('_id') ||
+      k.includes('uuid') ||
+      k === 'sourcerefid'
+    );
+  };
+
+  const rows = useMemo(() => {
+    return rawRows.map((row) => {
+      const cleaned: Record<string, any> = {};
+      for (const [key, val] of Object.entries(row)) {
+        if (!isIdField(key)) {
+          cleaned[key] = val;
+        }
+      }
+      return cleaned;
+    });
+  }, [rawRows]);
+
   const columns = rows.length ? Object.keys(rows[0]) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
@@ -350,11 +373,10 @@ export function ReportsView() {
                     role="tab"
                     aria-selected={isSelected}
                     onClick={() => setReportType(option.type)}
-                    className={`px-3.5 py-2 text-xs font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                      isSelected
+                    className={`px-3.5 py-2 text-xs font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isSelected
                         ? 'bg-white text-blue-700 shadow-2xs font-semibold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                    }`}
+                      }`}
                   >
                     {option.label}
                   </button>
