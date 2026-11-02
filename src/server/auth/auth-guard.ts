@@ -52,9 +52,7 @@ export async function authenticateUser(req: Request): Promise<AuthenticatedUser>
   }
   let payload: any;
   try {
-    payload = container.jwtService.verify(token, {
-      secret: process.env.JWT_SECRET || 'super_secret_jwt_signing_key_change_in_production',
-    });
+    payload = container.jwtService.verify(token);
   } catch {
     throw new UnauthorizedException('Invalid or expired token');
   }
@@ -128,7 +126,7 @@ export function handleApiError(error: any) {
   return NextResponse.json(
     {
       statusCode: 500,
-      message: error?.message || 'Internal server error',
+      message: process.env.NODE_ENV === 'production' ? 'Internal server error' : (error?.message || 'Internal server error'),
       error: 'Internal Server Error',
     },
     { status: 500 },
