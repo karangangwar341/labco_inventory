@@ -21,6 +21,7 @@ import { ReceiveShipmentDto } from './dto/receive-shipment.dto';
 import { ApproveReceiptDto } from './dto/approve-receipt.dto';
 import { ResolveDiscrepancyDto, DiscrepancyResolution } from './dto/resolve-discrepancy.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { buildDateFilter } from '../common/date-filter.util';
 
 @Injectable()
 export class ShipmentsService {
@@ -578,9 +579,16 @@ export class ShipmentsService {
   async getShipments(
     user: AuthenticatedUser,
     status?: ShipmentStatus,
-    pagination?: { limit?: number; page?: number },
+    pagination?: { limit?: number; page?: number; startDate?: string; endDate?: string },
+    dateRange?: { startDate?: string; endDate?: string },
   ) {
     const where: Prisma.ShipmentWhereInput = {};
+    const startDate = dateRange?.startDate || pagination?.startDate;
+    const endDate = dateRange?.endDate || pagination?.endDate;
+    const dateFilter = buildDateFilter(startDate, endDate);
+    if (dateFilter) {
+      where.createdAt = dateFilter;
+    }
     if (status) {
       if ((status as string) === 'ACTIVE') {
         where.status = { in: [ShipmentStatus.IN_TRANSIT, ShipmentStatus.AWAITING_RECEIPT_APPROVAL] };

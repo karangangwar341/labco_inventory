@@ -11,6 +11,7 @@ import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { EmptyState } from '../../../components/feedback/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../components/ui/Table';
+import { Modal } from '../../../components/ui/Modal';
 import { useAuth } from '../../auth/auth.store';
 import { catalogService } from '../../catalog/catalog.service';
 import { administrationService } from '../../administration/administration.service';
@@ -38,7 +39,7 @@ const LABELS: Record<string, string> = {
   projectName: 'Project', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
   shipmentType: 'Shipment type', sourceLocation: 'Source location',
-  destinationLocation: 'Destination location', dispatchedQuantity: 'Dispatched qty',
+  destinationLocation: 'Destination location', trackingNumber: 'Tracking #', productsSummary: 'Included Products', issuedBy: 'Issued by', dispatchedQuantity: 'Dispatched qty',
   dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at',
   missingQuantity: 'Missing quantity', shipmentCount: 'Shipments',
 };
@@ -55,7 +56,47 @@ const MONO_COLUMNS = new Set([
   'productionReference', 'timestamp', 'date', 'createdAt',
 ]);
 
-function formatCellValue(column: string, value: unknown): React.ReactNode {
+function formatCellValue(
+  column: string,
+  value: unknown,
+  row?: Record<string, any>,
+  onViewShipment?: (shipment: any) => void
+): React.ReactNode {
+  if (column === 'trackingNumber') {
+    return (
+      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+        📦 {String(value)}
+      </span>
+    );
+  }
+
+  if (column === 'productsSummary') {
+    const summary = String(value);
+    const lineItems: any[] = row?._items || [];
+    return (
+      <div className="flex flex-col gap-1 max-w-xs md:max-w-sm py-1">
+        <span className="text-xs text-slate-800 font-medium truncate block" title={summary}>
+          {summary}
+        </span>
+        {lineItems.length > 0 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewShipment?.({ ...row, items: lineItems });
+            }}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline w-fit"
+          >
+            <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Click to view more ({lineItems.length} products)
+          </button>
+        )}
+      </div>
+    );
+  }
   if (value === null || value === undefined || value === '') {
     return <span className="text-slate-300 font-mono">—</span>;
   }
@@ -251,19 +292,24 @@ export function ReportsView() {
     );
   };
 
+  const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
+
   const rows = useMemo(() => {
     return rawRows.map((row) => {
       const cleaned: Record<string, any> = {};
       for (const [key, val] of Object.entries(row)) {
-        if (!isIdField(key)) {
+        if (!isIdField(key) && key !== 'items') {
           cleaned[key] = val;
         }
+      }
+      if (row.items) {
+        cleaned._items = row.items;
       }
       return cleaned;
     });
   }, [rawRows]);
 
-  const columns = rows.length ? Object.keys(rows[0]) : [];
+  const columns = rows.length ? Object.keys(rows[0]).filter((col) => !col.startsWith('_')) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
   const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId);
@@ -609,7 +655,7 @@ export function ReportsView() {
                           numeric={isNum}
                           className="whitespace-nowrap"
                         >
-                          {formatCellValue(column, row[column])}
+                          {formatCellValue(column, row[column], row, (shipment) => setSelectedShipment(shipment))}
                         </TableCell>
                       );
                     })}
@@ -668,6 +714,90 @@ export function ReportsView() {
           )}
         </CardContent>
       </Card>
+          {/* Shipment Items Modal */}
+      {selectedShipment && (
+        <Modal
+          isOpen={Boolean(selectedShipment)}
+          onClose={() => setSelectedShipment(null)}
+          title={`Shipment Details: ${selectedShipment.trackingNumber || 'Products Breakdown'}`}
+          description={`${selectedShipment.sourceLocation || 'Origin'} → ${selectedShipment.destinationLocation || 'Destination'} • Status: ${selectedShipment.status}`}
+          maxWidth="2xl"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+              <div>
+                <span className="text-slate-500">Tracking #: </span>
+                <span className="font-mono font-bold text-slate-800">{selectedShipment.trackingNumber}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Dispatched: </span>
+                <span className="font-mono text-slate-700">{selectedShipment.dispatchedAt || 'Pending'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Received: </span>
+                <span className="font-mono text-slate-700">{selectedShipment.receivedAt || 'Pending'}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">Status: </span>
+                <Badge variant={String(selectedShipment.status).includes('COMPLETED') ? 'success' : 'warning'} size="sm">
+                  {selectedShipment.status}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3">Product Name</th>
+                    <th className="py-2.5 px-3">Brand</th>
+                    <th className="py-2.5 px-3 text-right">Dispatched</th>
+                    <th className="py-2.5 px-3 text-right">Received</th>
+                    <th className="py-2.5 px-3 text-right">Discrepancy</th>
+                    <th className="py-2.5 px-3">Unit</th>
+                    <th className="py-2.5 px-3">Condition</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {(selectedShipment.items || []).map((item: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-slate-50/70">
+                      <td className="py-2 px-3 font-mono text-slate-400">{idx + 1}</td>
+                      <td className="py-2 px-3 font-medium text-slate-900">{item.productName}</td>
+                      <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{item.brand || '—'}</td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800">
+                        {item.dispatchedQuantity?.toLocaleString() ?? '—'}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
+                        {item.receivedQuantity !== null && item.receivedQuantity !== undefined
+                          ? item.receivedQuantity.toLocaleString()
+                          : <span className="text-slate-400 font-normal">Pending</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold">
+                        {item.discrepancyQuantity > 0 ? (
+                          <span className="text-rose-600 font-bold">-{item.discrepancyQuantity}</span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">0</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-slate-600">{item.unit}</td>
+                      <td className="py-2 px-3">
+                        <Badge variant="neutral" size="sm">{item.condition || 'USABLE'}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button variant="secondary" onClick={() => setSelectedShipment(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

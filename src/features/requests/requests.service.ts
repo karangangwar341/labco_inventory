@@ -14,6 +14,8 @@ export const requestsService = {
     requestType?: string;
     projectId?: string;
     warehouseId?: string;
+    startDate?: string;
+    endDate?: string;
     limit?: number;
     page?: number;
   }): Promise<StockRequest[]> => {

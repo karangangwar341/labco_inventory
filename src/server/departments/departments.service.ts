@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { buildDateFilter } from '../common/date-filter.util';
 import {
   UserRole,
   DepartmentStatus,
@@ -246,7 +247,7 @@ export class DepartmentsService {
     await this.notificationsService.notifyUser(
       dept.createdById,
       'Department approved',
-      `Your department “${finalName}” was approved.`,
+      `Your department â€œ${finalName}â€ was approved.`,
       'DEPARTMENT',
       dept.id,
     );
@@ -276,7 +277,7 @@ export class DepartmentsService {
       await this.notificationsService.notifyUser(
         dept.createdById,
         'Department rejected',
-        `Your department proposal “${dept.name}” was rejected. ${dto.reason || ''}`.trim(),
+        `Your department proposal â€œ${dept.name}â€ was rejected. ${dto.reason || ''}`.trim(),
         'DEPARTMENT',
         dept.id,
       );
@@ -681,6 +682,8 @@ export class DepartmentsService {
       projectId?: string;
       departmentId?: string;
       status?: DepartmentIssueStatus;
+      startDate?: string;
+      endDate?: string;
     },
     user: AuthenticatedUser,
   ) {
@@ -693,6 +696,8 @@ export class DepartmentsService {
       user.role === UserRole.PROJECT_ADMIN ? userProjectId : query.projectId;
 
     const where: Prisma.DepartmentIssueWhereInput = {};
+    const dateFilter = buildDateFilter(query.startDate, query.endDate);
+    if (dateFilter) where.createdAt = dateFilter;
     if (!query.status) where.status = { not: DepartmentIssueStatus.DRAFT };
     if (effectiveProjectId) where.projectId = effectiveProjectId;
     if (query.departmentId) where.departmentId = query.departmentId;
@@ -1011,6 +1016,8 @@ export class DepartmentsService {
       projectId?: string;
       departmentId?: string;
       status?: DepartmentReturnStatus;
+      startDate?: string;
+      endDate?: string;
     },
     user: AuthenticatedUser,
   ) {
@@ -1023,6 +1030,8 @@ export class DepartmentsService {
       user.role === UserRole.PROJECT_ADMIN ? userProjectId : query.projectId;
 
     const where: Prisma.DepartmentReturnWhereInput = {};
+    const dateFilter = buildDateFilter(query.startDate, query.endDate);
+    if (dateFilter) where.createdAt = dateFilter;
     if (effectiveProjectId) where.projectId = effectiveProjectId;
     if (query.departmentId) where.departmentId = query.departmentId;
     if (query.status) where.status = query.status;

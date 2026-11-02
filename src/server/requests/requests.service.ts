@@ -11,6 +11,7 @@ import { LedgerService } from '../inventory/ledger.service';
 import { ReservationsService } from './reservations.service';
 import { ShipmentsService } from '../shipments/shipments.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { buildDateFilter } from '../common/date-filter.util';
 import {
   UserRole,
   RequestStatus,
@@ -977,14 +978,18 @@ export class RequestsService {
           requestType?: RequestType;
           projectId?: string;
           warehouseId?: string;
+          startDate?: string;
+          endDate?: string;
         },
-    pagination?: { limit?: number; page?: number },
+    pagination?: { limit?: number; page?: number; startDate?: string; endDate?: string },
   ) {
     const where: Prisma.StockRequestWhereInput = {};
     let status: RequestStatus | undefined;
     let requestType: RequestType | undefined;
     let filterProjectId: string | undefined;
     let filterWarehouseId: string | undefined;
+    let startDate: string | undefined = pagination?.startDate;
+    let endDate: string | undefined = pagination?.endDate;
 
     if (typeof statusOrFilters === 'string') {
       status = statusOrFilters;
@@ -993,6 +998,13 @@ export class RequestsService {
       requestType = statusOrFilters.requestType;
       filterProjectId = statusOrFilters.projectId;
       filterWarehouseId = statusOrFilters.warehouseId;
+      if (statusOrFilters.startDate) startDate = statusOrFilters.startDate;
+      if (statusOrFilters.endDate) endDate = statusOrFilters.endDate;
+    }
+
+    const dateFilter = buildDateFilter(startDate, endDate);
+    if (dateFilter) {
+      where.createdAt = dateFilter;
     }
 
     if (status) {

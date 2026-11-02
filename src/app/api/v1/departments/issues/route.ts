@@ -12,8 +12,13 @@ export async function GET(req: Request) {
     const projectId = searchParams.get('projectId') || undefined;
     const departmentId = searchParams.get('departmentId') || undefined;
     const status = (searchParams.get('status') as DepartmentIssueStatus) || undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
-    const data = await container.departmentsService.getIssues({ projectId, departmentId, status }, user);
+    const data = await container.departmentsService.getIssues(
+      { projectId, departmentId, status, startDate, endDate },
+      user,
+    );
     return NextResponse.json(data);
   } catch (error) {
     return handleApiError(error);

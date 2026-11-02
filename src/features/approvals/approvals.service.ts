@@ -24,7 +24,7 @@ function locationName(location: any): string | undefined {
 }
 
 export const approvalsService = {
-  getQueue: async (): Promise<Record<ApprovalTab, QueueItem[]>> => {
+  getQueue: async (params?: { startDate?: string; endDate?: string }): Promise<Record<ApprovalTab, QueueItem[]>> => {
     const queue: Record<ApprovalTab, QueueItem[]> = {
       REQUESTS: [],
       SHIPMENTS: [],
@@ -37,13 +37,13 @@ export const approvalsService = {
       const [requestsRes, shipmentsRes, departmentIssuesRes, departmentBatchesRes] =
         await Promise.all([
           apiClient
-            .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL' }))
+            .get<any[]>(endpoints.stockRequests.list({ status: 'PENDING_APPROVAL', startDate: params?.startDate, endDate: params?.endDate }))
             .catch(() => []),
           apiClient
-            .get<any[]>(endpoints.shipments.list({ status: 'AWAITING_RECEIPT_APPROVAL' }))
+            .get<any[]>(endpoints.shipments.list({ status: 'AWAITING_RECEIPT_APPROVAL', startDate: params?.startDate, endDate: params?.endDate }))
             .catch(() => []),
           apiClient
-            .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL' }))
+            .get<any[]>(endpoints.departments.issues({ status: 'PENDING_APPROVAL', startDate: params?.startDate, endDate: params?.endDate }))
             .catch(() => []),
           apiClient
             .get<any[]>(endpoints.departments.issueBatches({ status: 'PENDING_APPROVAL' }))

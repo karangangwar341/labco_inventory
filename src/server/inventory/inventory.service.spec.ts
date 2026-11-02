@@ -464,4 +464,21 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
       );
     });
   });
+  describe('Inventory Transactions Date Filtering (backend-level)', () => {
+    it('applies postedAt filter to where clause when startDate and endDate are provided', async () => {
+      mockPrisma.ledgerTransaction.findMany.mockResolvedValue([]);
+
+      const superAdminUser = { id: 'sa-1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE', sessionId: 'sess-sa' } as any;
+      await inventoryService.getTransactions(superAdminUser, 50, {
+        startDate: '2026-10-01',
+        endDate: '2026-10-31',
+      });
+
+      expect(mockPrisma.ledgerTransaction.findMany).toHaveBeenCalled();
+      const callArgs = mockPrisma.ledgerTransaction.findMany.mock.calls[0][0];
+      expect(callArgs.where.postedAt).toBeDefined();
+      expect(callArgs.where.postedAt.gte).toEqual(new Date('2026-10-01T00:00:00.000Z'));
+      expect(callArgs.where.postedAt.lte).toEqual(new Date('2026-10-31T23:59:59.999Z'));
+    });
+  });
 });

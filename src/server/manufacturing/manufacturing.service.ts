@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../inventory/ledger.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { buildDateFilter } from '../common/date-filter.util';
 import {
   UserRole,
   ProductionStatus,
@@ -919,8 +920,13 @@ export class ManufacturingService {
     user: AuthenticatedUser,
     status?: ProductionStatus,
     projectId?: string,
+    dateRange?: { startDate?: string; endDate?: string },
   ) {
     const where: Prisma.ProductionRunWhereInput = {};
+    const dateFilter = buildDateFilter(dateRange?.startDate, dateRange?.endDate);
+    if (dateFilter) {
+      where.createdAt = dateFilter;
+    }
     if (status) {
       where.status = status;
     }
@@ -1036,8 +1042,12 @@ export class ManufacturingService {
    * Get distinct production cycles with finished product stock levels,
    * replenishment alert status, and formula readiness.
    */
-  async getProductionCycles(user: AuthenticatedUser) {
-    let projectId: string | undefined;
+  async getProductionCycles(
+    user: AuthenticatedUser,
+    projectIdParam?: string,
+    dateRange?: { startDate?: string; endDate?: string },
+  ) {
+    let projectId: string | undefined = projectIdParam;
 
     if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
@@ -1052,6 +1062,10 @@ export class ManufacturingService {
     const where: Prisma.ProductionRunWhereInput = {};
     if (projectId) {
       where.projectId = projectId;
+    }
+    const dateFilter = buildDateFilter(dateRange?.startDate, dateRange?.endDate);
+    if (dateFilter) {
+      where.createdAt = dateFilter;
     }
 
     const runs = await this.prisma.productionRun.findMany({

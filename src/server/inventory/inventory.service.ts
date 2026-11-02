@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UserRole, LocationType, ProductKind, Prisma, OrganizationStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { calculateProjectedQuantities, CalculatedBalanceView } from './inventory.types';
+import { buildDateFilter } from '../common/date-filter.util';
 
 @Injectable()
 export class InventoryService {
@@ -291,9 +292,12 @@ export class InventoryService {
     });
   }
 
-  async getTransactions(user: AuthenticatedUser, limit = 50) {
+  async getTransactions(user: AuthenticatedUser, limit = 50, dateRange?: { startDate?: string; endDate?: string }) {
+    const dateFilter = buildDateFilter(dateRange?.startDate, dateRange?.endDate);
+    const dateWhere = dateFilter ? { postedAt: dateFilter } : {};
     if (user.role === UserRole.SUPER_ADMIN) {
       return this.prisma.ledgerTransaction.findMany({
+        where: dateWhere,
         take: limit,
         orderBy: { postedAt: 'desc' },
         include: {
@@ -315,6 +319,7 @@ export class InventoryService {
 
       return this.prisma.ledgerTransaction.findMany({
         where: {
+          ...dateWhere,
           entries: {
             some: { locationId: loc.id, product: { kind: ProductKind.RAW_MATERIAL } },
           },
@@ -337,6 +342,7 @@ export class InventoryService {
 
       return this.prisma.ledgerTransaction.findMany({
         where: {
+          ...dateWhere,
           entries: {
             some: { locationId: loc.id },
           },

@@ -30,6 +30,7 @@ import {
   DateQuickFilterBar,
   DateQuickFilter,
   isDateInRange,
+  getDateRangeFromFilter,
 } from "../../../components/data-display/DateQuickFilterBar";
 
 export interface ManufacturingViewProps {
@@ -77,6 +78,11 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
   const [dateFilter, setDateFilter] = useState<DateQuickFilter>('TODAY');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  const { startDate, endDate } = useMemo(
+    () => getDateRangeFromFilter(dateFilter, customStart, customEnd),
+    [dateFilter, customStart, customEnd],
+  );
 
   // Synchronize when propProjectId changes
   useEffect(() => {
@@ -131,10 +137,16 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
     error: runsError,
     refetch: fetchRuns,
   } = useQuery({
-    queryKey: queryKeys.manufacturing.list(runsProjectId || 'all', { projectId: runsProjectId || undefined }),
+    queryKey: queryKeys.manufacturing.list(runsProjectId || 'all', {
+      projectId: runsProjectId || undefined,
+      startDate,
+      endDate,
+    }),
     queryFn: async () => {
       const data = await manufacturingService.getProductionRuns({
         projectId: runsProjectId || undefined,
+        startDate,
+        endDate,
       });
       return Array.isArray(data) ? data : [];
     },

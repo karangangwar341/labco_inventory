@@ -62,6 +62,8 @@ export const departmentsService = {
     projectId?: string;
     departmentId?: string;
     status?: DepartmentIssueStatus;
+    startDate?: string;
+    endDate?: string;
   }): Promise<DepartmentIssue[]> => {
     return apiClient.get<DepartmentIssue[]>(
       endpoints.departments.issues(params),
@@ -97,7 +99,7 @@ export const departmentsService = {
     return apiClient.post(endpoints.departments.rejectIssue(id), { reason });
   },
 
-  getReturns: async (params?: { projectId?: string; departmentId?: string; condition?: string; status?: string }): Promise<DepartmentReturn[]> =>
+  getReturns: async (params?: { projectId?: string; departmentId?: string; condition?: string; status?: string; startDate?: string; endDate?: string }): Promise<DepartmentReturn[]> =>
     apiClient.get<DepartmentReturn[]>(endpoints.departments.returns(params)),
 
   createReturn: async (payload: CreateDepartmentReturnPayload): Promise<DepartmentReturn> =>

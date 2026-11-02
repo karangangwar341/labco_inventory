@@ -338,5 +338,36 @@ describe('Shipments Service (T-009: Dispatch, Transfers, Receipts & Discrepancie
         shipmentsService.createShipmentForApprovedDispatch(mockPrisma, transferRequest, superAdminUser.id),
       ).rejects.toThrow('Transfers are strictly inter-warehouse');
     });
+  describe('6. Shipment Time Filtering (backend-level date range)', () => {
+    it('applies date filter to where clause when startDate and endDate are provided', async () => {
+      mockPrisma.shipment.findMany.mockResolvedValue([]);
+
+      await shipmentsService.getShipments(superAdminUser, undefined, {
+        limit: 100,
+        page: 1,
+        startDate: '2026-10-01',
+        endDate: '2026-10-31',
+      });
+
+      expect(mockPrisma.shipment.findMany).toHaveBeenCalled();
+      const callArgs = mockPrisma.shipment.findMany.mock.calls[0][0];
+      expect(callArgs.where.createdAt).toBeDefined();
+      expect(callArgs.where.createdAt.gte).toEqual(new Date('2026-10-01T00:00:00.000Z'));
+      expect(callArgs.where.createdAt.lte).toEqual(new Date('2026-10-31T23:59:59.999Z'));
+    });
+
+    it('does not apply createdAt filter when no date parameters are given', async () => {
+      mockPrisma.shipment.findMany.mockResolvedValue([]);
+
+      await shipmentsService.getShipments(superAdminUser, undefined, {
+        limit: 100,
+      });
+
+      expect(mockPrisma.shipment.findMany).toHaveBeenCalled();
+      const callArgs = mockPrisma.shipment.findMany.mock.calls[0][0];
+      expect(callArgs.where.createdAt).toBeUndefined();
+    });
   });
+});
+
 });

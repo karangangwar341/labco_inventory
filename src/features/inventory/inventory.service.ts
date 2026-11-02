@@ -16,7 +16,7 @@ export const inventoryService = {
     return apiClient.get<StockBalance[]>(endpoints.inventory.balances(params));
   },
 
-  getTransactions: async (): Promise<StockTransaction[]> => {
-    return apiClient.get<StockTransaction[]>(endpoints.inventory.transactions());
+  getTransactions: async (params?: { limit?: number; startDate?: string; endDate?: string }): Promise<StockTransaction[]> => {
+    return apiClient.get<StockTransaction[]>(endpoints.inventory.transactions(params));
   },
 };

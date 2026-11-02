@@ -14,11 +14,13 @@ export async function GET(req: Request) {
     const warehouseId = searchParams.get('warehouseId') || undefined;
     const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined;
     const page = searchParams.get('page') ? Number(searchParams.get('page')) : undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
     const data = await container.requestsService.getRequests(
       user,
-      { status, requestType, projectId, warehouseId },
-      { limit, page },
+      { status, requestType, projectId, warehouseId, startDate, endDate },
+      { limit, page, startDate, endDate },
     );
     return NextResponse.json(data);
   } catch (error) {

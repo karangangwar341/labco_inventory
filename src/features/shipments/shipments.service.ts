@@ -14,6 +14,8 @@ export const shipmentsService = {
     status?: ShipmentStatus;
     limit?: number;
     page?: number;
+    startDate?: string;
+    endDate?: string;
   }): Promise<Shipment[]> => {
     return apiClient.get<Shipment[]>(endpoints.shipments.list(params));
   },
@@ -49,7 +51,10 @@ export const shipmentsService = {
     }
   },
 
-  resolveDiscrepancy: async (id: string, dto: ResolveDiscrepancyDto): Promise<Shipment> => {
+  resolveDiscrepancy: async (
+    id: string,
+    dto: ResolveDiscrepancyDto,
+  ): Promise<Shipment> => {
     return apiClient.post<Shipment>(endpoints.shipments.resolveDiscrepancy(id), dto);
   },
 };

@@ -17,6 +17,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { DataTable, ColumnDef } from '../../../components/ui/DataTable';
 import { StatusLabel } from '../../../components/data-display/StatusLabel';
+import { DateQuickFilterBar, DateQuickFilter, getDateRangeFromFilter } from '../../../components/data-display/DateQuickFilterBar';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 
 function formatQty(qty: unknown): number {
@@ -59,14 +60,38 @@ export function ShipmentsList() {
   const [selectedDestination, setSelectedDestination] = useState('ALL');
   const [pageSize, setPageSize] = useState(10);
 
+
+  // Time filter states (filters query from backend)
+  const [dateFilter, setDateFilter] = useState<DateQuickFilter>(() => {
+    const df = searchParams.get('dateRange') as DateQuickFilter;
+    return df && ['TODAY', 'YESTERDAY', 'LAST_WEEK', 'LAST_MONTH', 'CUSTOM', 'ALL'].includes(df) ? df : 'ALL';
+  });
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  const { startDate, endDate } = useMemo(
+    () => getDateRangeFromFilter(dateFilter, customStart, customEnd),
+    [dateFilter, customStart, customEnd],
+  );
+
   const {
     data: shipments = [],
     isLoading,
     error,
     refetch: refetchShipments,
   } = useQuery({
-    queryKey: queryKeys.shipments.list(),
-    queryFn: () => shipmentsService.getShipments({ limit: 500 }),
+    queryKey: queryKeys.shipments.list(user?.id, {
+      status: statusFilter === 'ALL' ? undefined : statusFilter,
+      startDate,
+      endDate,
+    }),
+    queryFn: () =>
+      shipmentsService.getShipments({
+        status: statusFilter === 'ALL' ? undefined : (statusFilter as any),
+        startDate,
+        endDate,
+        limit: 500,
+      }),
     staleTime: 2 * 60 * 1000,
   });
 
@@ -275,13 +300,16 @@ export function ShipmentsList() {
     statusFilter !== 'ALL' ||
     selectedOrigin !== 'ALL' ||
     selectedDestination !== 'ALL' ||
-    searchTerm.trim().length > 0;
+    searchTerm.trim().length > 0 || dateFilter !== 'ALL' || customStart !== '' || customEnd !== '';
 
   const clearFilters = () => {
     setStatusFilter('ALL');
     setSelectedOrigin('ALL');
     setSelectedDestination('ALL');
     setSearchTerm('');
+    setDateFilter('ALL');
+    setCustomStart('');
+    setCustomEnd('');
   };
 
   const columns = useMemo<ColumnDef<Shipment>[]>(() => [
@@ -615,6 +643,19 @@ export function ShipmentsList() {
                 ))}
               </Select>
             </div>
+          </div>
+
+          {/* Time Filter Bar (Applied from Backend Requests) */}
+          <div className="pt-2 border-t border-slate-100">
+            <DateQuickFilterBar
+              value={dateFilter}
+              onChange={setDateFilter}
+              customStart={customStart}
+              customEnd={customEnd}
+              onCustomStartChange={setCustomStart}
+              onCustomEndChange={setCustomEnd}
+              onViewAll={() => setDateFilter('ALL')}
+            />
           </div>
         </CardContent>
       </Card>

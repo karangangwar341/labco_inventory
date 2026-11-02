@@ -22,6 +22,7 @@ import {
   DateQuickFilterBar,
   DateQuickFilter,
   isDateInRange,
+  getDateRangeFromFilter,
 } from '../../../components/data-display/DateQuickFilterBar';
 
 const EMPTY_QUEUE: Record<ApprovalTab, QueueItem[]> = {
@@ -79,6 +80,11 @@ export function ApprovalsQueue() {
     if (dateParam && VALID_DATE_FILTERS.includes(dateParam)) return dateParam;
     return 'TODAY';
   });
+
+  const { startDate, endDate } = useMemo(
+    () => getDateRangeFromFilter(dateFilter),
+    [dateFilter],
+  );
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
@@ -109,8 +115,8 @@ export function ApprovalsQueue() {
     error,
     refetch: fetchQueue,
   } = useQuery({
-    queryKey: queryKeys.approvals.queue(),
-    queryFn: () => approvalsService.getQueue(),
+    queryKey: queryKeys.approvals.queue({ startDate, endDate }),
+    queryFn: () => approvalsService.getQueue({ startDate, endDate }),
     staleTime: 30 * 1000,
   });
 

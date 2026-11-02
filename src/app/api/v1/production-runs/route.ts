@@ -10,8 +10,15 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const status = (searchParams.get('status') as ProductionStatus) || undefined;
     const projectId = searchParams.get('projectId') || undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
-    const data = await container.manufacturingService.getProductionRuns(user, status, projectId);
+    const data = await container.manufacturingService.getProductionRuns(
+      user,
+      status,
+      projectId,
+      { startDate, endDate },
+    );
     return NextResponse.json(data);
   } catch (error) {
     return handleApiError(error);

@@ -27,6 +27,79 @@ export interface DateQuickFilterBarProps {
   compact?: boolean;
 }
 
+export function getDateRangeFromFilter(
+  filter: DateQuickFilter,
+  customStart?: string,
+  customEnd?: string,
+): { startDate?: string; endDate?: string } {
+  if (filter === 'ALL') {
+    return { startDate: undefined, endDate: undefined };
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  if (filter === 'TODAY') {
+    return {
+      startDate: todayStart.toISOString(),
+      endDate: todayEnd.toISOString(),
+    };
+  }
+
+  if (filter === 'YESTERDAY') {
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    const yesterdayEnd = new Date(todayEnd);
+    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+    return {
+      startDate: yesterdayStart.toISOString(),
+      endDate: yesterdayEnd.toISOString(),
+    };
+  }
+
+  if (filter === 'LAST_WEEK') {
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+    return {
+      startDate: weekStart.toISOString(),
+      endDate: todayEnd.toISOString(),
+    };
+  }
+
+  if (filter === 'LAST_MONTH') {
+    const monthStart = new Date(todayStart);
+    monthStart.setDate(monthStart.getDate() - 30);
+    return {
+      startDate: monthStart.toISOString(),
+      endDate: todayEnd.toISOString(),
+    };
+  }
+
+  if (filter === 'CUSTOM') {
+    let startIso: string | undefined;
+    let endIso: string | undefined;
+
+    if (customStart) {
+      const parts = customStart.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const d = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+        startIso = d.toISOString();
+      }
+    }
+    if (customEnd) {
+      const parts = customEnd.split('-').map(Number);
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const d = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999);
+        endIso = d.toISOString();
+      }
+    }
+    return { startDate: startIso, endDate: endIso };
+  }
+
+  return { startDate: undefined, endDate: undefined };
+}
+
 export function isDateInRange(
   dateValue: string | Date | null | undefined,
   filter: DateQuickFilter,
@@ -160,7 +233,7 @@ export function DateQuickFilterBar({
             className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-between sm:justify-start gap-1 px-2.5 py-1 sm:py-0.5 rounded-lg sm:rounded-full bg-amber-50 border border-amber-200/90 text-[11px] text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer mt-1 sm:mt-0"
             title="Older records exist in the database. Click to expand."
           >
-            <span>⚡ {effectiveOlderCount} older record(s)</span>
+            <span>âš¡ {effectiveOlderCount} older record(s)</span>
             <span className="underline font-semibold">View</span>
           </button>
         )}

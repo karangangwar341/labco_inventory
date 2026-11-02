@@ -32,7 +32,14 @@ export const endpoints = {
       const qs = q.toString();
       return qs ? `/inventory/balances?${qs}` : "/inventory/balances";
     },
-    transactions: () => "/inventory/transactions",
+    transactions: (params?: { limit?: number; startDate?: string; endDate?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.limit) q.set("limit", String(params.limit));
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
+      const qs = q.toString();
+      return qs ? `/inventory/transactions?${qs}` : "/inventory/transactions";
+    },
     reverseTransaction: (id: string) =>
       `/inventory/transactions/reversal/${id}`,
     correctTransaction: (id: string) => `/inventory/transactions/${id}/correct`,
@@ -44,6 +51,8 @@ export const endpoints = {
       requestType?: string;
       projectId?: string;
       warehouseId?: string;
+      startDate?: string;
+      endDate?: string;
       limit?: number;
       page?: number;
     }) => {
@@ -52,6 +61,8 @@ export const endpoints = {
       if (params?.requestType) q.set("requestType", params.requestType);
       if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.warehouseId) q.set("warehouseId", params.warehouseId);
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
       if (params?.limit) q.set("limit", String(params.limit));
       if (params?.page) q.set("page", String(params.page));
       const qs = q.toString();
@@ -67,11 +78,13 @@ export const endpoints = {
   },
 
   shipments: {
-    list: (params?: { status?: string; limit?: number; page?: number }) => {
+    list: (params?: { status?: string; limit?: number; page?: number; startDate?: string; endDate?: string }) => {
       const q = new URLSearchParams();
       if (params?.status) q.set("status", params.status);
       if (params?.limit) q.set("limit", String(params.limit));
       if (params?.page) q.set("page", String(params.page));
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
       const qs = q.toString();
       return qs ? `/shipments?${qs}` : "/shipments";
     },
@@ -95,14 +108,23 @@ export const endpoints = {
   },
 
   manufacturing: {
-    productionRuns: (params?: { status?: string; projectId?: string }) => {
+    productionRuns: (params?: { status?: string; projectId?: string; startDate?: string; endDate?: string }) => {
       const q = new URLSearchParams();
       if (params?.status) q.set("status", params.status);
       if (params?.projectId) q.set("projectId", params.projectId);
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
       const qs = q.toString();
       return qs ? `/production-runs?${qs}` : "/production-runs";
     },
-    cycles: () => "/production-runs/cycles",
+    cycles: (params?: { projectId?: string; startDate?: string; endDate?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.projectId) q.set("projectId", params.projectId);
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
+      const qs = q.toString();
+      return qs ? `/production-runs/cycles?${qs}` : "/production-runs/cycles";
+    },
     analytics: (params?: {
       projectId?: string;
       startDate?: string;
@@ -148,11 +170,15 @@ export const endpoints = {
       projectId?: string;
       departmentId?: string;
       status?: string;
+      startDate?: string;
+      endDate?: string;
     }) => {
       const q = new URLSearchParams();
       if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.departmentId) q.set("departmentId", params.departmentId);
       if (params?.status) q.set("status", params.status);
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
       const qs = q.toString();
       return qs ? `/departments/issues?${qs}` : "/departments/issues";
     },
@@ -171,11 +197,13 @@ export const endpoints = {
     createIssue: () => "/departments/issues",
     approveIssue: (id: string) => `/departments/issues/${id}/approve`,
     rejectIssue: (id: string) => `/departments/issues/${id}/reject`,
-    returns: (params?: { projectId?: string; departmentId?: string; status?: string }) => {
+    returns: (params?: { projectId?: string; departmentId?: string; status?: string; startDate?: string; endDate?: string }) => {
       const q = new URLSearchParams();
       if (params?.projectId) q.set("projectId", params.projectId);
       if (params?.departmentId) q.set("departmentId", params.departmentId);
       if (params?.status) q.set("status", params.status);
+      if (params?.startDate) q.set("startDate", params.startDate);
+      if (params?.endDate) q.set("endDate", params.endDate);
       const qs = q.toString();
       return qs ? `/departments/returns?${qs}` : "/departments/returns";
     },

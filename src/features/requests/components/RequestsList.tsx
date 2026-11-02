@@ -21,6 +21,7 @@ import {
   DateQuickFilterBar,
   DateQuickFilter,
   isDateInRange,
+  getDateRangeFromFilter,
 } from '../../../components/data-display/DateQuickFilterBar';
 
 type StatusFilter = 'ALL' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'DRAFT';
@@ -78,6 +79,11 @@ export function RequestsList() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
+  const { startDate, endDate } = useMemo(
+    () => getDateRangeFromFilter(dateFilter, customStart, customEnd),
+    [dateFilter, customStart, customEnd],
+  );
+
   // Query: Projects for dropdown filter
   const { data: projects = [] } = useQuery({
     queryKey: ['administration', 'projects'],
@@ -105,6 +111,8 @@ export function RequestsList() {
       warehouseId: selectedWarehouseId || undefined,
       requestType: typeFilter === 'ALL' ? undefined : typeFilter,
       status: statusFilter === 'ALL' ? undefined : statusFilter,
+      startDate,
+      endDate,
     }),
     queryFn: () =>
       requestsService.getRequests({
@@ -112,6 +120,8 @@ export function RequestsList() {
         warehouseId: selectedWarehouseId || undefined,
         requestType: typeFilter === 'ALL' ? undefined : typeFilter,
         status: statusFilter === 'ALL' ? undefined : (statusFilter as any),
+        startDate,
+        endDate,
       }),
     staleTime: 2 * 60 * 1000,
   });

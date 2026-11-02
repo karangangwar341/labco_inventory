@@ -458,4 +458,235 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(row.dispatchedQuantity).toBe(50);
     });
   });
+  describe('10. Project Consumption & Department Issues by Project Admin', () => {
+    it('includes department issues done by Project Admins across APPROVED, POSTED, and PENDING_APPROVAL', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-1' });
+      mockPrisma.departmentIssue.findMany.mockResolvedValue([
+        {
+          id: 'di-1',
+          indentNumber: 'IND-901',
+          quantity: new Prisma.Decimal(25),
+          requestedQuantity: new Prisma.Decimal(25),
+          baseQuantity: new Prisma.Decimal(25),
+          unitNameSnapshot: 'BOX',
+          status: 'POSTED',
+          notes: 'Emergency pathology supply',
+          issuedAt: new Date('2026-11-01'),
+          createdAt: new Date('2026-11-01'),
+          department: { name: 'Pathology Lab' },
+          product: { name: 'Reagent Set A' },
+          issuedBy: { username: 'projectadmin' },
+        },
+        {
+          id: 'di-2',
+          indentNumber: 'IND-902',
+          quantity: new Prisma.Decimal(10),
+          requestedQuantity: new Prisma.Decimal(10),
+          baseQuantity: new Prisma.Decimal(10),
+          unitNameSnapshot: 'PACK',
+          status: 'PENDING_APPROVAL',
+          notes: 'Routine refill',
+          issuedAt: null,
+          createdAt: new Date('2026-11-02'),
+          department: { name: 'Biochemistry' },
+          product: { name: 'Buffer Solution' },
+          issuedBy: { username: 'projectadmin' },
+        },
+      ]);
+      mockPrisma.departmentReturn.findMany.mockResolvedValue([]);
+
+      const result = await reportsService.generateReport(
+        ReportType.PROJECT_CONSUMPTION,
+        { format: ReportFormat.JSON },
+        projectAdminUser,
+      );
+
+      expect(result.data!.length).toBe(2);
+      expect(result.data![0].department).toBe('Pathology Lab');
+      expect(result.data![0].status).toBe('POSTED');
+      expect(result.data![0].issuedBy).toBe('projectadmin');
+      expect(result.data![1].department).toBe('Biochemistry');
+      expect(result.data![1].status).toBe('PENDING_APPROVAL');
+      expect(result.data![1].issuedBy).toBe('projectadmin');
+
+      // Verify Prisma query checked status in [APPROVED, POSTED, PENDING_APPROVAL]
+      expect(mockPrisma.departmentIssue.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            projectId: 'project-1',
+            status: { in: ['APPROVED', 'POSTED', 'PENDING_APPROVAL'] },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('11. Shipments Report Product Breakdown & Complete Excel Export', () => {
+    it('returns trackingNumber, productsSummary, and items in shipments report', async () => {
+      mockPrisma.shipment = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'ship-98b559c5-1111',
+            shipmentType: 'DISPATCH_TO_PROJECT',
+            status: 'COMPLETED',
+            sourceLocation: {
+              id: 'loc-wh-1',
+              locationType: 'WAREHOUSE',
+              warehouse: { name: 'Central Warehouse Hub' },
+            },
+            destinationLocation: {
+              id: 'loc-proj-1',
+              locationType: 'PROJECT',
+              project: { name: 'Max Healthcare Pathology' },
+            },
+            lines: [
+              {
+                dispatchedQty: new Prisma.Decimal(12),
+                receivedQty: new Prisma.Decimal(12),
+                discrepancyQty: new Prisma.Decimal(0),
+                unitName: 'BTL',
+                condition: 'USABLE',
+                product: { id: 'p-1', name: 'AST / SGOT Liquid Reagent 4x100ml', brand: 'Labco' },
+              },
+              {
+                dispatchedQty: new Prisma.Decimal(77),
+                receivedQty: new Prisma.Decimal(77),
+                discrepancyQty: new Prisma.Decimal(0),
+                unitName: 'BOX',
+                condition: 'USABLE',
+                product: { id: 'p-2', name: 'Dengue NS1 Antigen Rapid Screen', brand: 'Labco' },
+              },
+            ],
+            dispatchedAt: new Date('2026-10-22'),
+            receivedAt: new Date('2026-10-23'),
+            createdAt: new Date('2026-10-22'),
+          },
+        ]),
+      };
+
+      const result = await reportsService.generateReport(
+        ReportType.SHIPMENTS,
+        { format: ReportFormat.JSON },
+        superAdminUser,
+      );
+
+      const row = result.data![0];
+      expect(row.trackingNumber).toBe('SHP-SHIP-98B');
+      expect(row.productsSummary).toContain('AST / SGOT Liquid Reagent 4x100ml (12 BTL)');
+      expect(row.productsSummary).toContain('Dengue NS1 Antigen Rapid Screen (77 BOX)');
+      expect(row.items.length).toBe(2);
+      expect(row.items[0].productName).toBe('AST / SGOT Liquid Reagent 4x100ml');
+      expect(row.items[0].brand).toBe('Labco');
+      expect(row.items[0].dispatchedQuantity).toBe(12);
+      expect(row.items[0].receivedQuantity).toBe(12);
+    });
+
+    it('exports complete line-by-line product breakdown in Excel (.xlsx) for Shipments', async () => {
+      mockPrisma.shipment = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'ship-12345678',
+            shipmentType: 'DISPATCH_TO_PROJECT',
+            status: 'COMPLETED',
+            sourceLocation: {
+              id: 'loc-wh-1',
+              locationType: 'WAREHOUSE',
+              warehouse: { name: 'Main Depot' },
+            },
+            destinationLocation: {
+              id: 'loc-proj-1',
+              locationType: 'PROJECT',
+              project: { name: 'Lab Beta' },
+            },
+            lines: [
+              {
+                dispatchedQty: new Prisma.Decimal(15),
+                receivedQty: new Prisma.Decimal(15),
+                discrepancyQty: new Prisma.Decimal(0),
+                unitName: 'Kit',
+                condition: 'USABLE',
+                product: { id: 'p-1', name: 'Blood Glucose Strip', brand: 'Labco' },
+              },
+              {
+                dispatchedQty: new Prisma.Decimal(30),
+                receivedQty: new Prisma.Decimal(28),
+                discrepancyQty: new Prisma.Decimal(2),
+                unitName: 'Box',
+                condition: 'USABLE',
+                product: { id: 'p-2', name: 'Sterile Lancets', brand: 'Labco' },
+              },
+            ],
+            dispatchedAt: new Date('2026-10-22'),
+            receivedAt: new Date('2026-10-23'),
+            createdAt: new Date('2026-10-22'),
+          },
+        ]),
+      };
+
+      const result = await reportsService.generateReport(
+        ReportType.SHIPMENTS,
+        { format: ReportFormat.XLSX },
+        superAdminUser,
+      );
+
+      const wb = XLSX.read(result.buffer, { type: 'buffer' });
+      const dataAoa = XLSX.utils.sheet_to_json(wb.Sheets['Report Data'], { header: 1 }) as any[][];
+      const headerRow = dataAoa.find((row) => row.includes('productName'));
+      expect(headerRow).toBeDefined();
+      expect(headerRow).toContain('trackingNumber');
+      expect(headerRow).toContain('dispatchedQuantity');
+      expect(headerRow).toContain('receivedQuantity');
+
+      // Check that both products are represented as individual rows in the exported Excel
+      const hasProduct1 = dataAoa.some((row) => row.includes('Blood Glucose Strip'));
+      const hasProduct2 = dataAoa.some((row) => row.includes('Sterile Lancets'));
+      expect(hasProduct1).toBe(true);
+      expect(hasProduct2).toBe(true);
+    });
+
+    it('exports complete line-by-line product breakdown in CSV for Shipments', async () => {
+      mockPrisma.shipment = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'ship-csv-test',
+            shipmentType: 'DISPATCH_TO_PROJECT',
+            status: 'COMPLETED',
+            sourceLocation: {
+              id: 'loc-wh-1',
+              locationType: 'WAREHOUSE',
+              warehouse: { name: 'Main Depot' },
+            },
+            destinationLocation: {
+              id: 'loc-proj-1',
+              locationType: 'PROJECT',
+              project: { name: 'Lab Beta' },
+            },
+            lines: [
+              {
+                dispatchedQty: new Prisma.Decimal(50),
+                receivedQty: new Prisma.Decimal(50),
+                discrepancyQty: new Prisma.Decimal(0),
+                unitName: 'Vial',
+                condition: 'USABLE',
+                product: { id: 'p-vial', name: 'Saline Reagent', brand: 'Labco' },
+              },
+            ],
+            dispatchedAt: new Date('2026-10-22'),
+            receivedAt: new Date('2026-10-23'),
+            createdAt: new Date('2026-10-22'),
+          },
+        ]),
+      };
+
+      const result = await reportsService.generateReport(
+        ReportType.SHIPMENTS,
+        { format: ReportFormat.CSV },
+        superAdminUser,
+      );
+
+      expect(result.csvData).toContain('"productName"');
+      expect(result.csvData).toContain('"Saline Reagent"');
+      expect(result.csvData).toContain('"50"');
+    });
+  });
 });

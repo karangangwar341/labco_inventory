@@ -686,4 +686,20 @@ describe('Requests & Reservations Service (T-007)', () => {
       ).rejects.toThrow('Project-to-project transfer is strictly prohibited');
     });
   });
+  describe('Stock Request Date Filtering (backend-level)', () => {
+    it('applies date filter to where clause when startDate and endDate are provided', async () => {
+      mockPrisma.stockRequest.findMany.mockResolvedValue([]);
+
+      await requestsService.getRequests(superAdminUser, {
+        startDate: '2026-10-01',
+        endDate: '2026-10-31',
+      });
+
+      expect(mockPrisma.stockRequest.findMany).toHaveBeenCalled();
+      const callArgs = mockPrisma.stockRequest.findMany.mock.calls[0][0];
+      expect(callArgs.where.createdAt).toBeDefined();
+      expect(callArgs.where.createdAt.gte).toEqual(new Date('2026-10-01T00:00:00.000Z'));
+      expect(callArgs.where.createdAt.lte).toEqual(new Date('2026-10-31T23:59:59.999Z'));
+    });
+  });
 });

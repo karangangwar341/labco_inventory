@@ -14,14 +14,16 @@ export const manufacturingService = {
   getProductionRuns: async (params?: {
     status?: ProductionStatus;
     projectId?: string;
+    startDate?: string;
+    endDate?: string;
   }): Promise<ProductionRun[]> => {
     return apiClient.get<ProductionRun[]>(
       endpoints.manufacturing.productionRuns(params),
     );
   },
 
-  getProductionCycles: async (): Promise<ProductionCycle[]> => {
-    return apiClient.get<ProductionCycle[]>(endpoints.manufacturing.cycles());
+  getProductionCycles: async (params?: { projectId?: string; startDate?: string; endDate?: string }): Promise<ProductionCycle[]> => {
+    return apiClient.get<ProductionCycle[]>(endpoints.manufacturing.cycles(params));
   },
 
   reRunCycle: async (

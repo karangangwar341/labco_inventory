@@ -11,8 +11,10 @@ export async function GET(req: Request) {
     const status = (searchParams.get('status') as ShipmentStatus) || undefined;
     const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined;
     const page = searchParams.get('page') ? Number(searchParams.get('page')) : undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
 
-    let data = await container.shipmentsService.getShipments(user, status, { limit, page });
+    let data = await container.shipmentsService.getShipments(user, status, { limit, page, startDate, endDate });
     if (user.role === UserRole.PROJECT_ADMIN) {
       data = sanitizeShipmentPayload(data);
     }

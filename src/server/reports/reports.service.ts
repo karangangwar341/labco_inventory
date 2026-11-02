@@ -10,8 +10,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   UserRole,
   ProductKind,
+  DepartmentIssueStatus,
+  DepartmentReturnStatus,
   Prisma,
 } from '@prisma/client';
+import { buildDateFilter } from '../common/date-filter.util';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import {
   ReportType,
@@ -135,7 +138,7 @@ export class ReportsService {
     // 2. Format transformation
     const format = query.format || ReportFormat.JSON;
     if (format === ReportFormat.CSV) {
-      const csvData = this.transformToCsv(rows);
+      const csvData = this.transformToCsv(rows, reportType);
       return {
         reportType,
         format: 'csv',
@@ -338,8 +341,13 @@ export class ReportsService {
       throw new BadRequestException('projectId is required for Project Consumption Report');
     }
 
-    const issueWhere: Prisma.DepartmentIssueWhereInput = { status: 'APPROVED' };
-    const returnWhere: Prisma.DepartmentReturnWhereInput = { status: 'APPROVED' };
+    // Include APPROVED, POSTED, and PENDING_APPROVAL so department issues by Project Admins are always included
+    const issueWhere: Prisma.DepartmentIssueWhereInput = {
+      status: { in: [DepartmentIssueStatus.APPROVED, DepartmentIssueStatus.POSTED, DepartmentIssueStatus.PENDING_APPROVAL] },
+    };
+    const returnWhere: Prisma.DepartmentReturnWhereInput = {
+      status: { in: [DepartmentReturnStatus.APPROVED, DepartmentReturnStatus.POSTED, DepartmentReturnStatus.PENDING_APPROVAL] },
+    };
     if (projectId) {
       issueWhere.projectId = projectId;
       returnWhere.projectId = projectId;
@@ -349,18 +357,11 @@ export class ReportsService {
       returnWhere.productId = query.productId;
     }
     if (query.startDate || query.endDate) {
-      const issueDateFilter: Prisma.DateTimeNullableFilter = {};
-      const returnDateFilter: Prisma.DateTimeNullableFilter = {};
-      if (query.startDate) {
-        issueDateFilter.gte = new Date(query.startDate);
-        returnDateFilter.gte = new Date(query.startDate);
+      const dateFilter = buildDateFilter(query.startDate, query.endDate);
+      if (dateFilter) {
+        issueWhere.createdAt = dateFilter;
+        returnWhere.createdAt = dateFilter;
       }
-      if (query.endDate) {
-        issueDateFilter.lte = new Date(query.endDate);
-        returnDateFilter.lte = new Date(query.endDate);
-      }
-      issueWhere.issuedAt = issueDateFilter;
-      returnWhere.approvedAt = returnDateFilter;
     }
 
     const [issues, returns] = await Promise.all([
@@ -369,8 +370,9 @@ export class ReportsService {
         include: {
           department: { select: { name: true } },
           product: { select: { name: true } },
+          issuedBy: { select: { username: true } },
         },
-        orderBy: { issuedAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.departmentReturn.findMany({
         where: returnWhere,
@@ -378,7 +380,7 @@ export class ReportsService {
           department: { select: { name: true } },
           product: { select: { name: true } },
         },
-        orderBy: { approvedAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
 
@@ -401,6 +403,8 @@ export class ReportsService {
         unit: i.unitNameSnapshot,
         baseQuantity: i.baseQuantity.toNumber(),
         condition: 'USABLE',
+        status: i.status,
+        issuedBy: i.issuedBy?.username ?? 'Project Admin',
         date: i.issuedAt?.toISOString().slice(0, 10) || i.createdAt.toISOString().slice(0, 10),
       });
     });
@@ -408,11 +412,16 @@ export class ReportsService {
     returns.forEach((r) => {
       result.push({
         type: 'DEPARTMENT_RETURN',
+        indentNumber: 'N/A',
         department: r.department?.name || 'General',
         product: r.product.name,
+        requestedQuantity: r.quantity.toNumber(),
         quantity: r.quantity.toNumber(),
         unit: r.unitNameSnapshot,
         baseQuantity: r.baseQuantity.toNumber(),
+        condition: 'USABLE',
+        status: r.status,
+        issuedBy: 'Department Staff',
         date: r.approvedAt?.toISOString().slice(0, 10) || r.createdAt.toISOString().slice(0, 10),
       });
     });
@@ -539,7 +548,7 @@ export class ReportsService {
         },
         lines: {
           include: {
-            product: { select: { name: true } },
+            product: { select: { id: true, name: true, brand: true } },
           },
         },
       },
@@ -565,13 +574,30 @@ export class ReportsService {
 
       const totalQty = s.lines.reduce((sum, l) => sum + l.dispatchedQty.toNumber(), 0);
 
+      const items = s.lines.map((l) => ({
+        productName: l.product?.name ?? 'Unknown Product',
+        brand: l.product?.brand ?? 'N/A',
+        dispatchedQuantity: l.dispatchedQty.toNumber(),
+        receivedQuantity: l.receivedQty !== null && l.receivedQty !== undefined ? l.receivedQty.toNumber() : null,
+        discrepancyQuantity: l.discrepancyQty !== null && l.discrepancyQty !== undefined ? l.discrepancyQty.toNumber() : 0,
+        unit: l.unitName,
+        condition: l.condition,
+      }));
+
+      const productsSummary = items.length > 0
+        ? items.map((i) => `${i.productName} (${i.dispatchedQuantity} ${i.unit})`).join(', ')
+        : 'No products';
+
       return {
+        trackingNumber: `SHP-${s.id.slice(0, 8).toUpperCase()}`,
         shipmentType: s.shipmentType,
         status: s.status,
         sourceLocation: sourceName,
         destinationLocation: destinationName,
         totalItemsCount: s.lines.length,
         dispatchedQuantity: totalQty,
+        productsSummary,
+        items,
         dispatchedAt: s.dispatchedAt ? s.dispatchedAt.toISOString().slice(0, 10) : 'PENDING',
         receivedAt: s.receivedAt ? s.receivedAt.toISOString().slice(0, 10) : 'PENDING',
         createdAt: s.createdAt.toISOString().slice(0, 10),
@@ -694,6 +720,53 @@ export class ReportsService {
     query?: QueryReportDto,
     user?: AuthenticatedUser,
   ): Buffer {
+    let exportRows = rows;
+    if (reportType === ReportType.SHIPMENTS) {
+      const flattened: Record<string, any>[] = [];
+      for (const s of rows) {
+        if (Array.isArray(s.items) && s.items.length > 0) {
+          for (const item of s.items) {
+            flattened.push({
+              trackingNumber: s.trackingNumber || 'N/A',
+              shipmentType: s.shipmentType,
+              status: s.status,
+              sourceLocation: s.sourceLocation,
+              destinationLocation: s.destinationLocation,
+              productName: item.productName,
+              brand: item.brand || 'N/A',
+              dispatchedQuantity: item.dispatchedQuantity,
+              receivedQuantity: item.receivedQuantity !== null ? item.receivedQuantity : 'PENDING',
+              discrepancyQuantity: item.discrepancyQuantity || 0,
+              unit: item.unit,
+              condition: item.condition || 'USABLE',
+              dispatchedAt: s.dispatchedAt,
+              receivedAt: s.receivedAt,
+              createdAt: s.createdAt,
+            });
+          }
+        } else {
+          flattened.push({
+            trackingNumber: s.trackingNumber || 'N/A',
+            shipmentType: s.shipmentType,
+            status: s.status,
+            sourceLocation: s.sourceLocation,
+            destinationLocation: s.destinationLocation,
+            productName: 'N/A',
+            brand: 'N/A',
+            dispatchedQuantity: s.dispatchedQuantity || 0,
+            receivedQuantity: 'N/A',
+            discrepancyQuantity: 0,
+            unit: 'N/A',
+            condition: 'N/A',
+            dispatchedAt: s.dispatchedAt,
+            receivedAt: s.receivedAt,
+            createdAt: s.createdAt,
+          });
+        }
+      }
+      exportRows = flattened;
+    }
+
     const wb = XLSX.utils.book_new();
     const meta = ReportsService.REPORT_METADATA[reportType] || {
       title: reportType.replace(/_/g, ' '),
@@ -701,7 +774,7 @@ export class ReportsService {
       deltaExplanation: "Stock Delta ('baseDelta'): Net change in usable inventory in base packaging units.",
     };
 
-    if (rows.length === 0) {
+    if (exportRows.length === 0) {
       const emptyAoa = [
         ['LABCO INSTRUMENTS — DIAGNOSTIC WAREHOUSE OPERATIONS'],
         ['Report Name:', meta.title],
@@ -718,7 +791,7 @@ export class ReportsService {
       return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
     }
 
-    const headers = Object.keys(rows[0]);
+    const headers = Object.keys(exportRows[0]);
 
     // Build the executive pre-information header section
     const preInfo: any[][] = [
@@ -742,7 +815,7 @@ export class ReportsService {
     ];
 
     // Format data rows: native numbers for numeric values, formula sanitization for text
-    const dataRows = rows.map((row) => {
+    const dataRows = exportRows.map((row) => {
       return headers.map((h) => {
         const val = row[h];
         if (val === null || val === undefined) return '';
@@ -834,18 +907,62 @@ export class ReportsService {
   // (Test Plan Section 5 item 61)
   // ==========================================
 
-  private transformToCsv(rows: Record<string, any>[]): string {
-    if (rows.length === 0) {
+  private transformToCsv(rows: Record<string, any>[], reportType?: ReportType): string {
+    let exportRows = rows;
+    if (reportType === ReportType.SHIPMENTS) {
+      const flattened: Record<string, any>[] = [];
+      for (const s of rows) {
+        if (Array.isArray(s.items) && s.items.length > 0) {
+          for (const item of s.items) {
+            flattened.push({
+              trackingNumber: s.trackingNumber || 'N/A',
+              shipmentType: s.shipmentType,
+              status: s.status,
+              sourceLocation: s.sourceLocation,
+              destinationLocation: s.destinationLocation,
+              productName: item.productName,
+              brand: item.brand || 'N/A',
+              dispatchedQuantity: item.dispatchedQuantity,
+              receivedQuantity: item.receivedQuantity !== null ? item.receivedQuantity : 'PENDING',
+              discrepancyQuantity: item.discrepancyQuantity || 0,
+              unit: item.unit,
+              condition: item.condition || 'USABLE',
+              dispatchedAt: s.dispatchedAt,
+              receivedAt: s.receivedAt,
+              createdAt: s.createdAt,
+            });
+          }
+        } else {
+          flattened.push({
+            trackingNumber: s.trackingNumber || 'N/A',
+            shipmentType: s.shipmentType,
+            status: s.status,
+            sourceLocation: s.sourceLocation,
+            destinationLocation: s.destinationLocation,
+            productName: 'N/A',
+            brand: 'N/A',
+            dispatchedQuantity: s.dispatchedQuantity || 0,
+            receivedQuantity: 'N/A',
+            discrepancyQuantity: 0,
+            unit: 'N/A',
+            condition: 'N/A',
+            dispatchedAt: s.dispatchedAt,
+            receivedAt: s.receivedAt,
+            createdAt: s.createdAt,
+          });
+        }
+      }
+      exportRows = flattened;
+    }
+    if (exportRows.length === 0) {
       return 'No data available\n';
     }
 
-    const headers = Object.keys(rows[0]);
+    const headers = Object.keys(exportRows[0]);
 
     const sanitizeCell = (val: any): string => {
       if (val === null || val === undefined) return '""';
       let str = String(val).trim();
-      // Neutralize formula injection (=, +, -, @)
-      // Legitimate numeric values (e.g. -20, 25, -1.5) must NOT be prepended with apostrophe!
       const isNumeric = typeof val === 'number' || (!isNaN(Number(str)) && !['=', '@'].includes(str[0]));
       if (!isNumeric && (str.startsWith('=') || str.startsWith('+') || str.startsWith('-') || str.startsWith('@'))) {
         str = `'${str}`;
@@ -855,13 +972,15 @@ export class ReportsService {
 
     const lines = [headers.map((h) => `"${h}"`).join(',')];
 
-    for (const row of rows) {
+    for (const row of exportRows) {
       const line = headers.map((h) => sanitizeCell(row[h]));
       lines.push(line.join(','));
     }
 
     return lines.join('\n');
   }
+
+  // REPLACED_OLD_TRANSFORM_TO_CSV_PLACEHOLDER
 
   // ==========================================
   // AUDIT EVENT LOGGING
