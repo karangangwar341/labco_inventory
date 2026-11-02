@@ -270,6 +270,8 @@ export const endpoints = {
     summary: () => "/backups/summary",
     trigger: () => "/backups",
     restoreDrill: (id: string) => `/backups/${id}/restore-drill`,
+    download: (type = 'zip') => `/backups/download?type=${type}`,
+    downloadById: (id: string) => `/backups/${id}/download`,
   },
 
   health: {

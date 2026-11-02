@@ -173,6 +173,7 @@ class AppContainer {
       this.prisma,
       this.notificationsService,
       this.storageService,
+      this.reportsService,
     ));
   }
 

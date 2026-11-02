@@ -15,6 +15,18 @@ export const backupsService = {
     return apiClient.post<BackupRecord>(endpoints.backups.trigger(), { backupType });
   },
 
+  downloadAllReportsZip: async (): Promise<Blob> => {
+    return apiClient.get<Blob>(endpoints.backups.download('zip'));
+  },
+
+  downloadDatabaseJson: async (): Promise<Blob> => {
+    return apiClient.get<Blob>(endpoints.backups.download('database'));
+  },
+
+  downloadBackupById: async (id: string): Promise<Blob> => {
+    return apiClient.get<Blob>(endpoints.backups.downloadById(id));
+  },
+
   getHealth: async (): Promise<SystemHealth> => {
     return apiClient.get<SystemHealth>(endpoints.health.check());
   },

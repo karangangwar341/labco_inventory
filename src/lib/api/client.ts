@@ -108,7 +108,9 @@ export async function request<T = unknown>(
         contentType.includes('application/vnd.openxmlformats') ||
         contentType.includes('application/vnd.ms-excel') ||
         contentType.includes('application/octet-stream') ||
-        contentType.includes('application/pdf')
+        contentType.includes('application/pdf') ||
+        contentType.includes('application/zip') ||
+        contentType.includes('application/x-zip')
       ) {
         return (await res.blob()) as T;
       }

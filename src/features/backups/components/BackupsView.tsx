@@ -14,10 +14,24 @@ import { BackupRecord, BackupStatusSummary } from '../backups.types';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { invalidation } from '../../../lib/query/invalidation';
 
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export function BackupsView() {
   const queryClient = useQueryClient();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [isDownloadingJson, setIsDownloadingJson] = useState(false);
+  const [downloadingRowId, setDownloadingRowId] = useState<string | null>(null);
 
   const {
     data: backups = [],
@@ -50,7 +64,7 @@ export function BackupsView() {
   const triggerMutation = useMutation({
     mutationFn: (triggerType: string) => backupsService.triggerBackup(triggerType),
     onSuccess: () => {
-      setActionSuccess('Manual backup initiated successfully.');
+      setActionSuccess('Manual backup snapshot initiated successfully.');
       invalidation.afterBackupTrigger(queryClient);
       setTimeout(() => setActionSuccess(null), 4000);
     },
@@ -64,6 +78,55 @@ export function BackupsView() {
     triggerMutation.mutate('MANUAL_PRE_MIGRATION');
   };
 
+  const handleDownloadAllReportsZip = async () => {
+    setErrorMsg(null);
+    setIsDownloadingZip(true);
+    try {
+      const blob = await backupsService.downloadAllReportsZip();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      triggerBrowserDownload(blob, `labco_complete_backup_${dateStr}.zip`);
+      setActionSuccess('Complete system ZIP archive (Excel reports + database dump) downloaded successfully.');
+      setTimeout(() => setActionSuccess(null), 5000);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to download ZIP backup archive.');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadDatabaseJson = async () => {
+    setErrorMsg(null);
+    setIsDownloadingJson(true);
+    try {
+      const blob = await backupsService.downloadDatabaseJson();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      triggerBrowserDownload(blob, `labco_database_dump_${dateStr}.json`);
+      setActionSuccess('Complete database JSON dump downloaded successfully.');
+      setTimeout(() => setActionSuccess(null), 5000);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to download database dump.');
+    } finally {
+      setIsDownloadingJson(false);
+    }
+  };
+
+  const handleDownloadRowBackup = async (backupId: string) => {
+    setErrorMsg(null);
+    setDownloadingRowId(backupId);
+    try {
+      const blob = await backupsService.downloadBackupById(backupId);
+      const shortId = backupId.slice(0, 8);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      triggerBrowserDownload(blob, `backup_${shortId}_${dateStr}.zip`);
+      setActionSuccess(`Backup snapshot ${shortId} downloaded successfully.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to download backup snapshot.');
+    } finally {
+      setDownloadingRowId(null);
+    }
+  };
+
   const handleRetry = () => {
     setErrorMsg(null);
     refetchBackups();
@@ -74,21 +137,55 @@ export function BackupsView() {
     <div className="space-y-4">
       <PageHeader
         title="Database Backups & Resiliency Drills"
-        description="Immutable snapshot retention, WAL continuity, and automated verification drill monitoring."
+        description="Immutable snapshot retention, WAL continuity, and complete data reports export."
         actions={
-          <Button
-            variant="primary"
-            onClick={handleTriggerBackup}
-            isLoading={triggerMutation.isPending}
-          >
-            + Trigger Manual Backup
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="primary"
+              onClick={handleDownloadAllReportsZip}
+              isLoading={isDownloadingZip}
+              className="shadow-xs font-semibold"
+            >
+              📦 Download All Reports & DB (ZIP)
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={handleDownloadDatabaseJson}
+              isLoading={isDownloadingJson}
+            >
+              💾 Download Database (JSON)
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={handleTriggerBackup}
+              isLoading={triggerMutation.isPending}
+            >
+              + Trigger Snapshot
+            </Button>
+          </div>
         }
       />
 
+      {/* Information Banner */}
+      <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-start gap-2.5">
+          <span className="text-base">📦</span>
+          <div>
+            <p className="font-semibold text-blue-950">
+              Complete Disaster Recovery &amp; Operational Reports Export
+            </p>
+            <p className="text-blue-800/90 text-[11px] mt-0.5 leading-relaxed">
+              Click <strong>&quot;Download All Reports &amp; DB (ZIP)&quot;</strong> to download an all-in-one ZIP package containing all 6 Microsoft Excel operational reports (Current Stock Balances, Movement Ledger, Department Usage, Manufacturing Runs, Shipments Logistics, and Confirmed Missing Stock) alongside the authoritative JSON database dump.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {actionSuccess && (
         <div className="p-3 bg-[#ecfdf3] border border-[#bbf7d0] rounded-lg text-[#18794e] text-xs flex items-center justify-between">
-          <span>✓ {actionSuccess}</span>
+          <span className="font-medium">✓ {actionSuccess}</span>
           <button onClick={() => setActionSuccess(null)} className="text-[#18794e]">✕</button>
         </div>
       )}
@@ -99,7 +196,7 @@ export function BackupsView() {
 
       {/* SLA & Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-sm space-y-1">
+        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#5b6678] uppercase tracking-wider">
               Retention Policy
@@ -112,7 +209,7 @@ export function BackupsView() {
           </p>
         </div>
 
-        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-sm space-y-1">
+        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#5b6678] uppercase tracking-wider">
               Persistent Alert Status
@@ -129,7 +226,7 @@ export function BackupsView() {
           </p>
         </div>
 
-        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-sm space-y-1">
+        <div className="p-4 bg-white border border-[#dbe3ee] rounded-xl shadow-xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-[#5b6678] uppercase tracking-wider">
               Total Snapshots
@@ -151,7 +248,7 @@ export function BackupsView() {
       ) : backups.length === 0 ? (
         <EmptyState
           title="No backup records found"
-          description="Initiate a manual backup or wait for the scheduled daily backup run."
+          description="Initiate a manual backup or download the full system ZIP package above."
           action={
             <Button variant="primary" onClick={handleTriggerBackup} isLoading={triggerMutation.isPending}>
               + Trigger First Snapshot
@@ -168,6 +265,7 @@ export function BackupsView() {
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Size</TableHead>
               <TableHead>Location</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </tr>
           </TableHeader>
           <TableBody>
@@ -200,6 +298,18 @@ export function BackupsView() {
                 </TableCell>
                 <TableCell className="font-mono text-[11px] text-[#5b6678] truncate max-w-xs">
                   {b.locationUri || 'Local Secure Volume'}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="text-xs font-semibold"
+                    disabled={b.status !== 'COMPLETED' || downloadingRowId === b.id}
+                    isLoading={downloadingRowId === b.id}
+                    onClick={() => handleDownloadRowBackup(b.id)}
+                  >
+                    Download (ZIP)
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}

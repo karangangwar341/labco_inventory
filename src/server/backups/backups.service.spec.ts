@@ -33,22 +33,40 @@ describe('BackupsService', () => {
       systemSetting: {
         findUnique: vi.fn(),
         upsert: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       auditEvent: {
         create: vi.fn(),
       },
       user: {
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       inventoryBalance: {
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       stockRequest: {
         count: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
       },
       stockAlertState: {
         count: vi.fn(),
       },
+      warehouse: { findMany: vi.fn().mockResolvedValue([]) },
+      project: { findMany: vi.fn().mockResolvedValue([]) },
+      category: { findMany: vi.fn().mockResolvedValue([]) },
+      product: { findMany: vi.fn().mockResolvedValue([]) },
+      productUnit: { findMany: vi.fn().mockResolvedValue([]) },
+      stockLocation: { findMany: vi.fn().mockResolvedValue([]) },
+      ledgerTransaction: { findMany: vi.fn().mockResolvedValue([]) },
+      ledgerEntry: { findMany: vi.fn().mockResolvedValue([]) },
+      stockRequestLine: { findMany: vi.fn().mockResolvedValue([]) },
+      shipment: { findMany: vi.fn().mockResolvedValue([]) },
+      shipmentLine: { findMany: vi.fn().mockResolvedValue([]) },
+      productionRun: { findMany: vi.fn().mockResolvedValue([]) },
+      department: { findMany: vi.fn().mockResolvedValue([]) },
+      departmentIssue: { findMany: vi.fn().mockResolvedValue([]) },
+      departmentReturn: { findMany: vi.fn().mockResolvedValue([]) },
+      projectStaffMember: { findMany: vi.fn().mockResolvedValue([]) },
       $queryRaw: vi.fn(),
     };
 
@@ -416,4 +434,53 @@ describe('BackupsService', () => {
       expect(health.backups.hasPersistentWarning).toBe(true);
     });
   });
+  describe('exportFullDatabase and exportFullReportsZip', () => {
+    it('exports a sanitized JSON snapshot of all database tables', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 'u1', username: 'superadmin', role: UserRole.SUPER_ADMIN, status: 'ACTIVE' },
+      ]);
+      mockPrisma.warehouse.findMany.mockResolvedValue([{ id: 'wh1', name: 'Main' }]);
+
+      const result = await service.exportFullDatabase(mockSuperAdmin as any);
+
+      expect(result.filename).toMatch(/^labco_database_dump_\d{4}-\d{2}-\d{2}\.json$/);
+      expect(result.data.users).toHaveLength(1);
+      expect(result.counts.users).toBe(1);
+      expect(result.counts.warehouses).toBe(1);
+      expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'DATABASE_DUMP_EXPORTED',
+            entityType: 'DatabaseSnapshot',
+          }),
+        }),
+      );
+    });
+
+    it('generates a ZIP archive containing all 6 Excel operational reports and database dump', async () => {
+      const mockReportsService = {
+        generateReport: vi.fn().mockResolvedValue({
+          buffer: Buffer.from('mock-excel-binary'),
+          filename: 'report.xlsx',
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+      };
+      (service as any).reportsService = mockReportsService;
+
+      const result = await service.exportFullReportsZip(mockSuperAdmin as any);
+
+      expect(result.filename).toMatch(/^labco_complete_backup_\d{4}-\d{2}-\d{2}\.zip$/);
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
+      expect(mockReportsService.generateReport).toHaveBeenCalledTimes(6);
+      expect(mockPrisma.auditEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'BACKUP_ARCHIVE_DOWNLOADED',
+            entityType: 'BackupArchive',
+          }),
+        }),
+      );
+    });
+  });
+
 });
