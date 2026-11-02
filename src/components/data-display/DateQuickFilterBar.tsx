@@ -233,7 +233,7 @@ export function DateQuickFilterBar({
             className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-between sm:justify-start gap-1 px-2.5 py-1 sm:py-0.5 rounded-lg sm:rounded-full bg-amber-50 border border-amber-200/90 text-[11px] text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer mt-1 sm:mt-0"
             title="Older records exist in the database. Click to expand."
           >
-            <span>âš¡ {effectiveOlderCount} older record(s)</span>
+            <span>⚡ {effectiveOlderCount} older record(s)</span>
             <span className="underline font-semibold">View</span>
           </button>
         )}

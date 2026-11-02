@@ -178,7 +178,7 @@ export function DepartmentsView() {
         if (!indentMap[key]) {
           const timeStr = line.createdAt
             ? new Date(line.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : 'â€”';
+            : '—';
           indentMap[key] = {
             key,
             indentNumber: indentNum,
@@ -715,7 +715,7 @@ export function DepartmentsView() {
                     onClick={() => submitIssueBatchMutation.mutate()}
                   >
                     {submitIssueBatchMutation.isPending
-                      ? 'Submittingâ€¦'
+                      ? 'Submitting...'
                       : `Submit Stock Out (${totalDraftLines} lines)`}
                   </Button>
                 )}
@@ -734,8 +734,8 @@ export function DepartmentsView() {
 
       {actionSuccess && (
         <div className="p-3 bg-[#ecfdf3] border border-[#bbf7d0] rounded-lg text-[#18794e] text-xs flex items-center justify-between">
-          <span>âœ“ {actionSuccess}</span>
-          <button onClick={() => setActionSuccess(null)} className="text-[#18794e]">âœ•</button>
+          <span>✓ {actionSuccess}</span>
+          <button onClick={() => setActionSuccess(null)} className="text-[#18794e]">✕</button>
         </div>
       )}
 
@@ -807,8 +807,8 @@ export function DepartmentsView() {
                 {role === 'SUPER_ADMIN' && (d.proposedName || d.proposedStatus) && (
                   <div className="rounded-md bg-blue-50 p-2 text-[11px] text-blue-900">
                     <p className="font-semibold">Change awaiting review</p>
-                    {d.proposedName && <p>Name: {d.name} â†’ {d.proposedName}</p>}
-                    {d.proposedStatus && <p>Status: {d.status} â†’ {d.proposedStatus}</p>}
+                    {d.proposedName && <p>Name: {d.name} → {d.proposedName}</p>}
+                    {d.proposedStatus && <p>Status: {d.status} → {d.proposedStatus}</p>}
                   </div>
                 )}
                 <p className="text-[11px] text-[#5b6678]">
@@ -873,20 +873,20 @@ export function DepartmentsView() {
                         }
                         onClick={() => submitIssueBatchMutation.mutate()}
                       >
-                        {submitIssueBatchMutation.isPending ? 'Submittingâ€¦' : `Submit Stock Out (${totalDraftLines} lines)`}
+                        {submitIssueBatchMutation.isPending ? 'Submitting...' : `Submit Stock Out (${totalDraftLines} lines)`}
                       </Button>
                     )}
                   </div>
                 }
               >
                 <div className="flex items-center gap-2">
-                  <CardTitle>Todayâ€™s Department Issue Draft</CardTitle>
+                  <CardTitle>Today"™s Department Issue Draft</CardTitle>
                   <Badge variant={issueDraftQuery.data?.status === 'DRAFT' ? 'neutral' : 'success'}>
                     {issueDraftQuery.data?.status || 'DRAFT'}
                   </Badge>
                   {draftIndentGroups.length > 0 && (
                     <span className="text-xs text-slate-500 font-medium">
-                      ({draftIndentGroups.length} {draftIndentGroups.length === 1 ? 'indent' : 'indents'} Â· {totalDraftLines} items)
+                      ({draftIndentGroups.length} {draftIndentGroups.length === 1 ? 'indent' : 'indents'} · {totalDraftLines} items)
                     </span>
                   )}
                 </div>
@@ -915,14 +915,14 @@ export function DepartmentsView() {
                   <div className="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                        ðŸ“‹ Start New Department Indent Sheet
+                        Start New Department Indent Sheet
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsNewIndentBarOpen(false)}
                         className="text-slate-400 hover:text-slate-600 font-bold"
                       >
-                        âœ•
+                        ✕
                       </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1 items-end">
@@ -1056,7 +1056,7 @@ export function DepartmentsView() {
                             ) : (
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                                  ðŸ“‹ Indent #{group.indentNumber}
+                                  Indent #{group.indentNumber}
                                 </span>
                                 <span className="font-bold text-slate-900 text-sm">
                                   {group.departmentName}
@@ -1074,7 +1074,7 @@ export function DepartmentsView() {
                                   }}
                                   className="text-[11px] text-blue-600 hover:text-blue-800 underline ml-1"
                                 >
-                                  âœŽ Edit details
+                                  ✎ Edit details
                                 </button>
                               </div>
                             )}
@@ -1099,10 +1099,18 @@ export function DepartmentsView() {
                                 type="button"
                                 variant="secondary"
                                 size="sm"
-                                className="text-xs px-2.5 py-1 h-auto font-semibold"
+                                className="text-xs px-2.5 py-1 h-auto font-semibold inline-flex items-center gap-1.5"
                                 onClick={() => toggleDraftIndent(group.key)}
                               >
-                                {isOpen ? 'Close Indent â–²' : 'Open Indent â–¼'}
+                                <span>{isOpen ? 'Close Indent' : 'Open Indent'}</span>
+                                <svg
+                                  className={`w-3.5 h-3.5 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                               </Button>
 
                               <Button
@@ -1266,7 +1274,7 @@ export function DepartmentsView() {
                                           )}
                                         </TableCell>
                                         <TableCell className="text-slate-500 text-[11px] truncate max-w-[140px]">
-                                          {line.notes || 'â€”'}
+                                          {line.notes || '—'}
                                         </TableCell>
                                         <TableCell align="right">
                                           <div className="flex justify-end gap-1.5">
@@ -1277,7 +1285,7 @@ export function DepartmentsView() {
                                             >
                                               Edit
                                             </button>
-                                            <span className="text-slate-300">Â·</span>
+                                            <span className="text-slate-300">·</span>
                                             <button
                                               type="button"
                                               onClick={() => removeIssueLineMutation.mutate(line.id)}
@@ -1433,7 +1441,7 @@ export function DepartmentsView() {
                 <h3 className="text-sm font-semibold text-[#172033]">Stock Out History</h3>
                 {history.length > 0 && (
                   <span className="text-xs text-slate-500 font-medium">
-                    {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day shown' : 'days shown'} Â· {filteredHistory.length} of {history.length} total entries
+                    {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day shown' : 'days shown'} · {filteredHistory.length} of {history.length} total entries
                   </span>
                 )}
               </div>
@@ -1485,9 +1493,9 @@ export function DepartmentsView() {
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
                         <span className="font-semibold text-slate-800">{group.indentGroups.length}</span> {group.indentGroups.length === 1 ? 'indent form' : 'indent forms'}
-                        <span>Â·</span>
+                        <span>·</span>
                         <span className="font-semibold text-slate-800">{group.items.length}</span> {group.items.length === 1 ? 'line' : 'lines'}
-                        <span>Â·</span>
+                        <span>·</span>
                         <span className="font-semibold text-slate-800 font-mono">{group.totalUnits.toLocaleString()}</span> units
                       </div>
                     </div>
@@ -1506,7 +1514,7 @@ export function DepartmentsView() {
                             >
                               <div className="flex items-center gap-2.5">
                                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                                  ðŸ“‹ Indent #{indent.indentNumber}
+                                  Indent #{indent.indentNumber}
                                 </span>
                                 <span className="font-bold text-slate-900 text-sm">
                                   {indent.departmentName}
@@ -1537,13 +1545,21 @@ export function DepartmentsView() {
                                   type="button"
                                   variant="secondary"
                                   size="sm"
-                                  className="text-xs px-2.5 py-1 h-auto font-semibold"
+                                  className="text-xs px-2.5 py-1 h-auto font-semibold inline-flex items-center gap-1.5"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     toggleHistoryIndent(indent.key);
                                   }}
                                 >
-                                  {isHistoryOpen ? 'Close â–²' : 'Open Indent Form â–¼'}
+                                  <span>{isHistoryOpen ? 'Close' : 'View Products'}</span>
+                                  <svg
+                                    className={`w-3.5 h-3.5 transition-transform duration-150 ${isHistoryOpen ? 'rotate-180' : ''}`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
                                 </Button>
                               </div>
                             </div>
@@ -1589,12 +1605,12 @@ export function DepartmentsView() {
                                             </Badge>
                                           </TableCell>
                                           <TableCell className="text-slate-500 text-[11px]">
-                                            {item.notes || 'â€”'}
+                                            {item.notes || '—'}
                                           </TableCell>
                                           <TableCell align="right" mono className="text-slate-400 text-[11px]">
                                             {item.createdAt
                                               ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                              : 'â€”'}
+                                              : '—'}
                                           </TableCell>
                                         </TableRow>
                                       ))}

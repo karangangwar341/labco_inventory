@@ -247,7 +247,7 @@ export class DepartmentsService {
     await this.notificationsService.notifyUser(
       dept.createdById,
       'Department approved',
-      `Your department â€œ${finalName}â€ was approved.`,
+      `Your department "${finalName}" was approved.`,
       'DEPARTMENT',
       dept.id,
     );
@@ -277,7 +277,7 @@ export class DepartmentsService {
       await this.notificationsService.notifyUser(
         dept.createdById,
         'Department rejected',
-        `Your department proposal â€œ${dept.name}â€ was rejected. ${dto.reason || ''}`.trim(),
+        `Your department proposal "${dept.name}" was rejected. ${dto.reason || ''}`.trim(),
         'DEPARTMENT',
         dept.id,
       );

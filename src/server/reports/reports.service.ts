@@ -369,7 +369,7 @@ export class ReportsService {
         where: issueWhere,
         include: {
           department: { select: { name: true } },
-          product: { select: { name: true } },
+          product: { select: { name: true, brand: true } },
           issuedBy: { select: { username: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -378,13 +378,30 @@ export class ReportsService {
         where: returnWhere,
         include: {
           department: { select: { name: true } },
-          product: { select: { name: true } },
+          product: { select: { name: true, brand: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
 
-    const result: Record<string, any>[] = [];
+    // Group issues by Indent Slip # so each indent form is a single clean row
+    const issueGroups = new Map<string, {
+      type: string;
+      indentNumber: string;
+      department: string;
+      status: string;
+      issuedBy: string;
+      date: string;
+      items: Array<{
+        productName: string;
+        brand: string;
+        requestedQuantity: number;
+        quantity: number;
+        unit: string;
+        baseQuantity: number;
+        condition: string;
+      }>;
+    }>();
 
     issues.forEach((i, idx) => {
       let indent = i.indentNumber?.trim();
@@ -393,33 +410,75 @@ export class ReportsService {
           ? i.notes.trim()
           : `IND-${101 + (idx % 100)}`;
       }
-      result.push({
-        type: 'DEPARTMENT_ISSUE',
-        indentNumber: indent,
-        department: i.department.name,
-        product: i.product.name,
+      const groupDate = i.issuedAt?.toISOString().slice(0, 10) || i.createdAt.toISOString().slice(0, 10);
+      const groupKey = `${indent}_${i.department.name}_${groupDate}`;
+
+      const item = {
+        productName: i.product.name,
+        brand: (i.product as any).brand || 'N/A',
         requestedQuantity: (i.requestedQuantity ?? i.quantity).toNumber(),
         quantity: i.quantity.toNumber(),
         unit: i.unitNameSnapshot,
         baseQuantity: i.baseQuantity.toNumber(),
         condition: 'USABLE',
-        status: i.status,
-        issuedBy: i.issuedBy?.username ?? 'Project Admin',
-        date: i.issuedAt?.toISOString().slice(0, 10) || i.createdAt.toISOString().slice(0, 10),
-      });
+      };
+
+      const existing = issueGroups.get(groupKey);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        issueGroups.set(groupKey, {
+          type: 'DEPARTMENT_ISSUE',
+          indentNumber: indent,
+          department: i.department.name,
+          status: i.status,
+          issuedBy: i.issuedBy?.username ?? 'Project Admin',
+          date: groupDate,
+          items: [item],
+        });
+      }
     });
 
-    returns.forEach((r) => {
+    const result: Record<string, any>[] = [];
+
+    for (const group of issueGroups.values()) {
+      const totalQty = group.items.reduce((sum, it) => sum + it.quantity, 0);
+      const productsSummary = group.items
+        .map((it) => `${it.productName} (${it.quantity} ${it.unit})`)
+        .join(', ');
+
       result.push({
-        type: 'DEPARTMENT_RETURN',
-        indentNumber: 'N/A',
-        department: r.department?.name || 'General',
-        product: r.product.name,
+        type: group.type,
+        indentNumber: group.indentNumber,
+        department: group.department,
+        productsSummary,
+        totalItemsCount: group.items.length,
+        quantity: totalQty,
+        items: group.items,
+        status: group.status,
+        issuedBy: group.issuedBy,
+        date: group.date,
+      });
+    }
+
+    returns.forEach((r) => {
+      const item = {
+        productName: r.product.name,
+        brand: (r.product as any).brand || 'N/A',
         requestedQuantity: r.quantity.toNumber(),
         quantity: r.quantity.toNumber(),
         unit: r.unitNameSnapshot,
         baseQuantity: r.baseQuantity.toNumber(),
         condition: 'USABLE',
+      };
+      result.push({
+        type: 'DEPARTMENT_RETURN',
+        indentNumber: 'N/A',
+        department: r.department?.name || 'General',
+        productsSummary: `${item.productName} (${item.quantity} ${item.unit})`,
+        totalItemsCount: 1,
+        quantity: item.quantity,
+        items: [item],
         status: r.status,
         issuedBy: 'Department Staff',
         date: r.approvedAt?.toISOString().slice(0, 10) || r.createdAt.toISOString().slice(0, 10),
@@ -765,6 +824,42 @@ export class ReportsService {
         }
       }
       exportRows = flattened;
+    } else if (reportType === ReportType.PROJECT_CONSUMPTION) {
+      const flattened: Record<string, any>[] = [];
+      for (const row of rows) {
+        if (Array.isArray(row.items) && row.items.length > 0) {
+          for (const item of row.items) {
+            flattened.push({
+              indentNumber: row.indentNumber || 'N/A',
+              activity: row.type,
+              department: row.department,
+              productName: item.productName,
+              brand: item.brand || 'N/A',
+              requestedQuantity: item.requestedQuantity ?? item.quantity,
+              issuedQuantity: item.quantity,
+              unit: item.unit,
+              status: row.status,
+              issuedBy: row.issuedBy,
+              date: row.date,
+            });
+          }
+        } else {
+          flattened.push({
+            indentNumber: row.indentNumber || 'N/A',
+            activity: row.type,
+            department: row.department,
+            productName: row.productsSummary || 'N/A',
+            brand: 'N/A',
+            requestedQuantity: row.quantity || 0,
+            issuedQuantity: row.quantity || 0,
+            unit: 'N/A',
+            status: row.status,
+            issuedBy: row.issuedBy,
+            date: row.date,
+          });
+        }
+      }
+      exportRows = flattened;
     }
 
     const wb = XLSX.utils.book_new();
@@ -949,6 +1044,42 @@ export class ReportsService {
             dispatchedAt: s.dispatchedAt,
             receivedAt: s.receivedAt,
             createdAt: s.createdAt,
+          });
+        }
+      }
+      exportRows = flattened;
+    } else if (reportType === ReportType.PROJECT_CONSUMPTION) {
+      const flattened: Record<string, any>[] = [];
+      for (const row of rows) {
+        if (Array.isArray(row.items) && row.items.length > 0) {
+          for (const item of row.items) {
+            flattened.push({
+              indentNumber: row.indentNumber || 'N/A',
+              activity: row.type,
+              department: row.department,
+              productName: item.productName,
+              brand: item.brand || 'N/A',
+              requestedQuantity: item.requestedQuantity ?? item.quantity,
+              issuedQuantity: item.quantity,
+              unit: item.unit,
+              status: row.status,
+              issuedBy: row.issuedBy,
+              date: row.date,
+            });
+          }
+        } else {
+          flattened.push({
+            indentNumber: row.indentNumber || 'N/A',
+            activity: row.type,
+            department: row.department,
+            productName: row.productsSummary || 'N/A',
+            brand: 'N/A',
+            requestedQuantity: row.quantity || 0,
+            issuedQuantity: row.quantity || 0,
+            unit: 'N/A',
+            status: row.status,
+            issuedBy: row.issuedBy,
+            date: row.date,
           });
         }
       }

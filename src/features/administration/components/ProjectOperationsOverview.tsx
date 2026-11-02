@@ -64,7 +64,7 @@ type IndentGroupType = {
 
 type SubTab = "OVERVIEW" | "MANUFACTURING" | "STAFF" | "DEPARTMENTS" | "LEDGER";
 
-const getText = (row: ReportRow, key: string, fallback = "â€”") => {
+const getText = (row: ReportRow, key: string, fallback = "—") => {
   const value = row[key];
   return typeof value === "string" || typeof value === "number"
     ? String(value)
@@ -167,7 +167,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
   });
 
   if (overviewQuery.isLoading)
-    return <LoadingState message="Loading project operations overviewâ€¦" />;
+    return <LoadingState message="Loading project operations overview..." />;
   if (overviewQuery.error || !overviewQuery.data) {
     return (
       <ErrorState
@@ -354,7 +354,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
         description="Consolidated overview of project inventory balances, manufacturing runs, workforce, and clinical department activity."
         actions={
           <Link href="/admin/projects">
-            <Button variant="secondary">â† Back to Projects</Button>
+            <Button variant="secondary">←  Back to Projects</Button>
           </Link>
         }
       />
@@ -388,7 +388,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>ðŸ“Š Overview &amp; Balances</span>
+          <span>📊 Overview &amp; Balances</span>
         </button>
 
         <button
@@ -400,7 +400,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>âš™ï¸ Manufacturing Runs</span>
+          <span>⚙️  Manufacturing Runs</span>
           {production.length > 0 && (
             <span
               className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -423,7 +423,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>ðŸ‘¥ Staff &amp; Workforce</span>
+          <span>👥 Staff &amp; Workforce</span>
         </button>
 
         <button
@@ -435,7 +435,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>ðŸ¥ Clinical Departments</span>
+          <span>🏥 Clinical Departments</span>
           {departments.size > 0 && (
             <span
               className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -458,7 +458,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>ðŸ“œ Inventory Ledger</span>
+          <span>📜 Inventory Ledger</span>
           {manufacturingMovements.length > 0 && (
             <span
               className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -546,7 +546,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                     onClick={() => setShowBulkCatalogModal(true)}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
-                    âš¡ Bulk Add Project Products
+                    ⚡ Bulk Add Project Products
                   </Button>
                   <span className="text-xs text-slate-500">
                     {manufacturedProducts.length} products
@@ -587,7 +587,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                             <TableCell>
                               {product.category?.name ??
                                 product.categoryName ??
-                                "â€”"}
+                                "—"}
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -636,7 +636,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
             >
               <CardTitle>Project Inventory Balances</CardTitle>
               <CardDescription>
-                Authoritative posted balances currently located at this projectâ€™s facility.
+                Authoritative posted balances currently located at this project"™s facility.
               </CardDescription>
             </CardHeader>
 
@@ -810,7 +810,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                         <div className="p-3.5 bg-slate-50/90 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-2.5">
                           <div className="flex items-center gap-2.5">
                             <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                              ðŸ“‹ Indent #{group.indentNumber}
+                              Indent #{group.indentNumber}
                             </span>
                             <div>
                               <div className="flex items-center gap-2">
@@ -846,7 +846,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                               </Badge>
                             ) : (
                               <Badge variant="warning" size="sm">
-                                Partial ({group.totalProvided}/{group.totalRequested} Â· {group.fulfillmentRate}%)
+                                Partial ({group.totalProvided}/{group.totalRequested} · {group.fulfillmentRate}%)
                               </Badge>
                             )}
 
@@ -862,7 +862,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                                 }))
                               }
                             >
-                              {isExpanded ? "Hide items â–²" : "View items â–¼"}
+                              {isExpanded ? "Hide items ▲" : "View items ▼"}
                             </Button>
                           </div>
                         </div>
@@ -910,7 +910,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                                         )}
                                       </TableCell>
                                       <TableCell className="text-slate-400 text-[11px] truncate max-w-[160px]">
-                                        {item.notes || "â€”"}
+                                        {item.notes || "—"}
                                       </TableCell>
                                     </TableRow>
                                   );

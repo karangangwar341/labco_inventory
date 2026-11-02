@@ -519,6 +519,102 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
         }),
       );
     });
+
+    it('groups multiple product lines of the same indent slip into a single row and flattens for Excel export', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-pa', projectId: 'project-1' });
+      mockPrisma.departmentIssue.findMany.mockResolvedValue([
+        {
+          id: 'di-101',
+          indentNumber: '103',
+          quantity: new Prisma.Decimal(12),
+          requestedQuantity: new Prisma.Decimal(12),
+          baseQuantity: new Prisma.Decimal(12),
+          unitNameSnapshot: 'BOX',
+          status: 'POSTED',
+          notes: 'Line 1',
+          issuedAt: new Date('2026-11-02T10:00:00Z'),
+          createdAt: new Date('2026-11-02T10:00:00Z'),
+          department: { name: 'Molecular Rest' },
+          product: { name: 'PRODUCT102', brand: 'Brand A' },
+          issuedBy: { username: 'projectadmin' },
+        },
+        {
+          id: 'di-102',
+          indentNumber: '103',
+          quantity: new Prisma.Decimal(5),
+          requestedQuantity: new Prisma.Decimal(5),
+          baseQuantity: new Prisma.Decimal(5),
+          unitNameSnapshot: 'PACK',
+          status: 'POSTED',
+          notes: 'Line 2',
+          issuedAt: new Date('2026-11-02T10:00:00Z'),
+          createdAt: new Date('2026-11-02T10:00:00Z'),
+          department: { name: 'Molecular Rest' },
+          product: { name: 'Product101', brand: 'Brand B' },
+          issuedBy: { username: 'projectadmin' },
+        },
+        {
+          id: 'di-103',
+          indentNumber: '103',
+          quantity: new Prisma.Decimal(2),
+          requestedQuantity: new Prisma.Decimal(2),
+          baseQuantity: new Prisma.Decimal(2),
+          unitNameSnapshot: 'KIT',
+          status: 'POSTED',
+          notes: 'Line 3',
+          issuedAt: new Date('2026-11-02T10:00:00Z'),
+          createdAt: new Date('2026-11-02T10:00:00Z'),
+          department: { name: 'Molecular Rest' },
+          product: { name: 'Labco Multi-Analyte Chemistry Analyzer Kit 500T', brand: 'Labco' },
+          issuedBy: { username: 'projectadmin' },
+        },
+      ]);
+      mockPrisma.departmentReturn.findMany.mockResolvedValue([]);
+
+      // 1. JSON Report: Must return 1 row for Indent 103 with 3 items
+      const jsonResult = await reportsService.generateReport(
+        ReportType.PROJECT_CONSUMPTION,
+        { format: ReportFormat.JSON },
+        projectAdminUser,
+      );
+
+      expect(jsonResult.data!.length).toBe(1);
+      const row = jsonResult.data![0];
+      expect(row.indentNumber).toBe('103');
+      expect(row.department).toBe('Molecular Rest');
+      expect(row.totalItemsCount).toBe(3);
+      expect(row.quantity).toBe(19); // 12 + 5 + 2
+      expect(row.items.length).toBe(3);
+      expect(row.productsSummary).toContain('PRODUCT102');
+      expect(row.productsSummary).toContain('Product101');
+      expect(row.productsSummary).toContain('Labco Multi-Analyte Chemistry Analyzer Kit 500T');
+
+      // 2. Excel Report: Must flatten to 3 product lines with all details
+      const excelResult = await reportsService.generateReport(
+        ReportType.PROJECT_CONSUMPTION,
+        { format: ReportFormat.XLSX },
+        projectAdminUser,
+      );
+
+      expect(excelResult.buffer).toBeInstanceOf(Buffer);
+      const workbook = XLSX.read(excelResult.buffer, { type: 'buffer' });
+      const sheet = workbook.Sheets['Report Data'];
+      const sheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+
+      // Find the headers row (Row with 'indentNumber')
+      const headerRowIdx = sheetRows.findIndex((r) => Array.isArray(r) && r.includes('indentNumber'));
+      expect(headerRowIdx).toBeGreaterThanOrEqual(0);
+
+      // Data rows below the header
+      const dataRows = sheetRows.slice(headerRowIdx + 1).filter((r) => r.length > 0 && r[0]);
+      expect(dataRows.length).toBe(3);
+      expect(String(dataRows[0][0])).toBe('103');
+      expect(dataRows[0]).toEqual(expect.arrayContaining(['DEPARTMENT_ISSUE', 'Molecular Rest', 'PRODUCT102']));
+      expect(String(dataRows[1][0])).toBe('103');
+      expect(dataRows[1]).toEqual(expect.arrayContaining(['DEPARTMENT_ISSUE', 'Molecular Rest', 'Product101']));
+      expect(String(dataRows[2][0])).toBe('103');
+      expect(dataRows[2]).toEqual(expect.arrayContaining(['DEPARTMENT_ISSUE', 'Molecular Rest', 'Labco Multi-Analyte Chemistry Analyzer Kit 500T']));
+    });
   });
 
   describe('11. Shipments Report Product Breakdown & Complete Excel Export', () => {

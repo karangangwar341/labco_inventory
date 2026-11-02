@@ -40,7 +40,7 @@ const LABELS: Record<string, string> = {
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
   shipmentType: 'Shipment type', sourceLocation: 'Source location',
   destinationLocation: 'Destination location', trackingNumber: 'Tracking #', productsSummary: 'Included Products', issuedBy: 'Issued by', dispatchedQuantity: 'Dispatched qty',
-  dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at',
+  dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at', totalItemsCount: 'Items',
   missingQuantity: 'Missing quantity', shipmentCount: 'Shipments',
 };
 
@@ -49,7 +49,7 @@ const NUMERIC_COLUMNS = new Set([
   'minThreshold', 'originalQuantity',
   'baseDelta', 'quantity', 'baseQuantity', 'plannedOutput',
   'actualOutput', 'wastage', 'totalInputsCount', 'totalOutputsCount', 'dispatchedQuantity',
-  'missingQuantity', 'shipmentCount',
+  'missingQuantity', 'shipmentCount', 'totalItemsCount',
 ]);
 
 const MONO_COLUMNS = new Set([
@@ -66,6 +66,18 @@ function formatCellValue(
     return (
       <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
         📦 {String(value)}
+      </span>
+    );
+  }
+
+  if (column === 'indentNumber') {
+    const num = String(value);
+    if (!num || num === 'N/A' || num === 'null') {
+      return <span className="font-mono text-xs text-slate-400">—</span>;
+    }
+    return (
+      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+        #{num.replace(/^IND-/, '')}
       </span>
     );
   }
@@ -714,35 +726,72 @@ export function ReportsView() {
           )}
         </CardContent>
       </Card>
-          {/* Shipment Items Modal */}
+          {/* Shipment / Indent Slip Items Modal */}
       {selectedShipment && (
         <Modal
           isOpen={Boolean(selectedShipment)}
           onClose={() => setSelectedShipment(null)}
-          title={`Shipment Details: ${selectedShipment.trackingNumber || 'Products Breakdown'}`}
-          description={`${selectedShipment.sourceLocation || 'Origin'} → ${selectedShipment.destinationLocation || 'Destination'} • Status: ${selectedShipment.status}`}
+          title={
+            selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A'
+              ? `Indent Slip Details: Indent #${String(selectedShipment.indentNumber).replace(/^IND-/, '')}`
+              : `Shipment Details: ${selectedShipment.trackingNumber || 'Products Breakdown'}`
+          }
+          description={
+            selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A'
+              ? `Department: ${selectedShipment.department || 'General'} • Activity: ${selectedShipment.type || 'Department Issue'} • Recorded by: ${selectedShipment.issuedBy || 'Project Admin'}`
+              : `${selectedShipment.sourceLocation || 'Origin'} → ${selectedShipment.destinationLocation || 'Destination'} • Status: ${selectedShipment.status}`
+          }
           maxWidth="2xl"
         >
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-              <div>
-                <span className="text-slate-500">Tracking #: </span>
-                <span className="font-mono font-bold text-slate-800">{selectedShipment.trackingNumber}</span>
-              </div>
-              <div>
-                <span className="text-slate-500">Dispatched: </span>
-                <span className="font-mono text-slate-700">{selectedShipment.dispatchedAt || 'Pending'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500">Received: </span>
-                <span className="font-mono text-slate-700">{selectedShipment.receivedAt || 'Pending'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500">Status: </span>
-                <Badge variant={String(selectedShipment.status).includes('COMPLETED') ? 'success' : 'warning'} size="sm">
-                  {selectedShipment.status}
-                </Badge>
-              </div>
+              {selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A' ? (
+                <>
+                  <div>
+                    <span className="text-slate-500">Indent Slip #: </span>
+                    <span className="font-mono font-bold text-slate-800">#{String(selectedShipment.indentNumber).replace(/^IND-/, '')}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Department: </span>
+                    <span className="font-semibold text-slate-800">{selectedShipment.department}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Recorded By: </span>
+                    <span className="font-mono text-slate-700">{selectedShipment.issuedBy || 'Project Admin'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Date: </span>
+                    <span className="font-mono text-slate-700">{selectedShipment.date || 'Today'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Status: </span>
+                    <Badge variant={String(selectedShipment.status).includes('APPROVED') || String(selectedShipment.status).includes('POSTED') ? 'success' : 'warning'} size="sm">
+                      {selectedShipment.status}
+                    </Badge>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-slate-500">Tracking #: </span>
+                    <span className="font-mono font-bold text-slate-800">{selectedShipment.trackingNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Dispatched: </span>
+                    <span className="font-mono text-slate-700">{selectedShipment.dispatchedAt || 'Pending'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Received: </span>
+                    <span className="font-mono text-slate-700">{selectedShipment.receivedAt || 'Pending'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Status: </span>
+                    <Badge variant={String(selectedShipment.status).includes('COMPLETED') ? 'success' : 'warning'} size="sm">
+                      {selectedShipment.status}
+                    </Badge>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -752,9 +801,18 @@ export function ReportsView() {
                     <th className="py-2.5 px-3">#</th>
                     <th className="py-2.5 px-3">Product Name</th>
                     <th className="py-2.5 px-3">Brand</th>
-                    <th className="py-2.5 px-3 text-right">Dispatched</th>
-                    <th className="py-2.5 px-3 text-right">Received</th>
-                    <th className="py-2.5 px-3 text-right">Discrepancy</th>
+                    {selectedShipment.indentNumber ? (
+                      <>
+                        <th className="py-2.5 px-3 text-right">Requested Qty</th>
+                        <th className="py-2.5 px-3 text-right">Supplied Qty</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="py-2.5 px-3 text-right">Dispatched</th>
+                        <th className="py-2.5 px-3 text-right">Received</th>
+                        <th className="py-2.5 px-3 text-right">Discrepancy</th>
+                      </>
+                    )}
                     <th className="py-2.5 px-3">Unit</th>
                     <th className="py-2.5 px-3">Condition</th>
                   </tr>
@@ -765,21 +823,34 @@ export function ReportsView() {
                       <td className="py-2 px-3 font-mono text-slate-400">{idx + 1}</td>
                       <td className="py-2 px-3 font-medium text-slate-900">{item.productName}</td>
                       <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{item.brand || '—'}</td>
-                      <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800">
-                        {item.dispatchedQuantity?.toLocaleString() ?? '—'}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
-                        {item.receivedQuantity !== null && item.receivedQuantity !== undefined
-                          ? item.receivedQuantity.toLocaleString()
-                          : <span className="text-slate-400 font-normal">Pending</span>}
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-semibold">
-                        {item.discrepancyQuantity > 0 ? (
-                          <span className="text-rose-600 font-bold">-{item.discrepancyQuantity}</span>
-                        ) : (
-                          <span className="text-slate-400 font-normal">0</span>
-                        )}
-                      </td>
+                      {selectedShipment.indentNumber ? (
+                        <>
+                          <td className="py-2 px-3 text-right font-mono text-slate-600">
+                            {item.requestedQuantity?.toLocaleString() ?? item.quantity?.toLocaleString() ?? '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
+                            {item.quantity?.toLocaleString() ?? '—'}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800">
+                            {item.dispatchedQuantity?.toLocaleString() ?? '—'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
+                            {item.receivedQuantity !== null && item.receivedQuantity !== undefined
+                              ? item.receivedQuantity.toLocaleString()
+                              : <span className="text-slate-400 font-normal">Pending</span>}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-semibold">
+                            {item.discrepancyQuantity > 0 ? (
+                              <span className="text-rose-600 font-bold">-{item.discrepancyQuantity}</span>
+                            ) : (
+                              <span className="text-slate-400 font-normal">0</span>
+                            )}
+                          </td>
+                        </>
+                      )}
                       <td className="py-2 px-3 text-slate-600">{item.unit}</td>
                       <td className="py-2 px-3">
                         <Badge variant="neutral" size="sm">{item.condition || 'USABLE'}</Badge>
