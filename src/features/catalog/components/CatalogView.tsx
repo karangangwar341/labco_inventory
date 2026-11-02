@@ -404,8 +404,8 @@ export function CatalogView() {
       {
         id: 'name',
         header: 'Product & SKU',
-        width: '32%',
-        minWidth: '200px',
+        width: role === 'PROJECT_ADMIN' ? '30%' : '23%',
+        minWidth: '180px',
         valign: 'top',
         cell: (product) => (
           <div className="space-y-1">
@@ -430,8 +430,8 @@ export function CatalogView() {
       {
         id: 'kind',
         header: 'Kind',
-        width: '13%',
-        minWidth: '110px',
+        width: '10%',
+        minWidth: '95px',
         valign: 'top',
         cell: (product) => (
           <Badge variant={product.kind === 'MANUFACTURED_PRODUCT' ? 'purple' : 'neutral'} size="sm">
@@ -442,8 +442,8 @@ export function CatalogView() {
       {
         id: 'category',
         header: 'Category / Hierarchy',
-        width: role === 'PROJECT_ADMIN' ? '24%' : '18%',
-        minWidth: '140px',
+        width: role === 'PROJECT_ADMIN' ? '21%' : '15%',
+        minWidth: '130px',
         valign: 'top',
         cell: (product) => {
           const category = categoryById.get(product.categoryId);
@@ -462,8 +462,8 @@ export function CatalogView() {
       cols.push({
         id: 'brand',
         header: 'Brand / Maker',
-        width: '14%',
-        minWidth: '110px',
+        width: '12%',
+        minWidth: '100px',
         valign: 'top',
         cell: (product) =>
           product.brand ? (
@@ -481,7 +481,7 @@ export function CatalogView() {
         id: 'units',
         header: 'Active Units',
         width: '9%',
-        minWidth: '90px',
+        minWidth: '85px',
         valign: 'top',
         cell: (product) => {
           const activeUnits = product.units?.filter((u) => u.status !== 'SUPERSEDED') || [];
@@ -505,8 +505,8 @@ export function CatalogView() {
       {
         id: 'availableStock',
         header: 'Available Stock',
-        width: '12%',
-        minWidth: '110px',
+        width: '11%',
+        minWidth: '105px',
         valign: 'top',
         cell: (product) => {
           const stock = stockByProductId.get(product.id);
@@ -540,8 +540,8 @@ export function CatalogView() {
       {
         id: 'actions',
         header: 'Actions',
-        width: '8%',
-        minWidth: '90px',
+        width: '20%',
+        minWidth: '210px',
         align: 'right',
         valign: 'top',
         cell: (product) => {
@@ -937,7 +937,7 @@ export function CatalogView() {
             keyExtractor={(product) => product.id}
             isLoading={isLoading}
             loadingMessage="Loading catalog inventory..."
-            minWidth="min-w-[920px]"
+            minWidth="min-w-[1020px]"
             emptyState={{
               title: products.length ? 'No matching products' : 'Catalog is empty',
               description: products.length
