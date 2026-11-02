@@ -123,7 +123,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       ],
     };
 
-    it('limits Store Admin catalog results to approved company raw materials present in their warehouse', async () => {
+    it('limits Store Admin catalog results to approved company raw materials', async () => {
       const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN, warehouseId: 'wh-test' };
       mockPrisma.product.findMany.mockResolvedValue([]);
 
@@ -134,27 +134,21 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
           ownerScope: CatalogScope.COMPANY,
           kind: ProductKind.RAW_MATERIAL,
           status: ProductStatus.APPROVED,
-          balances: {
-            some: {
-              location: { warehouseId: 'wh-test' },
-            },
-          },
         }),
       }));
     });
 
-    it('blocks Store Admin from viewing product not present in their warehouse', async () => {
+    it('blocks Store Admin from viewing project product', async () => {
       const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN, warehouseId: 'wh-test' };
       mockPrisma.product.findUnique.mockResolvedValue({
-        id: 'p-other',
-        name: 'Other Warehouse Product',
+        id: 'p-proj',
+        name: 'Project Product',
         kind: ProductKind.RAW_MATERIAL,
-        ownerScope: CatalogScope.COMPANY,
+        ownerScope: CatalogScope.PROJECT,
       });
-      mockPrisma.inventoryBalance.findFirst.mockResolvedValue(null);
 
-      await expect(productsService.findById('p-other', storeAdmin)).rejects.toThrow(
-        'Store Admin cannot view products of other warehouses',
+      await expect(productsService.findById('p-proj', storeAdmin)).rejects.toThrow(
+        'Store Admins can only access company raw materials',
       );
     });
 

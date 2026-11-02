@@ -55,7 +55,13 @@ export function CreateRequestForm() {
   const { user } = useAuth();
   const userId = user?.id;
   const projectId = user?.projectId;
-  const [direction, setDirection] = useState<Direction>(() => (user?.role === 'PROJECT_ADMIN' ? 'STOCK_IN' : 'STOCK_OUT'));
+  const [direction, setDirection] = useState<Direction>(() => {
+    if (typeof window !== 'undefined') {
+      const param = new URLSearchParams(window.location.search).get('type');
+      if (isStockInType(param)) return param;
+    }
+    return 'STOCK_IN';
+  });
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [stockedProductIds, setStockedProductIds] = useState<Set<string>>(new Set());
@@ -188,7 +194,25 @@ export function CreateRequestForm() {
       setCategories(categoryData as CategoryDto[]);
       setLocations(locationData);
 
-      const editId = new URLSearchParams(window.location.search).get('edit');
+      const searchParamsObj = new URLSearchParams(window.location.search);
+      const preselectedProductId = searchParamsObj.get('productId');
+      if (preselectedProductId) {
+        const prod = approvedProducts.find((p) => p.id === preselectedProductId) || productData.find((p) => p.id === preselectedProductId);
+        if (prod) {
+          const category = (categoryData as CategoryDto[]).find((c) => c.id === prod.categoryId);
+          const baseUnit = prod.units?.find((u) => u.isBaseUnit)?.id || prod.units?.[0]?.id || '';
+          setLines([{
+            categoryId: category?.parentId || category?.id || '',
+            subcategoryId: category?.parentId ? category.id : '',
+            productId: prod.id,
+            unitId: baseUnit,
+            quantity: '',
+            condition: 'USABLE',
+          }]);
+        }
+      }
+
+      const editId = searchParamsObj.get('edit');
       if (editId) {
         const draft = await requestsService.getRequestById(editId);
         if (draft.status !== 'DRAFT') {
@@ -510,6 +534,25 @@ export function CreateRequestForm() {
               </Link>
             </div>
           )}
+        </div>
+      )}
+
+      {direction === 'STOCK_OUT' && selectableProducts.length === 0 && products.length > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">📦</span>
+            <div>
+              <span className="font-semibold block text-amber-950">No items are currently stocked at this facility</span>
+              <span className="text-amber-800">You must receive new items into the warehouse before dispatching or stocking out.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDirection('STOCK_IN')}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs self-start sm:self-auto shrink-0 shadow-2xs transition-colors"
+          >
+            📥 Switch to Stock In
+          </button>
         </div>
       )}
 

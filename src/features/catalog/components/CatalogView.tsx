@@ -555,6 +555,13 @@ export function CatalogView() {
               >
                 Inspect
               </Button>
+              {product.status === 'APPROVED' && (
+                <Link href={`/requests/new?type=STOCK_IN&productId=${product.id}`}>
+                  <Button variant="secondary" size="sm" className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300">
+                    📥 Stock
+                  </Button>
+                </Link>
+              )}
               {canEdit(product) && product.status === 'APPROVED' && !pendingVersion && (
                 <Link href={`/catalog/${product.id}/edit`}>
                   <Button variant="secondary" size="sm">
@@ -1430,15 +1437,24 @@ export function CatalogView() {
                 Close
               </Button>
 
-              {canEdit(selectedProduct) &&
-                selectedProduct.status === 'APPROVED' &&
-                !selectedProduct.versions?.some((v) => v.status === 'PENDING_APPROVAL') && (
-                  <Link href={`/catalog/${selectedProduct.id}/edit`}>
-                    <Button variant="primary" size="sm">
-                      Edit Specifications
+              <div className="flex items-center gap-2">
+                {selectedProduct.status === 'APPROVED' && (
+                  <Link href={`/requests/new?type=STOCK_IN&productId=${selectedProduct.id}`}>
+                    <Button variant="secondary" size="sm" className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300">
+                      📥 Stock in Facility
                     </Button>
                   </Link>
                 )}
+                {canEdit(selectedProduct) &&
+                  selectedProduct.status === 'APPROVED' &&
+                  !selectedProduct.versions?.some((v) => v.status === 'PENDING_APPROVAL') && (
+                    <Link href={`/catalog/${selectedProduct.id}/edit`}>
+                      <Button variant="primary" size="sm">
+                        Edit Specifications
+                      </Button>
+                    </Link>
+                  )}
+              </div>
             </div>
           </div>
         )}

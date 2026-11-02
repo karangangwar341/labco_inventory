@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateBulkProjectsDto } from './dto/create-bulk-projects.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { UserRole, OrganizationStatus } from '@prisma/client';
+import { UserRole, OrganizationStatus, LocationType } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
@@ -26,12 +26,22 @@ export class ProjectsService {
       throw new ConflictException(`Project with name "${normalizedName}" already exists`);
     }
 
-    return this.prisma.project.create({
+    const project = await this.prisma.project.create({
       data: {
         name: normalizedName,
         status: OrganizationStatus.ACTIVE,
       },
     });
+
+    if (this.prisma.stockLocation?.upsert) {
+      await this.prisma.stockLocation.upsert({
+        where: { projectId: project.id },
+        create: { locationType: LocationType.PROJECT, projectId: project.id },
+        update: {},
+      });
+    }
+
+    return project;
   }
 
 
@@ -63,6 +73,14 @@ export class ProjectsService {
             status: OrganizationStatus.ACTIVE,
           },
         });
+
+        if (tx.stockLocation?.upsert) {
+          await tx.stockLocation.upsert({
+            where: { projectId: project.id },
+            create: { locationType: LocationType.PROJECT, projectId: project.id },
+            update: {},
+          });
+        }
 
         if (item.warehouseIds?.length) {
           for (const whId of item.warehouseIds) {

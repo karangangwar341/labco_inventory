@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
-import { UserRole, OrganizationStatus, UserStatus } from '@prisma/client';
+import { UserRole, OrganizationStatus, UserStatus, LocationType } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class WarehousesService {
       await this.validateStoreAdmin(dto.storeAdminId);
     }
 
-    return this.prisma.warehouse.create({
+    const warehouse = await this.prisma.warehouse.create({
       data: {
         name: normalizedName,
         locationDescription: dto.locationDescription?.trim() || null,
@@ -55,6 +55,16 @@ export class WarehousesService {
         storeAdmin: { select: { id: true, username: true, status: true } },
       },
     });
+
+    if (this.prisma.stockLocation?.upsert) {
+      await this.prisma.stockLocation.upsert({
+        where: { warehouseId: warehouse.id },
+        create: { locationType: LocationType.WAREHOUSE, warehouseId: warehouse.id },
+        update: {},
+      });
+    }
+
+    return warehouse;
   }
 
   async findAll(currentUser: AuthenticatedUser) {
