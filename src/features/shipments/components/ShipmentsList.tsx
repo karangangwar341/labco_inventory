@@ -394,7 +394,7 @@ export function ShipmentsList() {
       width: '10%',
       minWidth: '100px',
       cell: (s) => (
-        <span className="text-[#5b6678] font-mono text-[11px]">
+        <span className="text-[#5b6678] font-mono text-[11px] whitespace-nowrap">
           {s.dispatchedAt ? new Date(s.dispatchedAt).toLocaleDateString() : '—'}
         </span>
       ),

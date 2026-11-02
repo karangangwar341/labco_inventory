@@ -425,9 +425,9 @@ export class ManufacturingService {
           'You can only delete your own production drafts',
         );
       }
-      if (run.status !== ProductionStatus.DRAFT) {
+      if (run.status === ProductionStatus.APPROVED || run.status === ProductionStatus.POSTED) {
         throw new ConflictException(
-          'Only production runs in Draft can be deleted',
+          'Finalized production runs that have already updated stock cannot be deleted. You can disable or archive the formula cycle.',
         );
       }
 
@@ -1127,6 +1127,13 @@ export class ManufacturingService {
       );
     };
 
+    const disabledSetting = await this.prisma.systemSetting.findUnique({
+      where: { key: `disabled_cycles_${projectId || 'global'}` },
+    }).catch(() => null);
+    const disabledKeys = new Set<string>(
+      Array.isArray(disabledSetting?.valueJson) ? (disabledSetting!.valueJson as string[]) : [],
+    );
+
     const cyclesMap = new Map<string, any>();
 
     for (const run of runs) {
@@ -1161,6 +1168,7 @@ export class ManufacturingService {
             sku: null,
             quantity: Number(inp.quantity),
             baseQuantity: reqQty,
+            unitId: inp.unitId,
             unitName: inp.unit?.unitName || inp.unitNameSnapshot,
             currentAvailableStock: availRaw,
             isStockSufficient: isAvailable,
@@ -1175,6 +1183,7 @@ export class ManufacturingService {
           outputProductId: outputProduct?.id || null,
           outputProductName: outputProduct?.name || 'Finished Product',
           outputProductSku: null,
+          outputUnitId: output?.unitId || null,
           latestRunId: run.id,
           latestRunNumber: `RUN-${run.id.substring(0, 8).toUpperCase()}`,
           totalExecutions: 1,
@@ -1189,6 +1198,7 @@ export class ManufacturingService {
           plannedOutput: run.plannedOutput ? run.plannedOutput.toNumber() : 1,
           unitName: output?.unit?.unitName || output?.unitNameSnapshot || 'Units',
           recipeInputs,
+          isDisabled: disabledKeys.has(key),
         });
       } else {
         const existing = cyclesMap.get(key);
@@ -1550,5 +1560,50 @@ export class ManufacturingService {
       cycles: lowStockCycles,
     };
   }
-}
+  /**
+   * Enable or disable a production cycle formula.
+   * Persists in system settings so disabled formulas are hidden from active runs.
+   */
+  async toggleCycleStatus(
+    user: AuthenticatedUser,
+    cycleKey: string,
+    disabled?: boolean,
+  ) {
+    if (user.role !== UserRole.PROJECT_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Project Admins or Super Admin can manage production cycles');
+    }
+    let projectId: string | undefined;
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+      projectId = dbUser?.projectId || undefined;
+    }
 
+    const settingKey = `disabled_cycles_${projectId || 'global'}`;
+    const existing = await this.prisma.systemSetting.findUnique({ where: { key: settingKey } }).catch(() => null);
+    const currentList: string[] = Array.isArray(existing?.valueJson)
+      ? (existing!.valueJson as string[])
+      : [];
+
+    const isCurrentlyDisabled = currentList.includes(cycleKey);
+    const shouldDisable = disabled !== undefined ? disabled : !isCurrentlyDisabled;
+
+    let updatedList: string[];
+    if (shouldDisable) {
+      updatedList = isCurrentlyDisabled ? currentList : [...currentList, cycleKey];
+    } else {
+      updatedList = currentList.filter((k) => k !== cycleKey);
+    }
+
+    await this.prisma.systemSetting.upsert({
+      where: { key: settingKey },
+      update: { valueJson: updatedList, updatedById: user.id },
+      create: { key: settingKey, valueJson: updatedList, updatedById: user.id },
+    });
+
+    return { cycleKey, isDisabled: shouldDisable, success: true };
+  }
+
+  async deleteProductionCycle(user: AuthenticatedUser, cycleKey: string) {
+    return this.toggleCycleStatus(user, cycleKey, true);
+  }
+}

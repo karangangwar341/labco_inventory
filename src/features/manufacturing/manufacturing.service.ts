@@ -26,6 +26,19 @@ export const manufacturingService = {
     return apiClient.get<ProductionCycle[]>(endpoints.manufacturing.cycles(params));
   },
 
+  toggleCycleStatus: async (
+    cycleKey: string,
+    disabled?: boolean,
+  ): Promise<{ cycleKey: string; isDisabled: boolean; success: boolean }> => {
+    return apiClient.post('/production-runs/cycles', { cycleKey, disabled });
+  },
+
+  deleteCycle: async (
+    cycleKey: string,
+  ): Promise<{ cycleKey: string; isDisabled: boolean; success: boolean }> => {
+    return apiClient.delete(`/production-runs/cycles?cycleKey=${encodeURIComponent(cycleKey)}`);
+  },
+
   reRunCycle: async (
     id: string,
     payload?: ReRunCyclePayload,

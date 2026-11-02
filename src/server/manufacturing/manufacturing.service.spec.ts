@@ -106,6 +106,10 @@ describe('Manufacturing Service (T-010: Project Manufacturing Linked & Separate 
       auditEvent: {
         create: vi.fn(),
       },
+      systemSetting: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        upsert: vi.fn().mockResolvedValue({}),
+      },
     };
 
     mockLedgerService = {
@@ -581,6 +585,101 @@ describe('Manufacturing Service (T-010: Project Manufacturing Linked & Separate 
       expect(analytics.executionHistory[0].yieldEfficiency).toBe(95);
       expect(analytics.materialConsumption).toHaveLength(1);
       expect(analytics.materialConsumption[0].productName).toBe('Chemical Reagent A');
+    });
+  });
+  describe('5. Cycle Disabling, Archival, and Run Deletion Invariants', () => {
+    it('disables and enables a production cycle formula via toggleCycleStatus', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      // Disable cycle
+      const res = await manufacturingService.toggleCycleStatus(
+        projectAdminUser,
+        'project-123_prod-finished',
+        true,
+      );
+
+      expect(res.isDisabled).toBe(true);
+      expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { key: 'disabled_cycles_project-123' },
+          create: expect.objectContaining({
+            valueJson: ['project-123_prod-finished'],
+          }),
+        }),
+      );
+
+      // Re-enable cycle
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({
+        valueJson: ['project-123_prod-finished'],
+      });
+      const reEnabled = await manufacturingService.toggleCycleStatus(
+        projectAdminUser,
+        'project-123_prod-finished',
+        false,
+      );
+      expect(reEnabled.isDisabled).toBe(false);
+    });
+
+    it('getProductionCycles marks cycle as isDisabled when present in disabled_cycles', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({
+        valueJson: ['project-123_prod-finished'],
+      });
+
+      mockPrisma.productionRun.findMany.mockResolvedValue([
+        {
+          id: 'run-1',
+          projectId: 'project-123',
+          status: 'APPROVED',
+          productionReference: 'Assay Kit Cycle',
+          plannedOutput: new Prisma.Decimal(10),
+          createdAt: new Date(),
+          project: { id: 'project-123', name: 'Labco Project' },
+          inputs: [],
+          outputs: [
+            {
+              productId: 'prod-finished',
+              product: { id: 'prod-finished', name: 'Diagnostic Assay Kit', minQuantity: 5 },
+            },
+          ],
+        },
+      ]);
+
+      const cycles = await manufacturingService.getProductionCycles(projectAdminUser);
+      expect(cycles.length).toBe(1);
+      expect(cycles[0].isDisabled).toBe(true);
+    });
+
+    it('rejects deletion of finalized (APPROVED or POSTED) production runs', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
+      mockPrisma.productionRun.findUnique.mockResolvedValue({
+        id: 'run-finalized',
+        projectId: 'project-123',
+        submittedById: 'ca-1',
+        status: ProductionStatus.APPROVED,
+      });
+
+      await expect(
+        manufacturingService.deleteProductionRun(projectAdminUser, 'run-finalized'),
+      ).rejects.toThrow('Finalized production runs that have already updated stock cannot be deleted');
+    });
+
+    it('allows deleting unapproved (DRAFT or PENDING_APPROVAL) production runs', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'ca-1', projectId: 'project-123' });
+      mockPrisma.productionRun.findUnique.mockResolvedValue({
+        id: 'run-pending',
+        projectId: 'project-123',
+        submittedById: 'ca-1',
+        status: ProductionStatus.PENDING_APPROVAL,
+      });
+      mockPrisma.productionRun.delete = vi.fn().mockResolvedValue({});
+
+      const result = await manufacturingService.deleteProductionRun(projectAdminUser, 'run-pending');
+      expect(result.success).toBe(true);
+      expect(mockPrisma.productionRun.delete).toHaveBeenCalledWith({
+        where: { id: 'run-pending' },
+      });
     });
   });
 });

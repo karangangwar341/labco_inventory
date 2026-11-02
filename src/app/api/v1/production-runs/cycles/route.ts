@@ -19,3 +19,33 @@ export async function GET(req: Request) {
     return handleApiError(error);
   }
 }
+
+export async function POST(req: Request) {
+  try {
+    const user = await authenticateUser(req);
+    const body = await req.json().catch(() => ({}));
+    const { cycleKey, disabled } = body;
+    if (!cycleKey) {
+      return NextResponse.json({ error: 'cycleKey is required' }, { status: 400 });
+    }
+    const data = await container.manufacturingService.toggleCycleStatus(user, cycleKey, disabled);
+    return NextResponse.json(data);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const user = await authenticateUser(req);
+    const { searchParams } = new URL(req.url);
+    const cycleKey = searchParams.get('cycleKey');
+    if (!cycleKey) {
+      return NextResponse.json({ error: 'cycleKey is required' }, { status: 400 });
+    }
+    const data = await container.manufacturingService.deleteProductionCycle(user, cycleKey);
+    return NextResponse.json(data);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

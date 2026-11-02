@@ -25,6 +25,9 @@ interface CyclesGridViewProps {
   onNewRun: () => void;
   onScanLowStock?: () => void;
   isScanning?: boolean;
+  onEditCycle?: (cycle: ProductionCycle) => void;
+  onToggleCycleStatus?: (cycleKey: string, disabled: boolean) => Promise<void>;
+  onDeleteCycle?: (cycleKey: string) => Promise<void>;
 }
 
 interface RowConfig {
@@ -41,8 +44,11 @@ export function CyclesGridView({
   onNewRun,
   onScanLowStock,
   isScanning = false,
+  onEditCycle,
+  onToggleCycleStatus,
+  onDeleteCycle,
 }: CyclesGridViewProps) {
-  const [filter, setFilter] = useState<"ALL" | "LOW_STOCK" | "HEALTHY">("ALL");
+  const [filter, setFilter] = useState<"ACTIVE" | "ALL" | "LOW_STOCK" | "HEALTHY" | "DISABLED">("ACTIVE");
   const [search, setSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<"TABLE" | "CARDS">("TABLE");
 

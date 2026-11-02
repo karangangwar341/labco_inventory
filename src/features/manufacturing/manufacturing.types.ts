@@ -16,6 +16,7 @@ export interface CycleRecipeInput {
   sku?: string | null;
   quantity: number;
   baseQuantity: number;
+  unitId?: string;
   unitName: string;
   currentAvailableStock: number;
   isStockSufficient: boolean;
@@ -29,6 +30,8 @@ export interface ProductionCycle {
   outputProductId: string | null;
   outputProductName: string;
   outputProductSku: string | null;
+  outputUnitId?: string | null;
+  isDisabled?: boolean;
   latestRunId: string;
   latestRunNumber: string;
   totalExecutions: number;
