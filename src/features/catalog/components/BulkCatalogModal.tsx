@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { catalogService } from '../catalog.service';
+import { inventoryService } from '@/features/inventory/inventory.service';
 import { administrationService } from '@/features/administration/administration.service';
 import { queryKeys } from '@/lib/query/query-keys';
 import { invalidation } from '@/lib/query/invalidation';
@@ -30,6 +31,9 @@ interface ParsedProductRow {
   kind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
   minQuantity?: number;
   description?: string;
+  facilityName?: string;
+  initialStockQuantity?: number;
+  initialStocks?: Array<{ facilityName: string; quantity: number }>;
 }
 
 export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCatalogModalProps) {
@@ -73,6 +77,15 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
     enabled: isSuperAdmin && isOpen,
   });
 
+  // Load Stock Locations (Warehouses and Projects)
+  const { data: locations = [] } = useQuery({
+    queryKey: queryKeys.inventory.locations(user?.id),
+    queryFn: inventoryService.getLocations,
+    enabled: isOpen,
+  });
+
+  const [defaultFacilityId, setDefaultFacilityId] = useState<string>('');
+
   // Set default project if needed
   React.useEffect(() => {
     if (initialProjectId) {
@@ -88,8 +101,12 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
     mutationFn: catalogService.createBulkProducts,
     onSuccess: async (res) => {
       await invalidation.afterCatalogMutation(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      const stockMsg = res.totalStocked && res.totalStocked > 0
+        ? ` and ${res.totalStocked} initial stock balances posted (${res.totalUnitsStocked?.toLocaleString() ?? 0} units total across facilities)`
+        : '';
       setStatusMessage(
-        `Bulk creation successful! ${res.totalCreated} products registered into database. ${
+        `Bulk creation successful! ${res.totalCreated} products registered into catalog${stockMsg}. ${
           res.totalSkipped > 0 ? `(${res.totalSkipped} duplicates skipped)` : ''
         }`
       );
@@ -149,6 +166,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
         kind: cols[5]?.toUpperCase() === 'MANUFACTURED_PRODUCT' ? 'MANUFACTURED_PRODUCT' : 'RAW_MATERIAL',
         minQuantity: cols[6] ? Number(cols[6]) : 0,
         description: cols[7] || undefined,
+        facilityName: cols[8] || undefined,
+        initialStockQuantity: cols[9] ? Number(cols[9]) : undefined,
       });
     });
 
@@ -190,6 +209,17 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
         const kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT' = kindRaw === 'MANUFACTURED_PRODUCT' ? 'MANUFACTURED_PRODUCT' : 'RAW_MATERIAL';
         const minQuantity = r.minQuantity || r.minQty || r.minStock || 0;
         const description = (r.description || r.Description || '').toString().trim();
+        const facilityName = (r.warehouse || r.warehouseName || r.Warehouse || r.facility || r.facilityName || r.location || '').toString().trim();
+        const initialStockQuantity = Number(r.initialStock || r.openingStock || r.initialStockQuantity || r.stockQuantity || r.stock || r.quantity || r.qty || 0) || 0;
+
+        // Check for dynamic columns matching available facilities (e.g. column 'Kursi Road Factory': 100)
+        const dynamicStocks: Array<{ facilityName: string; quantity: number }> = [];
+        locations.forEach((loc) => {
+          const locKey = Object.keys(r).find((k) => k.trim().toLowerCase() === loc.name.trim().toLowerCase());
+          if (locKey && Number(r[locKey]) > 0) {
+            dynamicStocks.push({ facilityName: loc.name, quantity: Number(r[locKey]) });
+          }
+        });
 
         return {
           name,
@@ -200,6 +230,9 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
           kind,
           minQuantity: Number(minQuantity) || 0,
           description: description || undefined,
+          facilityName: facilityName || undefined,
+          initialStockQuantity: initialStockQuantity > 0 ? initialStockQuantity : undefined,
+          initialStocks: dynamicStocks.length > 0 ? dynamicStocks : undefined,
         };
       }).filter((r) => Boolean(r.name));
 
@@ -228,6 +261,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
       'kind',
       'minQuantity',
       'description',
+      'warehouseName',
+      'initialStock',
     ];
     const sampleRows = [
       [
@@ -239,6 +274,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
         'RAW_MATERIAL',
         15,
         'Analytical reagent grade 500ml',
+        'Kursi Road Factory',
+        250,
       ],
       [
         'Latex Gloves Powder-Free Medium',
@@ -249,6 +286,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
         'RAW_MATERIAL',
         50,
         'Box of 100 powder-free nitrile examination gloves',
+        'Vikas Nagar Office',
+        100,
       ],
       [
         'Cardiac Biomarker Tri-Pack (Trop-I / CK-MB)',
@@ -259,6 +298,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
         'MANUFACTURED_PRODUCT',
         25,
         'Triage emergency cardiac diagnostic cassette kit',
+        'RML Lucknow',
+        50,
       ],
     ];
 
@@ -283,20 +324,26 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
       return;
     }
 
-    const items = parsedProducts.map((p) => ({
-      name: p.name,
-      categoryName: p.categoryName,
-      subcategoryName: p.subcategoryName,
-      brand: p.brand,
-      unitName: p.unitName,
-      kind: p.kind,
-      minQuantity: p.minQuantity,
-      description: p.description,
-      ownerScope: isProj ? ('PROJECT' as const) : ('COMPANY' as const),
-      projectId,
-    }));
+    const payload = {
+      defaultLocationId: defaultFacilityId || undefined,
+      items: parsedProducts.map((p) => ({
+        name: p.name,
+        categoryName: p.categoryName,
+        subcategoryName: p.subcategoryName,
+        brand: p.brand,
+        unitName: p.unitName,
+        kind: p.kind,
+        minQuantity: p.minQuantity,
+        description: p.description,
+        ownerScope: isProj ? ('PROJECT' as const) : ('COMPANY' as const),
+        projectId,
+        facilityName: p.facilityName,
+        initialStockQuantity: p.initialStockQuantity,
+        initialStocks: p.initialStocks,
+      })),
+    };
 
-    bulkProductMutation.mutate(items);
+    bulkProductMutation.mutate(payload as any);
   };
 
   // Parse Categories & Subcategories
@@ -435,6 +482,31 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
               </select>
             </div>
           )}
+        </div>
+
+        {/* Initial Stock Destination Selector */}
+        <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-950">
+              <span>🏢</span>
+              <span>Initial Stocking Facility (Opening Stock):</span>
+            </div>
+            <p className="text-emerald-800 text-[11px]">
+              Optionally choose a facility to automatically stock products upon import, or use <strong>warehouseName</strong> &amp; <strong>initialStock</strong> columns in your file.
+            </p>
+          </div>
+          <select
+            value={defaultFacilityId}
+            onChange={(e) => setDefaultFacilityId(e.target.value)}
+            className="text-xs rounded-md border-emerald-300 py-1.5 px-3 font-medium text-slate-800 focus:ring-emerald-500 focus:border-emerald-500 bg-white shadow-2xs shrink-0"
+          >
+            <option value="">None (Register Catalog Only)</option>
+            {locations.map((loc) => (
+              <option key={loc.id} value={loc.id}>
+                {loc.name} ({loc.locationType === 'WAREHOUSE' ? 'Warehouse' : 'Project Store'})
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Tab Selection */}
@@ -581,6 +653,7 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
                         <th className="py-1.5 px-3">Brand</th>
                         <th className="py-1.5 px-3">Unit</th>
                         <th className="py-1.5 px-3">Min Stock</th>
+                        <th className="py-1.5 px-3">Opening Stock</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
@@ -593,6 +666,23 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
                           <td className="py-1.5 px-3 text-slate-600">{p.brand || '—'}</td>
                           <td className="py-1.5 px-3 text-blue-700 font-semibold">{p.unitName || 'PIECE'}</td>
                           <td className="py-1.5 px-3 text-slate-700">{p.minQuantity ?? 0}</td>
+                          <td className="py-1.5 px-3 whitespace-nowrap">
+                            {p.initialStocks && p.initialStocks.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {p.initialStocks.map((s, si) => (
+                                  <span key={si} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                                    {s.quantity} → {s.facilityName}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (p.initialStockQuantity ?? 0) > 0 ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+                                {p.initialStockQuantity} → {p.facilityName || locations.find((l) => l.id === defaultFacilityId)?.name || 'Default Facility'}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-[11px]">—</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

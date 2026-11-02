@@ -1,3 +1,19 @@
+export class InitialStockEntryDto {
+  @ApiPropertyOptional({ description: 'Target facility name (warehouse or project facility)' })
+  @IsOptional()
+  @IsString()
+  facilityName?: string;
+
+  @ApiPropertyOptional({ description: 'Explicit stock location UUID' })
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
+  @ApiProperty({ description: 'Initial stock quantity' })
+  @IsNumber()
+  @Min(0.0001)
+  quantity!: number;
+}
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
@@ -90,6 +106,29 @@ export class CreateBulkProductItemDto {
   @IsOptional()
   @IsUUID('4', { message: 'projectId must be a valid UUID' })
   projectId?: string;
+
+  @ApiPropertyOptional({ example: 100, description: 'Single facility initial stock quantity' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  initialStockQuantity?: number;
+
+  @ApiPropertyOptional({ example: 'Kursi Road Factory', description: 'Target facility or warehouse name' })
+  @IsOptional()
+  @IsString()
+  facilityName?: string;
+
+  @ApiPropertyOptional({ description: 'Explicit stock location UUID' })
+  @IsOptional()
+  @IsString()
+  locationId?: string;
+
+  @ApiPropertyOptional({ type: [InitialStockEntryDto], description: 'Optional list of initial stocks for multiple facilities' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InitialStockEntryDto)
+  initialStocks?: InitialStockEntryDto[];
 }
 
 export class CreateBulkProductsDto {
@@ -98,4 +137,14 @@ export class CreateBulkProductsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateBulkProductItemDto)
   items!: CreateBulkProductItemDto[];
+
+  @ApiPropertyOptional({ description: 'Default fallback location UUID for items with initial stock' })
+  @IsOptional()
+  @IsString()
+  defaultLocationId?: string;
+
+  @ApiPropertyOptional({ description: 'Default fallback facility name for items with initial stock' })
+  @IsOptional()
+  @IsString()
+  defaultFacilityName?: string;
 }

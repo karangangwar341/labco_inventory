@@ -40,6 +40,12 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       inventoryBalance: {
         findFirst: vi.fn(),
       },
+      stockLocation: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      auditEvent: {
+        create: vi.fn().mockResolvedValue({}),
+      },
     };
     mockNotificationsService = {
       notifySuperAdmins: vi.fn(),
@@ -358,6 +364,57 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
             name: 'Hydrochloric Acid 37%',
           }),
         }),
+      );
+    });
+
+    it('creates products in bulk AND atomically posts opening stock when initialStock is provided', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      const mockLedger = { postTransaction: vi.fn().mockResolvedValue({}) };
+      (productsService as any).ledgerService = mockLedger;
+
+      mockPrisma.stockLocation.findMany.mockResolvedValue([
+        { id: 'loc-wh-1', warehouseId: 'wh-1', warehouse: { name: 'Kursi Road Factory' }, project: null },
+        { id: 'loc-wh-2', warehouseId: 'wh-2', warehouse: { name: 'Vikas Nagar Office' }, project: null },
+      ]);
+      mockPrisma.category.findFirst.mockResolvedValue({ id: 'cat-reagents' });
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      mockPrisma.product.create.mockImplementation(({ data }: any) => ({
+        id: 'prod-new-1',
+        ...data,
+      }));
+      mockPrisma.productVersion.create = vi.fn().mockResolvedValue({ id: 'pv-1' });
+
+      const res = await productsService.createBulk({
+        items: [
+          {
+            name: 'Hydrochloric Acid 37%',
+            categoryName: 'Reagents',
+            unitName: 'BOTTLE',
+            facilityName: 'Kursi Road Factory',
+            initialStockQuantity: 250,
+          },
+        ],
+      }, superAdmin);
+
+      expect(res.totalCreated).toBe(1);
+      expect(res.totalStocked).toBe(1);
+      expect(res.totalUnitsStocked).toBe(250);
+      expect(mockLedger.postTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          transactionType: 'STOCK_IN',
+          reason: 'Initial bulk catalog opening stock import',
+          lines: [
+            expect.objectContaining({
+              locationId: 'loc-wh-1',
+              productId: 'prod-new-1',
+              direction: 'IN',
+              quantity: 250,
+              unitName: 'BOTTLE',
+            }),
+          ],
+        }),
+        'su-1',
+        expect.anything(),
       );
     });
 });

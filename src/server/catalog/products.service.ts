@@ -4,13 +4,15 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateProductDto, ProposeProductVersionDto } from './dto/create-product.dto';
 import { CreateBulkProductsDto } from './dto/create-bulk-products.dto';
 import { ApproveProductDto, ApprovalDecision } from './dto/approve-product.dto';
-import { UserRole, CatalogScope, ProductKind, ProductStatus, ProductVersionStatus, UnitStatus, Prisma } from '@prisma/client';
+import { UserRole, CatalogScope, ProductKind, ProductStatus, ProductVersionStatus, UnitStatus, StockCondition, TransactionType, Prisma } from '@prisma/client';
+import { LedgerService } from '../inventory/ledger.service';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 export function computeDuplicateKey(params: {
@@ -45,6 +47,7 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    @Optional() private readonly ledgerService?: LedgerService,
   ) {}
 
   private productsCache = new Map<string, { data: any[]; expiresAt: number }>();
@@ -271,8 +274,43 @@ export class ProductsService {
 
     const created: any[] = [];
     const skipped: { name: string; reason: string }[] = [];
+    const stockPostLines: Array<{
+      locationId: string;
+      productId: string;
+      direction: 'IN';
+      quantity: number;
+      unitName: string;
+      condition: StockCondition;
+    }> = [];
 
     await this.prisma.$transaction(async (tx) => {
+      const stockLocations = (tx.stockLocation?.findMany
+        ? await tx.stockLocation.findMany({
+            include: {
+              warehouse: { select: { id: true, name: true, status: true } },
+              project: { select: { id: true, name: true, status: true } },
+            },
+          })
+        : []) as any[];
+
+      const findStockLocation = (nameOrId?: string): any | undefined => {
+        if (!nameOrId) return undefined;
+        const clean = nameOrId.trim().toLowerCase();
+        return stockLocations.find((loc: any) =>
+          loc.id === nameOrId ||
+          loc.warehouseId === nameOrId ||
+          loc.projectId === nameOrId ||
+          loc.warehouse?.name?.trim().toLowerCase() === clean ||
+          loc.project?.name?.trim().toLowerCase() === clean
+        );
+      };
+
+      const defaultLocation = dto.defaultLocationId
+        ? findStockLocation(dto.defaultLocationId)
+        : dto.defaultFacilityName
+          ? findStockLocation(dto.defaultFacilityName)
+          : undefined;
+
       for (const item of dto.items) {
         const productName = item.name?.trim();
         if (!productName) continue;
@@ -457,6 +495,61 @@ export class ProductsService {
         });
 
         created.push(product);
+
+        // Collect initial stock opening balance if requested
+        const productStockEntries: Array<{ location: any; quantity: number }> = [];
+
+        if (Array.isArray(item.initialStocks) && item.initialStocks.length > 0) {
+          for (const s of item.initialStocks) {
+            const loc = findStockLocation(s.locationId) || findStockLocation(s.facilityName) || defaultLocation;
+            const q = Number(s.quantity);
+            if (loc && q > 0) {
+              productStockEntries.push({ location: loc, quantity: q });
+            }
+          }
+        } else if (item.initialStockQuantity && Number(item.initialStockQuantity) > 0) {
+          const loc = findStockLocation(item.locationId) || findStockLocation(item.facilityName) || defaultLocation || (
+            itemProjectId ? findStockLocation(itemProjectId) : undefined
+          );
+          if (loc) {
+            productStockEntries.push({ location: loc, quantity: Number(item.initialStockQuantity) });
+          }
+        }
+
+        for (const entry of productStockEntries) {
+          stockPostLines.push({
+            locationId: entry.location.id,
+            productId: product.id,
+            direction: 'IN',
+            quantity: entry.quantity,
+            unitName: baseUnitName,
+            condition: StockCondition.USABLE,
+          });
+        }
+      }
+
+      if (this.ledgerService && stockPostLines.length > 0) {
+        await this.ledgerService.postTransaction(
+          {
+            transactionType: TransactionType.STOCK_IN,
+            reason: 'Initial bulk catalog opening stock import',
+            idempotencyKey: `bulk_init_stock_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            lines: stockPostLines,
+          },
+          user.id,
+          tx,
+        );
+
+        if (tx.auditEvent) {
+          await tx.auditEvent.create({
+            data: {
+              actorUserId: user.id,
+              action: 'BULK_OPENING_STOCK_POSTED',
+              entityType: 'InventoryBalance',
+              reason: `Bulk catalog upload posted opening stock for ${stockPostLines.length} product-location balances`,
+            },
+          });
+        }
       }
     });
 
@@ -464,6 +557,8 @@ export class ProductsService {
     return {
       totalCreated: created.length,
       totalSkipped: skipped.length,
+      totalStocked: stockPostLines.length,
+      totalUnitsStocked: stockPostLines.reduce((sum, l) => sum + Number(l.quantity), 0),
       created,
       skipped,
     };

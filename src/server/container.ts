@@ -143,7 +143,7 @@ class AppContainer {
   }
 
   get productsService(): ProductsService {
-    return (this._productsService ??= new ProductsService(this.prisma, this.notificationsService));
+    return (this._productsService ??= new ProductsService(this.prisma, this.notificationsService, this.ledgerService));
   }
 
   get categoriesService(): CategoriesService {

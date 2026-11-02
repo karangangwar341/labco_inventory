@@ -67,25 +67,48 @@ export const catalogService = {
     return apiClient.post(endpoints.catalog.categoriesBulk(), { items });
   },
 
-  createBulkProducts: async (items: Array<{
-    name: string;
-    categoryName?: string;
-    subcategoryName?: string;
-    categoryId?: string;
-    brand?: string;
-    description?: string;
-    kind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT' | 'CONSUMABLE';
-    unitName?: string;
-    minQuantity?: number;
-    minOrderQuantity?: number;
-    quantityPrecision?: number;
-    allowFractional?: boolean;
-    ownerScope?: 'COMPANY' | 'PROJECT';
-    projectId?: string;
-  }>): Promise<{ totalCreated: number; totalSkipped: number; created: CatalogProduct[]; skipped: Array<{ name: string; reason: string }> }> => {
-    const res = await apiClient.post<{ totalCreated: number; totalSkipped: number; created: CatalogProduct[]; skipped: Array<{ name: string; reason: string }> }>(
+  createBulkProducts: async (payload: {
+    items: Array<{
+      name: string;
+      categoryName?: string;
+      subcategoryName?: string;
+      categoryId?: string;
+      brand?: string;
+      description?: string;
+      kind?: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT' | 'CONSUMABLE';
+      unitName?: string;
+      minQuantity?: number;
+      minOrderQuantity?: number;
+      quantityPrecision?: number;
+      allowFractional?: boolean;
+      ownerScope?: 'COMPANY' | 'PROJECT';
+      projectId?: string;
+      initialStockQuantity?: number;
+      facilityName?: string;
+      locationId?: string;
+      initialStocks?: Array<{ facilityName?: string; locationId?: string; quantity: number }>;
+    }>;
+    defaultLocationId?: string;
+    defaultFacilityName?: string;
+  } | Array<any>): Promise<{
+    totalCreated: number;
+    totalSkipped: number;
+    totalStocked?: number;
+    totalUnitsStocked?: number;
+    created: CatalogProduct[];
+    skipped: Array<{ name: string; reason: string }>;
+  }> => {
+    const requestBody = Array.isArray(payload) ? { items: payload } : payload;
+    const res = await apiClient.post<{
+      totalCreated: number;
+      totalSkipped: number;
+      totalStocked?: number;
+      totalUnitsStocked?: number;
+      created: CatalogProduct[];
+      skipped: Array<{ name: string; reason: string }>;
+    }>(
       endpoints.catalog.productsBulk(),
-      { items }
+      requestBody
     );
     return {
       ...res,
