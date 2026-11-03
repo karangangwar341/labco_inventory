@@ -21,13 +21,15 @@ interface CloneCatalogModalProps {
   onSuccess?: () => void;
 }
 
+const EMPTY_INITIAL_IDS: string[] = [];
+
 export function CloneCatalogModal({
   isOpen,
   onClose,
   projectId,
   projectName,
-  initialSelectedProductIds = [],
-  initialSelectedCategoryIds = [],
+  initialSelectedProductIds = EMPTY_INITIAL_IDS,
+  initialSelectedCategoryIds = EMPTY_INITIAL_IDS,
   onSelect,
   onSuccess,
 }: CloneCatalogModalProps) {
@@ -35,20 +37,23 @@ export function CloneCatalogModal({
   const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'PRODUCTS'>('CATEGORIES');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set(initialSelectedProductIds));
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set(initialSelectedCategoryIds));
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(() => new Set(initialSelectedProductIds));
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(() => new Set(initialSelectedCategoryIds));
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  // Sync initial selection when modal opens or initial selections change
+  const prevIsOpenRef = React.useRef(false);
+
+  // Sync initial selection ONLY when transitioning modal from closed to open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       setSelectedProductIds(new Set(initialSelectedProductIds));
       setSelectedCategoryIds(new Set(initialSelectedCategoryIds));
       setError(null);
       setSuccessNotice(null);
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, initialSelectedProductIds, initialSelectedCategoryIds]);
 
   // Load all company products and categories
@@ -163,11 +168,13 @@ export function CloneCatalogModal({
     const allRelatedCatIds = [catId, ...subIds];
     const productsInCat = productsByCategoryId.get(catId) || [];
 
-    const isCurrentlySelected = selectedCategoryIds.has(catId);
+    const isCatSelected = selectedCategoryIds.has(catId);
+    const isAllProducts = productsInCat.length > 0 && productsInCat.every((p) => selectedProductIds.has(p.id));
+    const shouldDeselect = isCatSelected || isAllProducts;
 
     setSelectedCategoryIds((prev) => {
       const next = new Set(prev);
-      if (isCurrentlySelected) {
+      if (shouldDeselect) {
         allRelatedCatIds.forEach((id) => next.delete(id));
       } else {
         allRelatedCatIds.forEach((id) => next.add(id));
@@ -178,7 +185,7 @@ export function CloneCatalogModal({
     if (productsInCat.length > 0) {
       setSelectedProductIds((prev) => {
         const next = new Set(prev);
-        if (isCurrentlySelected) {
+        if (shouldDeselect) {
           productsInCat.forEach((p) => next.delete(p.id));
         } else {
           productsInCat.forEach((p) => next.add(p.id));
@@ -191,11 +198,13 @@ export function CloneCatalogModal({
   // Toggle single subcategory
   const toggleSubcategory = (subId: string, parentId: string) => {
     const productsInSub = productsByCategoryId.get(subId) || [];
-    const isCurrentlySelected = selectedCategoryIds.has(subId);
+    const isSubSelected = selectedCategoryIds.has(subId);
+    const isAllProducts = productsInSub.length > 0 && productsInSub.every((p) => selectedProductIds.has(p.id));
+    const shouldDeselect = isSubSelected || isAllProducts;
 
     setSelectedCategoryIds((prev) => {
       const next = new Set(prev);
-      if (isCurrentlySelected) {
+      if (shouldDeselect) {
         next.delete(subId);
       } else {
         next.add(subId);
@@ -208,7 +217,7 @@ export function CloneCatalogModal({
     if (productsInSub.length > 0) {
       setSelectedProductIds((prev) => {
         const next = new Set(prev);
-        if (isCurrentlySelected) {
+        if (shouldDeselect) {
           productsInSub.forEach((p) => next.delete(p.id));
         } else {
           productsInSub.forEach((p) => next.add(p.id));
@@ -229,10 +238,10 @@ export function CloneCatalogModal({
   // Select all categories (all roots + subcategories) and all company products
   const handleSelectAllCategories = () => {
     const allCatIds = new Set<string>();
-    rootCategories.forEach((root) => {
-      allCatIds.add(root.id);
-      const subs = subcategoriesByParent.get(root.id) || [];
-      subs.forEach((sub) => allCatIds.add(sub.id));
+    categories.forEach((c) => {
+      if (!c.projectId && (!c.ownerScope || c.ownerScope === 'COMPANY')) {
+        allCatIds.add(c.id);
+      }
     });
     setSelectedCategoryIds(allCatIds);
     setSelectedProductIds(new Set(companyProducts.map((p) => p.id)));
@@ -356,11 +365,11 @@ export function CloneCatalogModal({
             )}
             <Badge variant="primary" size="sm" className="font-semibold text-xs">
               {selectedCategoryIds.size > 0 && selectedProductIds.size > 0
-                ? `${selectedCategoryIds.size} Cat, ${selectedProductIds.size} Prod Selected`
+                ? `${selectedCategoryIds.size} Categories, ${selectedProductIds.size} Products Selected`
                 : selectedCategoryIds.size > 0
-                  ? `${selectedCategoryIds.size} Selected`
+                  ? `${selectedCategoryIds.size} Categories Selected`
                   : selectedProductIds.size > 0
-                    ? `${selectedProductIds.size} Selected`
+                    ? `${selectedProductIds.size} Products Selected`
                     : '0 Selected'}
             </Badge>
           </div>
