@@ -667,8 +667,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
     <div className="space-y-5">
       {!hideHeader ? (
         <PageHeader
-          title="Manufacturing & Production Cycles"
-          description="Convert bulk raw ingredients into finished assay kits and controls under strict BOM formulations. Re-run cycles instantly when stock is depleted."
+          title="Production & Batches"
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button

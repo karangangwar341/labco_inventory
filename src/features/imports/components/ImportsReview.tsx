@@ -357,8 +357,7 @@ export function ImportsReview() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Scan &amp; Review Stock Bills"
-        description="Upload a supplier bill, invoice, or packing list. Review the scanned items and counts before sending to your Admin for approval."
+        title="Scan Invoices &amp; Bills"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <input

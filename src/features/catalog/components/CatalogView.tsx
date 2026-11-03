@@ -582,22 +582,10 @@ export function CatalogView() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Product Catalogue"
-        description={
-          role === 'PROJECT_ADMIN'
-            ? 'Manage your manufactured product definitions and categories. Stock quantities are shown in Stock & Inventory.'
-            : 'Approved product definitions for stock movements. This page lists what can be stocked; current quantities are shown in Stock & Inventory.'
-        }
+        title="Product Catalog"
         actions={
           canCreate ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="primary"
-                onClick={() => setShowBulkModal(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                ⚡ Bulk Add / Import
-              </Button>
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -620,6 +608,13 @@ export function CatalogView() {
                   + Add Brand
                 </Button>
               )}
+              <Button
+                variant="secondary"
+                onClick={() => setShowBulkModal(true)}
+                className="font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+              >
+                Bulk Add / Import
+              </Button>
               {role !== 'PROJECT_ADMIN' && (
                 <Link href="/catalog/new?kind=RAW_MATERIAL">
                   <Button variant="primary">+ Add Raw Material</Button>
@@ -658,7 +653,7 @@ export function CatalogView() {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <span>📦 All Catalog Items</span>
+            <span>All Catalog Items</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'PRODUCTS' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
@@ -676,7 +671,7 @@ export function CatalogView() {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <span>🏷️ {role === 'PROJECT_ADMIN' ? 'Categories Directory' : 'Categories & Brands Directory'}</span>
+            <span>{role === 'PROJECT_ADMIN' ? 'Categories' : 'Categories & Brands'}</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'TAXONOMY' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
@@ -696,7 +691,7 @@ export function CatalogView() {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <span>📏 Units of Measure</span>
+            <span>Units of Measure</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'UNITS' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'

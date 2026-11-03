@@ -247,17 +247,9 @@ export function InventoryTable() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title="Warehouse Raw Materials Inventory"
-          description="Usable stock, reservations, and available raw materials present across company warehouses."
-        />
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <Badge variant="primary" size="md" withDot>
-            Raw Materials & Warehouses Only
-          </Badge>
-        </div>
-      </div>
+      <PageHeader
+        title="Stock & Inventory"
+      />
 
       {/* KPI Summary Cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

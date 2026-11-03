@@ -99,8 +99,8 @@ export const MAIN_DOMAINS: MainDomain[] = [
     roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/catalog', '/imports'],
     subItems: [
-      { href: '/catalog', label: 'Product & Item Catalog' },
-      { href: '/imports', label: 'Scan Invoices & Bills (AI)' },
+      { href: '/catalog', label: 'Product Catalog' },
+      { href: '/imports', label: 'Scan Invoices & Bills' },
     ],
   },
   {
@@ -111,7 +111,7 @@ export const MAIN_DOMAINS: MainDomain[] = [
     roles: ['SUPER_ADMIN', 'STORE_ADMIN', 'PROJECT_ADMIN'],
     matchPaths: ['/reports'],
     subItems: [
-      { href: '/reports', label: 'Stock Reports & Excel Exports' },
+      { href: '/reports', label: 'Stock & Operations Reports' },
     ],
   },
   {
@@ -122,11 +122,11 @@ export const MAIN_DOMAINS: MainDomain[] = [
     roles: ['SUPER_ADMIN'],
     matchPaths: ['/admin', '/backups'],
     subItems: [
-      { href: '/admin/projects', label: 'Hospital & Lab Projects' },
-      { href: '/admin/warehouses', label: 'Central Warehouses' },
-      { href: '/admin/users', label: 'User Accounts & Roles' },
-      { href: '/admin/settings', label: 'System Settings & Approvals' },
-      { href: '/backups', label: 'Database Backups & Health' },
+      { href: '/admin/projects', label: 'Projects' },
+      { href: '/admin/warehouses', label: 'Warehouses' },
+      { href: '/admin/users', label: 'Users' },
+      { href: '/admin/settings', label: 'Settings' },
+      { href: '/backups', label: 'Backups' },
     ],
   },
 ];

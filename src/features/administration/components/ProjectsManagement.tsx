@@ -113,8 +113,7 @@ export function ProjectsManagement() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Project Organizations"
-        description="Manage healthcare lab accounts, diagnostics partners, and project lifecycles."
+        title="Projects &amp; Healthcare Labs"
         actions={
           <Link href="/admin/warehouses">
             <Button variant="secondary">

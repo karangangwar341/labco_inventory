@@ -156,8 +156,7 @@ export function WarehousesManagement() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title="Distribution Warehouses"
-        description="Configure central storage depots, physical location details, and assign Store Admins."
+        title="Central Warehouses"
         actions={
           <Link href="/admin/projects">
             <Button variant="secondary">← Go to Projects</Button>

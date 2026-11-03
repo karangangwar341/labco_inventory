@@ -69,8 +69,7 @@ export function StoreAdminDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Warehouse stock"
-        description="Record incoming stock or send stock to an assigned project."
+        title="Warehouse Overview"
         actions={
           <div className="flex flex-wrap gap-2.5">
             <Link href="/requests/new?type=STOCK_IN">

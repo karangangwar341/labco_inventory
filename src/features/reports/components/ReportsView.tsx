@@ -371,8 +371,7 @@ export function ReportsView() {
     <div className="space-y-6">
       {/* Page Header with primary print / CSV / Excel actions */}
       <PageHeader
-        title="Reports & Analytics"
-        description="Inventory movement history, stock summaries, and operational reports."
+        title="Reports & Exports"
         actions={
           <div className="flex flex-wrap items-center gap-2.5 print:hidden">
             <Button
@@ -441,9 +440,7 @@ export function ReportsView() {
                 );
               })}
             </div>
-            {activeReportMeta && (
-              <p className="text-[11px] text-slate-500 pl-1">{activeReportMeta.description}</p>
-            )}
+
           </div>
 
           {/* Form Filter Row */}

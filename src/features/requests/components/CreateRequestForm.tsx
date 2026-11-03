@@ -473,14 +473,12 @@ export function CreateRequestForm() {
                 : 'Internal Stock Deduction (Stock Out)'}
         description={
           user?.role === 'PROJECT_ADMIN'
-            ? 'Request diagnostic products and reagents from Central Supply to restock your clinic or lab inventory.'
+            ? 'Request diagnostic reagents and supplies to restock project inventory.'
             : isDispatch
-              ? 'Send items from your warehouse to a project clinic or hospital.'
+              ? 'Dispatch stock to a project facility.'
               : direction === 'STOCK_IN'
-                ? 'Record new items arriving at your location from a supplier or delivery truck.'
-                : isSourceProject
-                  ? 'Record internal consumption, department usage, or damaged stock-out at this project facility. Direct project-to-project transfers are prohibited.'
-                  : 'Record items being dispatched, used, or transferred out of your store.'
+                ? 'Receive incoming goods into stock.'
+                : 'Record outgoing stock or internal consumption.'
         }
         actions={
           <Link href="/requests" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
@@ -511,7 +509,7 @@ export function CreateRequestForm() {
                 }`}
               >
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
-                <span className="truncate">{isStockIn ? '📥 Stock In (Receive New Stock)' : '📤 Stock Out (Dispatch / Send Items)'}</span>
+                <span className="truncate">{isStockIn ? 'Stock In (Receive Goods)' : 'Stock Out (Dispatch / Issue)'}</span>
               </button>
             );
           })}

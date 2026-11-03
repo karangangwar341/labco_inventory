@@ -101,8 +101,7 @@ export function UsersManagement() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="User accounts"
-        description="Create accounts, assign the correct organization, reset passwords, or disable access."
+        title="User Accounts"
         actions={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Add user</Button>}
       />
 

@@ -370,8 +370,7 @@ export function StaffManagementView({ projectId: propProjectId, hideHeader = fal
       {/* Header */}
       {!hideHeader ? (
         <PageHeader
-          title="Staff &amp; Workforce Portal"
-          description="Manage your facility personnel, assign employee badge numbers, track active shifts, and log daily work accomplishments."
+          title="Staff &amp; Workforce"
           actions={
             <div className="flex items-center gap-2">
               <Button

@@ -397,8 +397,8 @@ export function TopBar({ onOpenMobileMenu, actions }: TopBarProps) {
         {/* User Role Badge */}
         {user && (
           <div className="hidden sm:flex items-center gap-1.5 pl-2.5 border-l border-slate-200">
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-              {user.role}
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/90 shadow-2xs">
+              {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'STORE_ADMIN' ? 'Warehouse Admin' : user.role === 'PROJECT_ADMIN' ? 'Project Admin' : user.role}
             </span>
           </div>
         )}

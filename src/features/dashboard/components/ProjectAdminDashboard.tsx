@@ -70,8 +70,7 @@ export function ProjectAdminDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Project stock"
-        description="Record incoming stock, send items to departments, or check deliveries."
+        title="Project Overview"
         actions={
           <div className="flex flex-wrap gap-2.5">
             <Link href="/requests/new?type=STOCK_IN">

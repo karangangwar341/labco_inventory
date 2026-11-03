@@ -100,8 +100,7 @@ export function SuperAdminDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Executive Operations Overview"
-        description="Dual-control governance center. Review inbound requests, inventory state transitions, and tenant operations."
+        title="Operations Overview"
         actions={
           <Link href="/approvals">
             <Button variant="primary">
@@ -215,7 +214,7 @@ export function SuperAdminDashboard() {
               </span>
             </div>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Continuous WAL &amp; PITR Active</p>
+          <p className="mt-1 text-[11px] text-slate-400">Automated Daily Backups Active</p>
         </Link>
       </div>
 

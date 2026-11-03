@@ -136,8 +136,7 @@ export function BackupsView() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Database Backups & Resiliency Drills"
-        description="Immutable snapshot retention, WAL continuity, and complete data reports export."
+        title="Database Backups & Exports"
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -146,7 +145,7 @@ export function BackupsView() {
               isLoading={isDownloadingZip}
               className="shadow-xs font-semibold"
             >
-              📦 Download All Reports & DB (ZIP)
+              Download All Reports & DB (ZIP)
             </Button>
 
             <Button
@@ -154,7 +153,7 @@ export function BackupsView() {
               onClick={handleDownloadDatabaseJson}
               isLoading={isDownloadingJson}
             >
-              💾 Download Database (JSON)
+              Download Database (JSON)
             </Button>
 
             <Button
@@ -168,20 +167,7 @@ export function BackupsView() {
         }
       />
 
-      {/* Information Banner */}
-      <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <div className="flex items-start gap-2.5">
-          <span className="text-base">📦</span>
-          <div>
-            <p className="font-semibold text-blue-950">
-              Complete Disaster Recovery &amp; Operational Reports Export
-            </p>
-            <p className="text-blue-800/90 text-[11px] mt-0.5 leading-relaxed">
-              Click <strong>&quot;Download All Reports &amp; DB (ZIP)&quot;</strong> to download an all-in-one ZIP package containing all 6 Microsoft Excel operational reports (Current Stock Balances, Movement Ledger, Department Usage, Manufacturing Runs, Shipments Logistics, and Confirmed Missing Stock) alongside the authoritative JSON database dump.
-            </p>
-          </div>
-        </div>
-      </div>
+
 
       {actionSuccess && (
         <div className="p-3 bg-[#ecfdf3] border border-[#bbf7d0] rounded-lg text-[#18794e] text-xs flex items-center justify-between">

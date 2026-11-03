@@ -489,12 +489,7 @@ export function RequestsList() {
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        title={isSuperAdmin ? 'Stock Requests & Movement Register' : 'My Stock Requests'}
-        description={
-          isSuperAdmin
-            ? 'Monitor, audit, and filter warehouse dispatches, inbound receipts, and stock transfer vouchers across all projects and warehouses.'
-            : 'Monitor, approve, and track warehouse dispatches, inbound receipts, and stock transfer vouchers.'
-        }
+        title={isSuperAdmin ? 'Stock Movements & Transfers' : 'My Stock Requests'}
         actions={
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {isSuperAdmin && (

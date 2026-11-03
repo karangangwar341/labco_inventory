@@ -539,8 +539,7 @@ export function ApprovalsQueue() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Approvals & Governance Queue"
-        description="Dual-control transaction decisions. Commits update available, reserved, and usable balances atomically."
+        title="Approvals Queue"
       />
 
       {/* Authorized Notice */}

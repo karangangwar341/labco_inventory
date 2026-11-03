@@ -682,12 +682,7 @@ export function DepartmentsView() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={activeTab === 'ISSUES' ? 'Stock Out to Departments' : 'Departments'}
-        description={
-          activeTab === 'ISSUES'
-            ? 'Manage department indent forms and daily stock outs.'
-            : 'Manage internal clinical and hospital departments.'
-        }
+        title={activeTab === 'ISSUES' ? 'Department Issues' : 'Departments Directory'}
         actions={
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             {activeTab === 'ISSUES' && (role === 'PROJECT_ADMIN' || role === 'SUPER_ADMIN') && (
@@ -1605,12 +1600,12 @@ export function DepartmentsView() {
                                             </Badge>
                                           </TableCell>
                                           <TableCell className="text-slate-500 text-[11px]">
-                                            {item.notes || '—'}
+                                            {item.notes || '-'}
                                           </TableCell>
                                           <TableCell align="right" mono className="text-slate-400 text-[11px]">
                                             {item.createdAt
                                               ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                              : '—'}
+                                              : '-'}
                                           </TableCell>
                                         </TableRow>
                                       ))}

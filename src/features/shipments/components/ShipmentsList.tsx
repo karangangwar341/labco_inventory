@@ -177,11 +177,7 @@ export function ShipmentsList() {
     ? 'Incoming Deliveries'
     : 'Shipments & Deliveries';
 
-  const pageDescription = isStoreAdmin
-    ? 'Track outbound orders dispatched from this warehouse to project clinics and facilities.'
-    : isProjectAdmin
-    ? 'Inspect and verify incoming shipments arriving at your facility dock.'
-    : 'Origin to destination transit tracking and receiving audit verification.';
+  const pageDescription = undefined;
 
   const emptyTitle = isStoreAdmin
     ? 'No project dispatches found'
@@ -444,15 +440,7 @@ export function ShipmentsList() {
         </div>
       )}
 
-      {/* Warehouse Identity Privacy Banner for Project Admin */}
-      {!canSeeSource && (
-        <div className="p-3 bg-[#eff6ff] border border-[#bfdbfe] rounded-lg text-xs text-[#2563eb] flex items-center gap-2">
-          <span>🔒</span>
-          <span>
-            <strong>Tenant Privacy Active:</strong> Source warehouse operational identifiers are redacted in accordance with multi-project security policy.
-          </span>
-        </div>
-      )}
+
 
       {/* 1. KPI Metric Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">

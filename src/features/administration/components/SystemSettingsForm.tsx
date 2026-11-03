@@ -81,23 +81,15 @@ export function SystemSettingsForm() {
 
   return (
     <div className="max-w-4xl space-y-5">
-      <PageHeader title="System settings" description="Set approval requirements and notification behavior for inventory workflows." />
+      <PageHeader title="System Settings" />
       {notice && <div role="status" className="rounded-lg border border-[#bbf7d0] bg-[#ecfdf3] p-3 text-sm text-[#18794e]">{notice}</div>}
       {saveMutation.error && <div role="alert" className="rounded-lg border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[#b42318]">{saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save settings.'}</div>}
 
       <form onSubmit={save} className="space-y-4">
         <section className="space-y-3 rounded-xl border border-[#dbe3ee] bg-white p-4">
           <div>
-            <h2 className="text-base font-semibold text-[#172033]">Approval requirements &amp; Dual-Control Governance</h2>
-            <p className="mt-1 text-sm text-[#5b6678]">Choose which inventory workflows wait for Super Admin review. A policy change applies strictly to new submissions.</p>
-            <div className="mt-2.5 p-3 rounded-lg bg-blue-50/70 border border-blue-200/80 text-xs text-blue-900 flex items-start gap-2">
-              <svg className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>
-                <strong>Operational Impact:</strong> When enabled, requests require explicit Super Admin approval before stock is committed or released. When disabled, validated submissions post atomically to balances upon receipt.
-              </span>
-            </div>
+            <h2 className="text-base font-semibold text-[#172033]">Approval Requirements</h2>
+            <p className="mt-1 text-sm text-[#5b6678]">Select which workflows require Super Admin review before updating stock balances.</p>
           </div>
           <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 pt-1">
             {APPROVAL_LABELS.map(([key, label]) => {
@@ -117,7 +109,7 @@ export function SystemSettingsForm() {
                     <div>
                       <span>{label}</span>
                       <p className="text-[11px] font-normal text-slate-500 mt-0.5">
-                        {enabled ? '🛡️ Requires Super Admin approval' : '⚡ Posts atomically on submission'}
+                        {enabled ? 'Requires Super Admin review' : 'Automatic approval & posting'}
                       </p>
                     </div>
                   </label>

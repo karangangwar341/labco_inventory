@@ -172,7 +172,7 @@ export function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
                 <p className="text-xs font-semibold text-white truncate leading-tight">{user.username}</p>
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-slate-400 font-medium truncate">
-                    {user.role}
+                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : user.role === 'STORE_ADMIN' ? 'Warehouse Admin' : user.role === 'PROJECT_ADMIN' ? 'Project Admin' : user.role}
                   </span>
                 </div>
               </div>
