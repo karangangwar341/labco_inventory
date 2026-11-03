@@ -357,30 +357,30 @@ export function WarehousesManagement() {
                     className="p-4 sm:p-5 hover:bg-slate-50/50 transition-colors space-y-3"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-slate-900">{warehouse.name}</h4>
-                          <Badge variant={isInactive ? 'neutral' : 'purple'} size="sm">
+                          <h4 className="text-sm font-semibold text-slate-900 truncate">{warehouse.name}</h4>
+                          <Badge variant={isInactive ? 'neutral' : 'purple'} size="sm" className="whitespace-nowrap shrink-0">
                             {warehouse.status ?? 'ACTIVE'}
                           </Badge>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
-                          <div className="flex items-center gap-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs text-slate-500 mt-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
                             <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
-                            <span>{warehouse.locationDescription || 'Location unassigned'}</span>
+                            <span className="truncate">{warehouse.locationDescription || 'Location unassigned'}</span>
                           </div>
-                          <span className="text-slate-300">·</span>
-                          <div className="flex items-center gap-1">
+                          <span className="hidden sm:inline text-slate-300">·</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <span className="text-slate-400">Assigned Admin:</span>
                             {assignedAdmin ? (
-                              <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs flex items-center gap-1">
+                              <span className="font-semibold text-blue-700 bg-blue-50 border border-blue-200/60 px-2 py-0.5 rounded-md text-xs flex items-center gap-1">
                                 👤 {assignedAdmin.username}
                               </span>
                             ) : (
-                              <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs italic">
+                              <span className="text-amber-700 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md text-xs italic">
                                 Unassigned
                               </span>
                             )}
@@ -388,15 +388,16 @@ export function WarehousesManagement() {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link href={`/inventory?locationId=${warehouse.id}&view=WAREHOUSE`}>
-                          <Button variant="primary" size="sm">
-                            📦 View Depot Stock ➔
+                      <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-1 sm:pt-0">
+                        <Link href={`/inventory?locationId=${warehouse.id}&view=WAREHOUSE`} className="w-full sm:w-auto">
+                          <Button variant="primary" size="sm" className="w-full sm:w-auto justify-center text-xs">
+                            📦 View Stock ➔
                           </Button>
                         </Link>
                         <Button
                           variant="secondary"
                           size="sm"
+                          className="w-full sm:w-auto justify-center text-xs"
                           onClick={() =>
                             setEditing({
                               id: warehouse.id,

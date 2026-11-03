@@ -281,123 +281,274 @@ export function UsersManagement() {
           }
         />
       ) : (
-        <Table>
-          <TableHeader sticky>
-            <tr>
-              <TableHead>User / Identity</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Contact &amp; Address</TableHead>
-              <TableHead>Assigned Facility</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </tr>
-          </TableHeader>
-          <TableBody>
+        <>
+          {/* Mobile View: High-density User Account Cards */}
+          <div className="space-y-3 md:hidden">
             {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
+              <div
+                key={user.id}
+                className="bg-white rounded-xl border border-slate-200/90 p-4 space-y-3 shadow-2xs transition-shadow hover:shadow-xs"
+              >
+                {/* Header: Avatar + Name + Role & Status Badges */}
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     {user.idImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={user.idImageUrl}
                         alt={user.username}
-                        className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-50"
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-50"
                       />
                     ) : (
-                      <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 uppercase">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 uppercase">
                         {(user.fullName || user.username).slice(0, 2)}
                       </div>
                     )}
-                    <div>
-                      <div className="font-semibold text-slate-900 text-xs">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-xs truncate">
                         {user.fullName || user.username}
                       </div>
-                      <div className="text-[11px] text-slate-500 font-mono">
+                      <div className="text-[11px] text-slate-500 font-mono truncate">
                         @{user.username}
                       </div>
                     </div>
                   </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}>
-                    {user.role.replaceAll('_', ' ')}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs text-slate-600">
-                  {user.phoneNumber || user.address ? (
-                    <div className="space-y-0.5">
-                      {user.phoneNumber && (
-                        <div className="font-medium text-slate-800 flex items-center gap-1">
-                          <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          <span>{user.phoneNumber}</span>
-                        </div>
-                      )}
-                      {user.address && (
-                        <div className="text-[11px] text-slate-500 truncate max-w-xs" title={user.address}>
-                          {user.address}
-                        </div>
-                      )}
+
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <Badge
+                      variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}
+                      size="sm"
+                      className="whitespace-nowrap text-[10px]"
+                    >
+                      {user.role.replaceAll('_', ' ')}
+                    </Badge>
+                    <Badge
+                      variant={user.status === 'ACTIVE' ? 'success' : user.status === 'DISABLED' ? 'danger' : 'warning'}
+                      size="sm"
+                      className="whitespace-nowrap text-[10px]"
+                    >
+                      {user.status.replaceAll('_', ' ')}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Details: Contact & Assigned Facility */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-slate-50/70 p-2.5 rounded-lg border border-slate-100">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                      Assigned Facility / Scope
+                    </span>
+                    <div className="font-medium text-slate-800 flex items-center gap-1.5">
+                      <span>
+                        {user.role === 'SUPER_ADMIN' ? '🏢' : user.role === 'STORE_ADMIN' ? '🏭' : '📁'}
+                      </span>
+                      <span className="truncate">
+                        {user.role === 'STORE_ADMIN'
+                          ? user.managedWarehouses && user.managedWarehouses.length > 0
+                            ? user.managedWarehouses.map((w) => w.name).join(', ')
+                            : user.warehouse?.name ?? 'Unassigned'
+                          : user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide (All Depots)' : 'Unassigned')}
+                      </span>
                     </div>
-                  ) : (
-                    <span className="text-slate-400 text-xs">-</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-slate-600">
-                  {user.role === 'STORE_ADMIN'
-                    ? user.managedWarehouses && user.managedWarehouses.length > 0
-                      ? user.managedWarehouses.map((w) => w.name).join(', ')
-                      : user.warehouse?.name ?? 'Unassigned'
-                    : user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={user.status === 'ACTIVE' ? 'success' : user.status === 'DISABLED' ? 'danger' : 'warning'}>
-                    {user.status.replaceAll('_', ' ')}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end items-center gap-1.5 flex-wrap">
-                    <Button variant="secondary" size="sm" onClick={() => openEditModal(user)}>
-                      Edit
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                      Contact & Address
+                    </span>
+                    {user.phoneNumber || user.address ? (
+                      <div className="space-y-0.5">
+                        {user.phoneNumber && (
+                          <a
+                            href={`tel:${user.phoneNumber}`}
+                            className="font-medium text-blue-700 hover:underline flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <span>{user.phoneNumber}</span>
+                          </a>
+                        )}
+                        {user.address && (
+                          <div className="text-[11px] text-slate-500 truncate" title={user.address}>
+                            📍 {user.address}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 text-[11px] italic">No contact details</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions Footer */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full justify-center text-xs py-1.5"
+                    onClick={() => openEditModal(user)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full justify-center text-xs py-1.5"
+                    onClick={() => {
+                      setResetTarget({ id: user.id, username: user.username });
+                      setResetPassword('');
+                    }}
+                  >
+                    Reset PW
+                  </Button>
+                  {user.status === 'DISABLED' ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={enableMutation.isPending}
+                      onClick={() => toggleUserStatus(user)}
+                      className="w-full justify-center text-xs py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      Enable
                     </Button>
+                  ) : (
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => {
-                        setResetTarget({ id: user.id, username: user.username });
-                        setResetPassword('');
-                      }}
+                      disabled={disableMutation.isPending}
+                      onClick={() => toggleUserStatus(user)}
+                      className="w-full justify-center text-xs py-1.5 text-rose-600 hover:bg-rose-50 border-rose-200"
                     >
-                      Reset Password
+                      Disable
                     </Button>
-                    {user.status === 'DISABLED' ? (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={enableMutation.isPending}
-                        onClick={() => toggleUserStatus(user)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      >
-                        Enable User
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={disableMutation.isPending}
-                        onClick={() => toggleUserStatus(user)}
-                      >
-                        Disable
-                      </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
+                  )}
+                </div>
+              </div>
             ))}
-          </TableBody>
-        </Table>
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader sticky>
+                <tr>
+                  <TableHead>User / Identity</TableHead>
+                  <TableHead className="whitespace-nowrap">Role</TableHead>
+                  <TableHead>Contact &amp; Address</TableHead>
+                  <TableHead>Assigned Facility</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {user.idImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={user.idImageUrl}
+                            alt={user.username}
+                            className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-50"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center shrink-0 uppercase">
+                            {(user.fullName || user.username).slice(0, 2)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-slate-900 text-xs">
+                            {user.fullName || user.username}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            @{user.username}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={user.role === 'SUPER_ADMIN' ? 'purple' : user.role === 'STORE_ADMIN' ? 'primary' : 'neutral'}>
+                        {user.role.replaceAll('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {user.phoneNumber || user.address ? (
+                        <div className="space-y-0.5">
+                          {user.phoneNumber && (
+                            <div className="font-medium text-slate-800 flex items-center gap-1">
+                              <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                              </svg>
+                              <span>{user.phoneNumber}</span>
+                            </div>
+                          )}
+                          {user.address && (
+                            <div className="text-[11px] text-slate-500 truncate max-w-xs" title={user.address}>
+                              {user.address}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-slate-600">
+                      {user.role === 'STORE_ADMIN'
+                        ? user.managedWarehouses && user.managedWarehouses.length > 0
+                          ? user.managedWarehouses.map((w) => w.name).join(', ')
+                          : user.warehouse?.name ?? 'Unassigned'
+                        : user.project?.name ?? (user.role === 'SUPER_ADMIN' ? 'Company-wide' : 'Unassigned')}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={user.status === 'ACTIVE' ? 'success' : user.status === 'DISABLED' ? 'danger' : 'warning'}>
+                        {user.status.replaceAll('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end items-center gap-1.5 flex-nowrap">
+                        <Button variant="secondary" size="sm" onClick={() => openEditModal(user)}>
+                          Edit
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            setResetTarget({ id: user.id, username: user.username });
+                            setResetPassword('');
+                          }}
+                        >
+                          Reset Password
+                        </Button>
+                        {user.status === 'DISABLED' ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={enableMutation.isPending}
+                            onClick={() => toggleUserStatus(user)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            Enable User
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={disableMutation.isPending}
+                            onClick={() => toggleUserStatus(user)}
+                          >
+                            Disable
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
       {/* Add User Modal */}

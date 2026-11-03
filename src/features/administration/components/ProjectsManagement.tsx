@@ -403,10 +403,10 @@ export function ProjectsManagement() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-0">
                         <Link
                           href={`/admin/projects/${project.id}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50/60 hover:bg-blue-50 rounded-lg border border-blue-200/80 transition-colors"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50/60 hover:bg-blue-50 rounded-lg border border-blue-200/80 transition-colors flex-1 sm:flex-initial"
                         >
                           <span>Project Overview</span>
                           <span>→</span>
@@ -415,7 +415,7 @@ export function ProjectsManagement() {
                           variant="secondary"
                           size="sm"
                           onClick={() => setCloneProjectTarget({ id: project.id, name: project.name })}
-                          className="text-xs"
+                          className="text-xs flex-1 sm:flex-initial justify-center"
                         >
                           Transfer Catalog
                         </Button>
@@ -423,6 +423,7 @@ export function ProjectsManagement() {
                           variant="secondary"
                           size="sm"
                           onClick={() => setEditing({ id: project.id, name: project.name, status: project.status ?? 'ACTIVE' })}
+                          className="flex-initial justify-center"
                         >
                           Edit
                         </Button>
