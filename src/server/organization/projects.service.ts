@@ -8,8 +8,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateBulkProjectsDto } from './dto/create-bulk-projects.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { UserRole, OrganizationStatus, LocationType } from '@prisma/client';
+import {
+  UserRole,
+  OrganizationStatus,
+  LocationType,
+  CatalogScope,
+  ProductKind,
+  ProductStatus,
+  UnitStatus,
+} from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { computeDuplicateKey } from '../catalog/products.service';
 
 @Injectable()
 export class ProjectsService {
@@ -39,6 +48,10 @@ export class ProjectsService {
         create: { locationType: LocationType.PROJECT, projectId: project.id },
         update: {},
       });
+    }
+
+    if (dto.initialProductIds?.length || dto.seedAllCompanyProducts) {
+      await this.cloneCompanyProductsToProject(project.id, dto.initialProductIds);
     }
 
     return project;
@@ -248,5 +261,95 @@ export class ProjectsService {
         changedById,
       },
     });
+  }
+
+  async cloneCompanyProductsToProject(projectId: string, productIds?: string[], user?: AuthenticatedUser) {
+    if (user && user.role === UserRole.PROJECT_ADMIN) {
+      const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
+      if (dbUser?.projectId !== projectId) {
+        throw new ForbiddenException('Access denied to other project catalog');
+      }
+    } else if (user && user.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only Super Admin or Project Admin can import catalog items');
+    }
+
+    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('Project not found');
+
+    const sourceWhere: any = {
+      ownerScope: CatalogScope.COMPANY,
+      status: ProductStatus.APPROVED,
+    };
+    if (productIds && productIds.length > 0) {
+      sourceWhere.id = { in: productIds };
+    }
+
+    const sourceProducts = await this.prisma.product.findMany({
+      where: sourceWhere,
+      include: {
+        units: true,
+        attributes: true,
+      },
+    });
+
+    const isAutoApproved = !user || user.role === UserRole.SUPER_ADMIN;
+    let clonedCount = 0;
+    let skippedCount = 0;
+
+    for (const src of sourceProducts) {
+      const duplicateKey = computeDuplicateKey({
+        ownerScope: CatalogScope.PROJECT,
+        projectId,
+        name: src.name,
+        categoryId: src.categoryId,
+        brand: src.brand,
+        attributes: src.attributes,
+      });
+
+      const existing = await this.prisma.product.findUnique({
+        where: { duplicateKey },
+      });
+
+      if (existing) {
+        skippedCount++;
+        continue;
+      }
+
+      await this.prisma.product.create({
+        data: {
+          duplicateKey,
+          name: src.name,
+          brand: src.brand,
+          description: src.description,
+          categoryId: src.categoryId,
+          kind: ProductKind.MANUFACTURED_PRODUCT,
+          ownerScope: CatalogScope.PROJECT,
+          projectId,
+          status: isAutoApproved ? ProductStatus.APPROVED : ProductStatus.PENDING_APPROVAL,
+          quantityPrecision: src.quantityPrecision,
+          allowFractional: src.allowFractional,
+          minQuantity: src.minQuantity,
+          units: {
+            create: src.units.map((u) => ({
+              unitName: u.unitName,
+              isBaseUnit: u.isBaseUnit,
+              conversionToBase: u.conversionToBase,
+              status: UnitStatus.ACTIVE,
+            })),
+          },
+          attributes: {
+            create: src.attributes.map((a) => ({
+              attributeName: a.attributeName,
+              value: a.value,
+              unit: a.unit,
+              sortOrder: a.sortOrder,
+            })),
+          },
+        },
+      });
+      clonedCount++;
+    }
+
+    return { success: true, clonedCount, skippedCount, totalProcessed: sourceProducts.length };
   }
 }

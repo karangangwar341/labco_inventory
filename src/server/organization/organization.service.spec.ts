@@ -34,6 +34,12 @@ describe('Organization Services (Projects & Warehouses)', () => {
         update: vi.fn(),
         updateMany: vi.fn(),
       },
+      product: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
     };
 
     projectsService = new ProjectsService(mockPrisma as any);
@@ -61,6 +67,42 @@ describe('Organization Services (Projects & Warehouses)', () => {
 
       await expect(projectsService.create({ name: 'Metro Hospital' })).rejects.toThrow(
         ConflictException,
+      );
+    });
+
+    it('clones company catalog products to a project', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Apollo Project' });
+      mockPrisma.product.findMany.mockResolvedValue([
+        {
+          id: 'prod-co-1',
+          name: 'N95 Mask',
+          brand: '3M',
+          description: 'Protective mask',
+          categoryId: 'cat-1',
+          quantityPrecision: 0,
+          allowFractional: false,
+          minQuantity: 10,
+          units: [{ unitName: 'Box', isBaseUnit: true, conversionToBase: 1 }],
+          attributes: [{ attributeName: 'Color', value: 'White', sortOrder: 0 }],
+        },
+      ]);
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      mockPrisma.product.findFirst.mockResolvedValue(null);
+      mockPrisma.product.create.mockResolvedValue({ id: 'prod-cloned-1' });
+
+      const res = await projectsService.cloneCompanyProductsToProject('proj-1', ['prod-co-1'], superAdmin);
+      expect(res.success).toBe(true);
+      expect(res.clonedCount).toBe(1);
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'N95 Mask',
+            kind: 'MANUFACTURED_PRODUCT',
+            ownerScope: 'PROJECT',
+            projectId: 'proj-1',
+          }),
+        }),
       );
     });
 

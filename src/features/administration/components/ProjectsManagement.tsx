@@ -14,6 +14,7 @@ import { LoadingState } from '../../../components/feedback/LoadingState';
 import { ErrorState } from '../../../components/feedback/ErrorState';
 import { administrationService, ManagedProject } from '../administration.service';
 import { BulkProjectsModal } from './BulkProjectsModal';
+import { CloneCatalogModal } from '@/features/catalog/components/CloneCatalogModal';
 import { queryKeys } from '../../../lib/query/query-keys';
 
 type ProjectEdit = {
@@ -25,6 +26,8 @@ type ProjectEdit = {
 export function ProjectsManagement() {
   const queryClient = useQueryClient();
   const [projectName, setProjectName] = useState('');
+  const [seedCatalog, setSeedCatalog] = useState(false);
+  const [cloneProjectTarget, setCloneProjectTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [editing, setEditing] = useState<ProjectEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -86,12 +89,19 @@ export function ProjectsManagement() {
     e.preventDefault();
     if (!projectName.trim()) return;
     setActionError(null);
-    createProject.mutate(projectName.trim(), {
-      onSuccess: () => {
-        setProjectName('');
-        setNotice(`Project "${projectName.trim()}" created successfully.`);
+    createProject.mutate(
+      {
+        name: projectName.trim(),
+        seedAllCompanyProducts: seedCatalog,
       },
-    });
+      {
+        onSuccess: () => {
+          setProjectName('');
+          setSeedCatalog(false);
+          setNotice(`Project "${projectName.trim()}" created successfully${seedCatalog ? ' with company catalog seeded' : ''}.`);
+        },
+      },
+    );
   };
 
   const handleSaveEdit = (e: FormEvent) => {
@@ -203,24 +213,41 @@ export function ProjectsManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <Input
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                maxLength={120}
-                required
-                placeholder="Enter project lab name (e.g. Apex Diagnostics Clinic)..."
-              />
+          <form onSubmit={handleCreate} className="space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  maxLength={120}
+                  required
+                  placeholder="Enter project lab name (e.g. Apex Diagnostics Clinic)..."
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={busy || !projectName.trim()}
+                className="shrink-0"
+              >
+                + Create Project
+              </Button>
             </div>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={busy || !projectName.trim()}
-              className="shrink-0"
-            >
-              + Create Project
-            </Button>
+
+            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={seedCatalog}
+                onChange={(e) => setSeedCatalog(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="font-medium text-slate-800">
+                Seed project with Company Catalog templates
+              </span>
+              <span className="text-[11px] text-slate-400">
+                (transfers existing company products so this project doesn't start from scratch)
+              </span>
+            </label>
           </form>
         </CardContent>
       </Card>
@@ -289,6 +316,14 @@ export function ProjectsManagement() {
                         <Button
                           variant="secondary"
                           size="sm"
+                          onClick={() => setCloneProjectTarget({ id: project.id, name: project.name })}
+                          className="text-xs"
+                        >
+                          Transfer Catalog
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setEditing({ id: project.id, name: project.name, status: project.status ?? 'ACTIVE' })}
                         >
                           Edit
@@ -310,6 +345,18 @@ export function ProjectsManagement() {
         isOpen={showBulkProjectsModal}
         onClose={() => setShowBulkProjectsModal(false)}
       />
+
+      {cloneProjectTarget && (
+        <CloneCatalogModal
+          isOpen={Boolean(cloneProjectTarget)}
+          onClose={() => setCloneProjectTarget(null)}
+          projectId={cloneProjectTarget.id}
+          projectName={cloneProjectTarget.name}
+          onSuccess={() => {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.administration.projects() });
+          }}
+        />
+      )}
 
       {/* Edit Project Modal */}
       {editing && (

@@ -21,6 +21,7 @@ import { CatalogProduct, CategoryDto } from '../catalog.types';
 import { inventoryService } from '@/features/inventory/inventory.service';
 import { UnitsDirectory } from './UnitsDirectory';
 import { BulkCatalogModal } from './BulkCatalogModal';
+import { CloneCatalogModal } from './CloneCatalogModal';
 
 type CatalogTab = 'PRODUCTS' | 'TAXONOMY' | 'UNITS';
 
@@ -73,6 +74,7 @@ export function CatalogView() {
   const [brandError, setBrandError] = useState<string | null>(null);
   const [customBrands, setCustomBrands] = useState<string[]>([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
 
   const canCreate = role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
 
@@ -628,9 +630,19 @@ export function CatalogView() {
                 </Link>
               )}
               {role === 'PROJECT_ADMIN' && (
-                <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT" className="block">
-                  <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Product</Button>
-                </Link>
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="text-xs px-2.5 py-1.5 font-semibold text-blue-700 border-blue-300 hover:bg-blue-50"
+                    onClick={() => setShowCloneModal(true)}
+                  >
+                    Import from Company Catalog
+                  </Button>
+                  <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT" className="block">
+                    <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Product</Button>
+                  </Link>
+                </>
               )}
             </div>
           ) : (
@@ -678,15 +690,13 @@ export function CatalogView() {
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            <span>{role === 'PROJECT_ADMIN' ? 'Categories' : 'Categories & Brands'}</span>
+            <span>Categories &amp; Brands</span>
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'TAXONOMY' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {role === 'PROJECT_ADMIN'
-                ? `${categories.length} categories`
-                : `${categories.length} categories · ${brands.length} brands`}
+              {`${categories.length} categories · ${brands.length} brands`}
             </span>
           </button>
 
@@ -1524,6 +1534,15 @@ export function CatalogView() {
         isOpen={showBulkModal}
         onClose={() => setShowBulkModal(false)}
       />
+
+      {user?.projectId && (
+        <CloneCatalogModal
+          isOpen={showCloneModal}
+          onClose={() => setShowCloneModal(false)}
+          projectId={user.projectId}
+          onSuccess={() => void refetch()}
+        />
+      )}
     </div>
   );
 }

@@ -151,10 +151,14 @@ export class ProductsService {
 
     const rootScope = category.parent ? category.parent.ownerScope : category.ownerScope;
     const rootProjectId = category.parent ? category.parent.projectId : category.projectId;
-    if (
-      (ownerScope === CatalogScope.COMPANY && (category.ownerScope !== CatalogScope.COMPANY || rootScope !== CatalogScope.COMPANY)) ||
-      (ownerScope === CatalogScope.PROJECT && (category.ownerScope !== CatalogScope.PROJECT || (projectId && category.projectId !== projectId) || (projectId && rootProjectId !== projectId)))
-    ) {
+    const isCategoryAllowed =
+      ownerScope === CatalogScope.COMPANY
+        ? (category.ownerScope === CatalogScope.COMPANY && rootScope === CatalogScope.COMPANY)
+        : (
+            (category.ownerScope === CatalogScope.COMPANY && rootScope === CatalogScope.COMPANY) ||
+            (category.ownerScope === CatalogScope.PROJECT && (!projectId || category.projectId === projectId) && (!projectId || !rootProjectId || rootProjectId === projectId))
+          );
+    if (!isCategoryAllowed) {
       throw new ForbiddenException('Choose a category available in your catalog');
     }
 
@@ -343,8 +347,10 @@ export class ProductsService {
             where: {
               name: { equals: catName, mode: 'insensitive' },
               parentId: null,
-              ownerScope: itemOwnerScope,
-              projectId: itemProjectId,
+              OR: [
+                { ownerScope: CatalogScope.COMPANY },
+                { ownerScope: itemOwnerScope, projectId: itemProjectId },
+              ],
             },
           });
           if (!mainCategory) {
@@ -365,8 +371,10 @@ export class ProductsService {
               where: {
                 name: { equals: subName, mode: 'insensitive' },
                 parentId: mainCategory.id,
-                ownerScope: itemOwnerScope,
-                projectId: itemProjectId,
+                OR: [
+                  { ownerScope: CatalogScope.COMPANY },
+                  { ownerScope: itemOwnerScope, projectId: itemProjectId },
+                ],
               },
             });
             if (!subcategory) {
@@ -386,8 +394,10 @@ export class ProductsService {
         if (!targetCategoryId) {
           let defaultCat = await tx.category.findFirst({
             where: {
-              ownerScope: itemOwnerScope,
-              projectId: itemProjectId,
+              OR: [
+                { ownerScope: itemOwnerScope, projectId: itemProjectId },
+                { ownerScope: CatalogScope.COMPANY },
+              ],
             },
           });
           if (!defaultCat) {

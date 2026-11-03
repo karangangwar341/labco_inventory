@@ -48,8 +48,12 @@ export class CategoriesService {
       if (ownerScope === CatalogScope.COMPANY && parent.ownerScope !== CatalogScope.COMPANY) {
         throw new ForbiddenException('Company categories cannot be nested under project categories');
       }
-      if (ownerScope === CatalogScope.PROJECT && (parent.ownerScope !== CatalogScope.PROJECT || parent.projectId !== projectId)) {
-        throw new ForbiddenException('Project categories can only be nested under a category owned by the same project');
+      if (
+        ownerScope === CatalogScope.PROJECT &&
+        parent.ownerScope !== CatalogScope.COMPANY &&
+        (parent.ownerScope !== CatalogScope.PROJECT || parent.projectId !== projectId)
+      ) {
+        throw new ForbiddenException('Project categories can only be nested under a company category or a category owned by the same project');
       }
     }
 
@@ -218,8 +222,17 @@ export class CategoriesService {
 
       categories = await this.prisma.category.findMany({
         where: {
-          ownerScope: CatalogScope.PROJECT,
-          projectId: dbUser?.projectId || '',
+          OR: [
+            { ownerScope: CatalogScope.COMPANY },
+            ...(dbUser?.projectId
+              ? [
+                  {
+                    ownerScope: CatalogScope.PROJECT,
+                    projectId: dbUser.projectId,
+                  },
+                ]
+              : []),
+          ],
         },
         orderBy: { name: 'asc' },
         include: { children: true },

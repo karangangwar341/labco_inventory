@@ -102,8 +102,18 @@ export const administrationService = {
   }> => {
     return apiClient.post(endpoints.organization.createProjectsBulk(), { items });
   },
-  createProject: async (name: string): Promise<ManagedProject> => {
-    return apiClient.post(endpoints.organization.createProject(), { name });
+  createProject: async (
+    payload: string | { name: string; initialProductIds?: string[]; seedAllCompanyProducts?: boolean },
+  ): Promise<ManagedProject> => {
+    const body = typeof payload === 'string' ? { name: payload } : payload;
+    return apiClient.post(endpoints.organization.createProject(), body);
+  },
+
+  cloneCatalogToProject: async (
+    projectId: string,
+    productIds?: string[],
+  ): Promise<{ success: boolean; clonedCount: number; skippedCount: number; totalProcessed: number }> => {
+    return apiClient.post(endpoints.organization.cloneCatalog(projectId), { productIds });
   },
 
   updateProject: async (id: string, payload: { name?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<ManagedProject> => {

@@ -294,6 +294,7 @@ export const endpoints = {
     createProject: () => "/projects",
     createProjectsBulk: () => "/projects/bulk",
     updateProject: (id: string) => `/projects/${id}`,
+    cloneCatalog: (id: string) => `/projects/${id}/clone-catalog`,
     projectWarehouses: (id: string) => `/projects/${id}/warehouses`,
     projectWarehouseAssignment: (projectId: string, warehouseId: string) =>
       `/projects/${projectId}/warehouses/${warehouseId}`,

@@ -29,6 +29,7 @@ import { reportsService } from "@/features/reports/reports.service";
 import { catalogService } from "@/features/catalog/catalog.service";
 import type { CatalogProduct } from "@/features/catalog/catalog.types";
 import { BulkCatalogModal } from "@/features/catalog/components/BulkCatalogModal";
+import { CloneCatalogModal } from "@/features/catalog/components/CloneCatalogModal";
 import { ManufacturingView } from "@/features/manufacturing/components/ManufacturingView";
 import { StaffManagementView } from "@/features/staff/components/StaffManagementView";
 import {
@@ -113,6 +114,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
   const [deptCustomEnd, setDeptCustomEnd] = useState("");
   const [expandedIndents, setExpandedIndents] = useState<Record<string, boolean>>({});
   const [showBulkCatalogModal, setShowBulkCatalogModal] = useState(false);
+  const [showCloneCatalogModal, setShowCloneCatalogModal] = useState(false);
 
   const [ledgerDateFilter, setLedgerDateFilter] = useState<DateQuickFilter>("TODAY");
   const [ledgerCustomStart, setLedgerCustomStart] = useState("");
@@ -564,6 +566,14 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
             <CardHeader
               action={
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowCloneCatalogModal(true)}
+                    className="text-xs"
+                  >
+                    Transfer from Company Catalog
+                  </Button>
                   <Button
                     variant="primary"
                     size="sm"
@@ -1163,6 +1173,15 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         isOpen={showBulkCatalogModal}
         onClose={() => setShowBulkCatalogModal(false)}
         initialProjectId={projectId}
+      />
+      <CloneCatalogModal
+        isOpen={showCloneCatalogModal}
+        onClose={() => setShowCloneCatalogModal(false)}
+        projectId={projectId}
+        projectName={project.name}
+        onSuccess={() => {
+          void overviewQuery.refetch();
+        }}
       />
     </div>
   );
