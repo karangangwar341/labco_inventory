@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -8,13 +8,15 @@ import { Badge } from '@/components/ui/Badge';
 import { catalogService } from '../catalog.service';
 import { administrationService } from '@/features/administration/administration.service';
 import { invalidation } from '@/lib/query/invalidation';
-import type { CatalogProduct } from '../catalog.types';
+import type { CatalogProduct, CategoryDto } from '../catalog.types';
 
 interface CloneCatalogModalProps {
   isOpen: boolean;
   onClose: () => void;
-  projectId: string;
+  projectId?: string;
   projectName?: string;
+  initialSelectedProductIds?: string[];
+  onSelect?: (productIds: string[]) => void;
   onSuccess?: () => void;
 }
 
@@ -23,14 +25,27 @@ export function CloneCatalogModal({
   onClose,
   projectId,
   projectName,
+  initialSelectedProductIds = [],
+  onSelect,
   onSuccess,
 }: CloneCatalogModalProps) {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'PRODUCTS'>('CATEGORIES');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set(initialSelectedProductIds));
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
+  // Sync initial selection when modal opens or initialSelectedProductIds changes
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedProductIds(new Set(initialSelectedProductIds));
+      setError(null);
+      setSuccessNotice(null);
+    }
+  }, [isOpen, initialSelectedProductIds]);
 
   // Load all company products and categories
   const { data: allProducts = [], isLoading: isLoadingProducts } = useQuery({
@@ -40,7 +55,7 @@ export function CloneCatalogModal({
     staleTime: 5 * 60_000,
   });
 
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
     queryKey: ['catalog', 'categories-for-clone'],
     queryFn: () => catalogService.getCategories(),
     enabled: isOpen,
@@ -54,9 +69,55 @@ export function CloneCatalogModal({
     );
   }, [allProducts]);
 
+  // Map category ID to CategoryDto
+  const categoryById = useMemo(() => {
+    const map = new Map<string, CategoryDto>();
+    categories.forEach((c) => map.set(c.id, c));
+    return map;
+  }, [categories]);
+
+  // Map categories to products under them (including products in their subcategories)
+  const productsByCategoryId = useMemo(() => {
+    const map = new Map<string, CatalogProduct[]>();
+    companyProducts.forEach((p) => {
+      if (p.categoryId) {
+        const list = map.get(p.categoryId) || [];
+        list.push(p);
+        map.set(p.categoryId, list);
+
+        const parentId = categoryById.get(p.categoryId)?.parentId;
+        if (parentId) {
+          const parentList = map.get(parentId) || [];
+          parentList.push(p);
+          map.set(parentId, parentList);
+        }
+      }
+    });
+    return map;
+  }, [companyProducts, categoryById]);
+
+  // Top level categories
+  const rootCategories = useMemo(() => {
+    return categories.filter((c) => !c.parentId && c.ownerScope === 'COMPANY');
+  }, [categories]);
+
+  // Subcategories grouped by parent
+  const subcategoriesByParent = useMemo(() => {
+    const map = new Map<string, CategoryDto[]>();
+    categories.forEach((c) => {
+      if (c.parentId) {
+        const list = map.get(c.parentId) || [];
+        list.push(c);
+        map.set(c.parentId, list);
+      }
+    });
+    return map;
+  }, [categories]);
+
+  // Filtered products for PRODUCTS tab
   const filteredProducts = useMemo(() => {
     return companyProducts.filter((p) => {
-      if (selectedCategory && p.categoryId !== selectedCategory && p.category?.parentId !== selectedCategory) {
+      if (selectedCategory && p.categoryId !== selectedCategory && categoryById.get(p.categoryId)?.parentId !== selectedCategory) {
         return false;
       }
       if (searchTerm.trim()) {
@@ -68,16 +129,20 @@ export function CloneCatalogModal({
       }
       return true;
     });
-  }, [companyProducts, selectedCategory, searchTerm]);
+  }, [companyProducts, selectedCategory, searchTerm, categoryById]);
 
-  const handleSelectAll = () => {
-    if (selectedProductIds.size === filteredProducts.length) {
-      setSelectedProductIds(new Set());
-    } else {
-      setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
-    }
-  };
+  // Count distinct categories among selected products
+  const selectedCategoriesCount = useMemo(() => {
+    const catIds = new Set<string>();
+    companyProducts.forEach((p) => {
+      if (selectedProductIds.has(p.id) && p.categoryId) {
+        catIds.add(p.categoryId);
+      }
+    });
+    return catIds.size;
+  }, [selectedProductIds, companyProducts]);
 
+  // Toggle single product selection
   const toggleProduct = (id: string) => {
     setSelectedProductIds((prev) => {
       const next = new Set(prev);
@@ -87,12 +152,53 @@ export function CloneCatalogModal({
     });
   };
 
+  // Toggle entire category (all products in this category and its subcategories)
+  const toggleCategory = (catId: string) => {
+    const productsInCat = productsByCategoryId.get(catId) || [];
+    if (productsInCat.length === 0) return;
+
+    const allSelected = productsInCat.every((p) => selectedProductIds.has(p.id));
+
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        productsInCat.forEach((p) => next.delete(p.id));
+      } else {
+        productsInCat.forEach((p) => next.add(p.id));
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllVisibleProducts = () => {
+    if (selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
+    }
+  };
+
+  const handleSelectAllCategories = () => {
+    setSelectedProductIds(new Set(companyProducts.map((p) => p.id)));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedProductIds(new Set());
+  };
+
+  const toggleCategoryExpand = (catId: string) => {
+    setExpandedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+  };
+
+  // Clone mutation (used when transferring directly to an existing project)
   const cloneMutation = useMutation({
-    mutationFn: () =>
-      administrationService.cloneCatalogToProject(
+    mutationFn: () => {
+      if (!projectId) throw new Error('Project ID required for direct transfer.');
+      return administrationService.cloneCatalogToProject(
         projectId,
         Array.from(selectedProductIds),
-      ),
+      );
+    },
     onSuccess: async (res) => {
       await invalidation.afterCatalogMutation(queryClient);
       setSuccessNotice(
@@ -100,27 +206,37 @@ export function CloneCatalogModal({
           res.skippedCount > 0 ? ` (${res.skippedCount} already existed)` : ''
         }`,
       );
-      setSelectedProductIds(new Set());
       if (onSuccess) onSuccess();
       setTimeout(() => {
         setSuccessNotice(null);
         onClose();
-      }, 1800);
+      }, 1600);
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : 'Catalog transfer failed.');
     },
   });
 
+  const handleConfirm = () => {
+    if (onSelect) {
+      onSelect(Array.from(selectedProductIds));
+      onClose();
+    } else if (projectId) {
+      cloneMutation.mutate();
+    }
+  };
+
+  const isPickerMode = Boolean(onSelect);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Transfer Products to ${projectName || 'Project'} Catalog`}
-      description="Select products from the company catalog to clone directly into this project's catalog as manufactured products so you do not have to create them from scratch."
+      title={isPickerMode ? `Choose Products to Seed into ${projectName || 'Project'}` : `Transfer Catalog to ${projectName || 'Project'}`}
+      description="Select specific categories or individual products from the company catalog to transfer into this project as manufactured products."
       maxWidth="xl"
     >
-      <div className="space-y-4 pt-2">
+      <div className="space-y-3.5 pt-1">
         {error && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
             {error}
@@ -134,111 +250,280 @@ export function CloneCatalogModal({
           </div>
         )}
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-2.5">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search products by name, brand, or category..."
-              className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 shadow-2xs"
-            />
-          </div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 shadow-2xs"
-          >
-            <option value="">All Categories ({categories.length})</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} {c.ownerScope === 'COMPANY' ? '(Company)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Action Row */}
-        <div className="flex items-center justify-between text-xs py-1 px-1 bg-slate-50 rounded-lg border border-slate-100">
-          <div className="flex items-center gap-2">
+        {/* View Mode Tabs */}
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
             <button
               type="button"
-              onClick={handleSelectAll}
-              className="px-2.5 py-1 text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded-md shadow-2xs cursor-pointer transition-colors"
+              onClick={() => setActiveTab('CATEGORIES')}
+              className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer ${
+                activeTab === 'CATEGORIES'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              {selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0
-                ? 'Deselect All'
-                : 'Select All Visible'}
+              Select by Category ({rootCategories.length})
             </button>
-            <span className="text-slate-500 text-[11px]">
-              Showing {filteredProducts.length} company products
-            </span>
+            <button
+              type="button"
+              onClick={() => setActiveTab('PRODUCTS')}
+              className={`px-3 py-1.5 rounded-md font-semibold transition-all cursor-pointer ${
+                activeTab === 'PRODUCTS'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Select by Product ({companyProducts.length})
+            </button>
           </div>
-          <span className="font-semibold text-slate-700 text-xs">
-            {selectedProductIds.size} selected for transfer
-          </span>
+
+          <div className="flex items-center gap-2">
+            {selectedProductIds.size > 0 && (
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="text-xs text-slate-500 hover:text-rose-600 font-medium cursor-pointer"
+              >
+                Clear All
+              </button>
+            )}
+            <Badge variant="primary" size="sm" className="font-semibold text-xs">
+              {selectedProductIds.size} Selected
+            </Badge>
+          </div>
         </div>
 
-        {/* Products List */}
-        <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
-          {isLoadingProducts ? (
-            <div className="p-8 text-center text-xs text-slate-400">Loading company products...</div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
-              No matching company products found.
-            </div>
-          ) : (
-            filteredProducts.map((p: CatalogProduct) => {
-              const isSelected = selectedProductIds.has(p.id);
-              return (
-                <label
-                  key={p.id}
-                  className={`flex items-center gap-3 p-3 text-xs cursor-pointer transition-colors select-none ${
-                    isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50/70'
-                  }`}
+        {/* TAB 1: CATEGORIES VIEW */}
+        {activeTab === 'CATEGORIES' && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+              <span>Checking a category selects all company products in that classification.</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllCategories}
+                  className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleProduct(p.id)}
-                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 truncate">{p.name}</span>
-                      {p.brand && (
-                        <span className="text-[11px] text-slate-500 font-medium px-1.5 py-0.5 bg-slate-100 rounded">
-                          {p.brand}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
-                      <span>Category: {p.category?.name || p.categoryName || 'General'}</span>
-                      <span>•</span>
-                      <span>Base Unit: {p.baseUnit}</span>
-                      {p.units && p.units.length > 1 && (
-                        <>
-                          <span>•</span>
-                          <span>{p.units.length} units configured</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <Badge variant="neutral" size="sm">
-                    Company
-                  </Badge>
-                </label>
-              );
-            })
-          )}
-        </div>
+                  Select All Categories
+                </button>
+                <span>•</span>
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-slate-500 hover:text-slate-700 cursor-pointer"
+                >
+                  Deselect All
+                </button>
+              </div>
+            </div>
 
-        {/* Footer */}
+            <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
+              {isLoadingCategories || isLoadingProducts ? (
+                <div className="p-8 text-center text-xs text-slate-400">Loading catalog taxonomy...</div>
+              ) : rootCategories.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">No company categories found.</div>
+              ) : (
+                rootCategories.map((root) => {
+                  const productsInRoot = productsByCategoryId.get(root.id) || [];
+                  const subs = subcategoriesByParent.get(root.id) || [];
+                  const selectedInRoot = productsInRoot.filter((p) => selectedProductIds.has(p.id)).length;
+                  const isAllSelected = productsInRoot.length > 0 && selectedInRoot === productsInRoot.length;
+                  const isPartial = selectedInRoot > 0 && selectedInRoot < productsInRoot.length;
+                  const isExpanded = expandedCategories[root.id] ?? (selectedInRoot > 0);
+
+                  return (
+                    <div key={root.id} className="p-2.5 text-xs transition-colors hover:bg-slate-50/50">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            ref={(el) => {
+                              if (el) el.indeterminate = isPartial;
+                            }}
+                            onChange={() => toggleCategory(root.id)}
+                            disabled={productsInRoot.length === 0}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span className="text-amber-500 text-sm">📁</span>
+                          <span className="font-semibold text-slate-900 truncate">{root.name}</span>
+                          <span className="text-slate-400 text-[11px]">
+                            ({productsInRoot.length} {productsInRoot.length === 1 ? 'item' : 'items'})
+                          </span>
+                        </label>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {selectedInRoot > 0 ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              {selectedInRoot} / {productsInRoot.length} selected
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">0 selected</span>
+                          )}
+
+                          {subs.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryExpand(root.id)}
+                              className="text-slate-400 hover:text-slate-600 text-xs px-1 cursor-pointer"
+                              title={isExpanded ? 'Collapse subcategories' : 'Expand subcategories'}
+                            >
+                              {isExpanded ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subcategories (if any and expanded) */}
+                      {subs.length > 0 && isExpanded && (
+                        <div className="mt-2 ml-7 pl-3 border-l-2 border-slate-200 space-y-1.5 py-1">
+                          {subs.map((sub) => {
+                            const productsInSub = productsByCategoryId.get(sub.id) || [];
+                            const selectedInSub = productsInSub.filter((p) => selectedProductIds.has(p.id)).length;
+                            const isSubAll = productsInSub.length > 0 && selectedInSub === productsInSub.length;
+                            const isSubPartial = selectedInSub > 0 && selectedInSub < productsInSub.length;
+
+                            return (
+                              <div key={sub.id} className="flex items-center justify-between text-[11px]">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSubAll}
+                                    ref={(el) => {
+                                      if (el) el.indeterminate = isSubPartial;
+                                    }}
+                                    onChange={() => toggleCategory(sub.id)}
+                                    disabled={productsInSub.length === 0}
+                                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <span className="text-slate-400 font-mono">↳</span>
+                                  <span className="font-medium text-slate-700">{sub.name}</span>
+                                  <span className="text-slate-400">({productsInSub.length})</span>
+                                </label>
+                                <span className="text-slate-500 font-mono text-[10px]">
+                                  {selectedInSub} / {productsInSub.length}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: PRODUCTS VIEW */}
+        {activeTab === 'PRODUCTS' && (
+          <div className="space-y-2.5">
+            {/* Filter toolbar */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search products by name, brand, or SKU..."
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 shadow-2xs"
+                />
+              </div>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 shadow-2xs max-w-xs"
+              >
+                <option value="">All Categories ({categories.length})</option>
+                {rootCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Quick Actions Row */}
+            <div className="flex items-center justify-between text-xs py-1 px-1 bg-slate-50 rounded-lg border border-slate-100">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllVisibleProducts}
+                  className="px-2.5 py-1 text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-blue-200 rounded-md shadow-2xs cursor-pointer transition-colors"
+                >
+                  {selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0
+                    ? 'Deselect Visible'
+                    : 'Select All Visible'}
+                </button>
+                <span className="text-slate-500 text-[11px]">
+                  Showing {filteredProducts.length} of {companyProducts.length} products
+                </span>
+              </div>
+              <span className="font-semibold text-slate-700 text-xs">
+                {selectedProductIds.size} selected
+              </span>
+            </div>
+
+            {/* Products List */}
+            <div className="max-h-[320px] overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
+              {isLoadingProducts ? (
+                <div className="p-8 text-center text-xs text-slate-400">Loading company products...</div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  No matching company products found.
+                </div>
+              ) : (
+                filteredProducts.map((p: CatalogProduct) => {
+                  const isSelected = selectedProductIds.has(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className={`flex items-center gap-3 p-2.5 text-xs cursor-pointer transition-colors select-none ${
+                        isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleProduct(p.id)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 truncate">{p.name}</span>
+                          {p.brand && (
+                            <span className="text-[10px] text-slate-500 font-medium px-1.5 py-0.2 bg-slate-100 rounded">
+                              {p.brand}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <span>{p.category?.name || p.categoryName || 'General'}</span>
+                          <span>•</span>
+                          <span>Unit: {p.baseUnit}</span>
+                          {p.units && p.units.length > 1 && (
+                            <span>({p.units.length} units)</span>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant="neutral" size="sm" className="text-[10px]">
+                        Company
+                      </Badge>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-          <span className="text-xs text-slate-500">
-            {selectedProductIds.size} product(s) will be created in project catalog
-          </span>
+          <div className="text-xs text-slate-500">
+            <span className="font-bold text-slate-800">{selectedProductIds.size}</span> product(s) across{' '}
+            <span className="font-bold text-slate-800">{selectedCategoriesCount}</span> categories selected
+          </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={onClose}>
               Cancel
@@ -249,10 +534,12 @@ export function CloneCatalogModal({
               size="sm"
               disabled={selectedProductIds.size === 0 || cloneMutation.isPending}
               isLoading={cloneMutation.isPending}
-              onClick={() => cloneMutation.mutate()}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleConfirm}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
             >
-              Transfer {selectedProductIds.size} Products to Project
+              {isPickerMode
+                ? `Confirm Selection (${selectedProductIds.size} items)`
+                : `Transfer ${selectedProductIds.size} Products`}
             </Button>
           </div>
         </div>

@@ -13,6 +13,12 @@ export class CreateProjectDto {
   @IsString({ each: true })
   initialProductIds?: string[];
 
+  @ApiPropertyOptional({ description: 'Optional list of company category IDs whose products should be seeded' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  initialCategoryIds?: string[];
+
   @ApiPropertyOptional({ description: 'Automatically seed all approved company products as project catalog items' })
   @IsOptional()
   @IsBoolean()

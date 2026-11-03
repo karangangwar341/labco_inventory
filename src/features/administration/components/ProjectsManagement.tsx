@@ -26,7 +26,9 @@ type ProjectEdit = {
 export function ProjectsManagement() {
   const queryClient = useQueryClient();
   const [projectName, setProjectName] = useState('');
-  const [seedCatalog, setSeedCatalog] = useState(false);
+  const [seedOption, setSeedOption] = useState<'NONE' | 'ALL' | 'CUSTOM'>('NONE');
+  const [customSeedProductIds, setCustomSeedProductIds] = useState<string[]>([]);
+  const [showSeedPickerModal, setShowSeedPickerModal] = useState(false);
   const [cloneProjectTarget, setCloneProjectTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [editing, setEditing] = useState<ProjectEdit | null>(null);
@@ -89,16 +91,25 @@ export function ProjectsManagement() {
     e.preventDefault();
     if (!projectName.trim()) return;
     setActionError(null);
+    const createdName = projectName.trim();
     createProject.mutate(
       {
-        name: projectName.trim(),
-        seedAllCompanyProducts: seedCatalog,
+        name: createdName,
+        seedAllCompanyProducts: seedOption === 'ALL',
+        initialProductIds: seedOption === 'CUSTOM' && customSeedProductIds.length > 0 ? customSeedProductIds : undefined,
       },
       {
         onSuccess: () => {
           setProjectName('');
-          setSeedCatalog(false);
-          setNotice(`Project "${projectName.trim()}" created successfully${seedCatalog ? ' with company catalog seeded' : ''}.`);
+          setSeedOption('NONE');
+          setCustomSeedProductIds([]);
+          setNotice(`Project "${createdName}" created successfully${
+            seedOption === 'ALL'
+              ? ' with all company items seeded'
+              : seedOption === 'CUSTOM' && customSeedProductIds.length > 0
+              ? ` with ${customSeedProductIds.length} catalog items seeded`
+              : ''
+          }.`);
         },
       },
     );
@@ -234,20 +245,107 @@ export function ProjectsManagement() {
               </Button>
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={seedCatalog}
-                onChange={(e) => setSeedCatalog(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="font-medium text-slate-800">
-                Seed project with Company Catalog templates
+            {/* Catalog Seeding Strategy */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                Catalog Seeding Strategy:
               </span>
-              <span className="text-[11px] text-slate-400">
-                (transfers existing company products so this project doesn't start from scratch)
-              </span>
-            </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <label
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-all select-none ${
+                    seedOption === 'NONE'
+                      ? 'bg-blue-50/50 border-blue-400 text-slate-900 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="seedOption"
+                    checked={seedOption === 'NONE'}
+                    onChange={() => setSeedOption('NONE')}
+                    className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-semibold text-slate-800">Blank Slate</div>
+                    <div className="text-[11px] text-slate-500">Do not seed. Project starts fresh with empty catalog.</div>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-all select-none ${
+                    seedOption === 'ALL'
+                      ? 'bg-blue-50/50 border-blue-400 text-slate-900 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="seedOption"
+                    checked={seedOption === 'ALL'}
+                    onChange={() => setSeedOption('ALL')}
+                    className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-semibold text-slate-800">All Company Items</div>
+                    <div className="text-[11px] text-slate-500">Automatically copy all approved company templates into project.</div>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition-all select-none ${
+                    seedOption === 'CUSTOM'
+                      ? 'bg-blue-50/50 border-blue-400 text-slate-900 shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="seedOption"
+                    checked={seedOption === 'CUSTOM'}
+                    onChange={() => {
+                      setSeedOption('CUSTOM');
+                      if (customSeedProductIds.length === 0) {
+                        setShowSeedPickerModal(true);
+                      }
+                    }}
+                    className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-semibold text-slate-800">Select Categories / Products</div>
+                    <div className="text-[11px] text-slate-500">
+                      {customSeedProductIds.length > 0
+                        ? `${customSeedProductIds.length} items selected to seed`
+                        : 'Choose specific categories and products.'}
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              {seedOption === 'CUSTOM' && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowSeedPickerModal(true)}
+                    className="text-xs"
+                  >
+                    {customSeedProductIds.length > 0
+                      ? `Edit Selection (${customSeedProductIds.length} selected)`
+                      : '+ Choose Categories & Products'}
+                  </Button>
+                  {customSeedProductIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomSeedProductIds([])}
+                      className="text-slate-400 hover:text-rose-600 text-xs cursor-pointer underline"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -345,6 +443,19 @@ export function ProjectsManagement() {
         isOpen={showBulkProjectsModal}
         onClose={() => setShowBulkProjectsModal(false)}
       />
+
+      {showSeedPickerModal && (
+        <CloneCatalogModal
+          isOpen={showSeedPickerModal}
+          onClose={() => setShowSeedPickerModal(false)}
+          projectName={projectName.trim() || 'New Project'}
+          initialSelectedProductIds={customSeedProductIds}
+          onSelect={(ids) => {
+            setCustomSeedProductIds(ids);
+            setShowSeedPickerModal(false);
+          }}
+        />
+      )}
 
       {cloneProjectTarget && (
         <CloneCatalogModal

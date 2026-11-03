@@ -50,8 +50,11 @@ export class ProjectsService {
       });
     }
 
-    if (dto.initialProductIds?.length || dto.seedAllCompanyProducts) {
-      await this.cloneCompanyProductsToProject(project.id, dto.initialProductIds);
+    if (dto.initialProductIds?.length || dto.initialCategoryIds?.length || dto.seedAllCompanyProducts) {
+      await this.cloneCompanyProductsToProject(project.id, {
+        productIds: dto.initialProductIds,
+        categoryIds: dto.initialCategoryIds,
+      });
     }
 
     return project;
@@ -263,7 +266,21 @@ export class ProjectsService {
     });
   }
 
-  async cloneCompanyProductsToProject(projectId: string, productIds?: string[], user?: AuthenticatedUser) {
+  async cloneCompanyProductsToProject(
+    projectId: string,
+    options?: { productIds?: string[]; categoryIds?: string[] } | string[],
+    user?: AuthenticatedUser,
+  ) {
+    let productIds: string[] | undefined;
+    let categoryIds: string[] | undefined;
+
+    if (Array.isArray(options)) {
+      productIds = options;
+    } else if (options) {
+      productIds = options.productIds;
+      categoryIds = options.categoryIds;
+    }
+
     if (user && user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
       if (dbUser?.projectId !== projectId) {
@@ -276,12 +293,34 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Project not found');
 
+    let targetCategoryIds: string[] = [];
+    if (categoryIds && categoryIds.length > 0) {
+      const matchingCats = await this.prisma.category.findMany({
+        where: {
+          OR: [
+            { id: { in: categoryIds } },
+            { parentId: { in: categoryIds } },
+          ],
+        },
+        select: { id: true },
+      });
+      targetCategoryIds = matchingCats.map((c: { id: string }) => c.id);
+    }
+
     const sourceWhere: any = {
       ownerScope: CatalogScope.COMPANY,
       status: ProductStatus.APPROVED,
     };
-    if (productIds && productIds.length > 0) {
+
+    if (productIds && productIds.length > 0 && targetCategoryIds.length > 0) {
+      sourceWhere.OR = [
+        { id: { in: productIds } },
+        { categoryId: { in: targetCategoryIds } },
+      ];
+    } else if (productIds && productIds.length > 0) {
       sourceWhere.id = { in: productIds };
+    } else if (targetCategoryIds.length > 0) {
+      sourceWhere.categoryId = { in: targetCategoryIds };
     }
 
     const sourceProducts = await this.prisma.product.findMany({

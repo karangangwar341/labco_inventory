@@ -13,8 +13,13 @@ export async function POST(
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
     const productIds = Array.isArray(body.productIds) ? body.productIds : undefined;
+    const categoryIds = Array.isArray(body.categoryIds) ? body.categoryIds : undefined;
 
-    const result = await container.projectsService.cloneCompanyProductsToProject(id, productIds, user);
+    const result = await container.projectsService.cloneCompanyProductsToProject(
+      id,
+      { productIds, categoryIds },
+      user,
+    );
     return NextResponse.json(result);
   } catch (error) {
     return handleApiError(error);

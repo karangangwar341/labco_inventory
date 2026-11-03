@@ -103,7 +103,12 @@ export const administrationService = {
     return apiClient.post(endpoints.organization.createProjectsBulk(), { items });
   },
   createProject: async (
-    payload: string | { name: string; initialProductIds?: string[]; seedAllCompanyProducts?: boolean },
+    payload: string | {
+      name: string;
+      initialProductIds?: string[];
+      initialCategoryIds?: string[];
+      seedAllCompanyProducts?: boolean;
+    },
   ): Promise<ManagedProject> => {
     const body = typeof payload === 'string' ? { name: payload } : payload;
     return apiClient.post(endpoints.organization.createProject(), body);
@@ -111,9 +116,10 @@ export const administrationService = {
 
   cloneCatalogToProject: async (
     projectId: string,
-    productIds?: string[],
+    params?: { productIds?: string[]; categoryIds?: string[] } | string[],
   ): Promise<{ success: boolean; clonedCount: number; skippedCount: number; totalProcessed: number }> => {
-    return apiClient.post(endpoints.organization.cloneCatalog(projectId), { productIds });
+    const payload = Array.isArray(params) ? { productIds: params } : params ?? {};
+    return apiClient.post(endpoints.organization.cloneCatalog(projectId), payload);
   },
 
   updateProject: async (id: string, payload: { name?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<ManagedProject> => {

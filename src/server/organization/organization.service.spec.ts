@@ -34,6 +34,9 @@ describe('Organization Services (Projects & Warehouses)', () => {
         update: vi.fn(),
         updateMany: vi.fn(),
       },
+      category: {
+        findMany: vi.fn(),
+      },
       product: {
         findMany: vi.fn(),
         findUnique: vi.fn(),
@@ -101,6 +104,43 @@ describe('Organization Services (Projects & Warehouses)', () => {
             kind: 'MANUFACTURED_PRODUCT',
             ownerScope: 'PROJECT',
             projectId: 'proj-1',
+          }),
+        }),
+      );
+    });
+
+    it('clones company catalog products by category IDs to a project', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Apollo Project' });
+      mockPrisma.category.findMany.mockResolvedValue([{ id: 'cat-cotton' }, { id: 'sub-cotton' }]);
+      mockPrisma.product.findMany.mockResolvedValue([
+        {
+          id: 'prod-co-cotton',
+          name: 'Cotton Roll',
+          brand: 'Labco',
+          description: 'Medical cotton',
+          categoryId: 'cat-cotton',
+          quantityPrecision: 0,
+          allowFractional: false,
+          minQuantity: 10,
+          units: [{ unitName: 'Roll', isBaseUnit: true, conversionToBase: 1 }],
+          attributes: [],
+        },
+      ]);
+      mockPrisma.product.findUnique.mockResolvedValue(null);
+      mockPrisma.product.create.mockResolvedValue({ id: 'prod-cloned-cotton' });
+
+      const res = await projectsService.cloneCompanyProductsToProject(
+        'proj-1',
+        { categoryIds: ['cat-cotton'] },
+        superAdmin,
+      );
+      expect(res.success).toBe(true);
+      expect(res.clonedCount).toBe(1);
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            categoryId: { in: ['cat-cotton', 'sub-cotton'] },
           }),
         }),
       );
