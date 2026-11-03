@@ -466,134 +466,210 @@ export function InventoryTable() {
         </div>
       </div>
 
-      {/* Main Stock Table */}
+      {/* Main Stock View: Mobile Cards + Desktop Table */}
       {filtered.length === 0 ? (
         <EmptyState
           title="No raw material inventory matches your filters"
           description="Try broadening your category, brand, or warehouse selection."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-2xs">
-          <Table>
-            <TableHeader sticky>
-              <tr>
-                <TableHead>Product</TableHead>
-                <TableHead>Warehouse</TableHead>
-                <TableHead>Category / Subcategory</TableHead>
-                <TableHead align="right">Usable Qty</TableHead>
-                <TableHead align="right">Reserved Qty</TableHead>
-                <TableHead align="right">Available Qty</TableHead>
-                <TableHead>Unit</TableHead>
-              </tr>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((balance) => {
-                const available = Number(balance.availableQty || 0);
-                const minThreshold = Number(balance.minThreshold || 0);
-                const isLowStock = minThreshold > 0 && available <= minThreshold;
+        <>
+          {/* MOBILE VIEW: High-density responsive inventory cards */}
+          <div className="grid gap-2.5 md:hidden">
+            {filtered.map((balance) => {
+              const available = Number(balance.availableQty || 0);
+              const minThreshold = Number(balance.minThreshold || 0);
+              const isLowStock = minThreshold > 0 && available <= minThreshold;
 
-                return (
-                  <TableRow key={balance.id}>
-                    {/* Product & Brand */}
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-900">
-                            {balance.productName || 'Raw Material Product'}
-                          </span>
-                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                            {balance.productKind ? balance.productKind.replace(/_/g, ' ') : 'Product'}
-                          </span>
-                        </div>
-                        {balance.brand && (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-500">
-                            <span className="text-slate-400">Brand:</span>
-                            <span className="font-medium text-slate-700">{balance.brand}</span>
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    {/* Warehouse Location */}
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
-                        <svg
-                          className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                          />
-                        </svg>
-                        <span>{balance.locationName || 'Warehouse'}</span>
-                      </div>
-                    </TableCell>
-
-                    {/* Category & Subcategory */}
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <div className="text-xs font-medium text-slate-800">
-                          {balance.categoryName || 'General'}
-                        </div>
-                        {balance.subCategoryName && (
-                          <div className="inline-block text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                            Sub: {balance.subCategoryName}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    {/* Usable Qty */}
-                    <TableCell align="right" className="text-xs text-slate-700 font-mono">
-                      {Number(balance.usableQty).toLocaleString()}
-                    </TableCell>
-
-                    {/* Reserved Qty */}
-                    <TableCell align="right" className="text-xs text-amber-700 font-mono">
-                      {Number(balance.reservedQty) > 0 ? (
-                        Number(balance.reservedQty).toLocaleString()
-                      ) : (
-                        <span className="text-slate-300">0</span>
-                      )}
-                    </TableCell>
-
-                    {/* Available Qty */}
-                    <TableCell align="right">
-                      <div className="inline-flex items-center gap-1.5 justify-end">
-                        <span
-                          className={`text-xs font-mono font-bold ${
-                            isLowStock
-                              ? 'text-rose-600'
-                              : available > 0
-                              ? 'text-emerald-700'
-                              : 'text-slate-400'
-                          }`}
-                        >
-                          {available.toLocaleString()}
+              return (
+                <div
+                  key={`mobile-${balance.id}`}
+                  className="p-3 bg-white border border-slate-200/90 rounded-xl shadow-2xs space-y-2"
+                >
+                  {/* Card Header: Product, Kind, Brand, Low Stock Badge */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-xs text-slate-900 break-words">
+                          {balance.productName || 'Raw Material Product'}
                         </span>
-                        {isLowStock && (
-                          <Badge variant="danger" size="sm">
-                            Low
-                          </Badge>
-                        )}
+                        <span className="inline-block px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                          {balance.productKind ? balance.productKind.replace(/_/g, ' ') : 'Product'}
+                        </span>
                       </div>
-                    </TableCell>
+                      {balance.brand && (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Brand: <span className="font-medium text-slate-700">{balance.brand}</span>
+                        </div>
+                      )}
+                    </div>
+                    {isLowStock && (
+                      <Badge variant="danger" size="sm" className="shrink-0 text-[10px]">
+                        Low Stock
+                      </Badge>
+                    )}
+                  </div>
 
-                    {/* Unit */}
-                    <TableCell className="text-xs text-slate-500 font-medium">
-                      {balance.unit || 'units'}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                  {/* Location & Category Strip */}
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg">
+                    <div className="flex items-center gap-1 truncate mr-2">
+                      <span>🏢</span>
+                      <span className="font-medium text-slate-800 truncate">{balance.locationName || 'Warehouse'}</span>
+                    </div>
+                    <span className="shrink-0 font-medium text-slate-600">
+                      {balance.categoryName || 'General'}{balance.subCategoryName ? ` / ${balance.subCategoryName}` : ''}
+                    </span>
+                  </div>
+
+                  {/* 3-Part Quantity Strip */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-0.5 text-center">
+                    <div className="p-1.5 bg-slate-50 rounded-lg">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Usable</div>
+                      <div className="text-xs font-bold font-mono text-slate-800">
+                        {Number(balance.usableQty).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-1.5 bg-slate-50 rounded-lg">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Reserved</div>
+                      <div className={`text-xs font-bold font-mono ${Number(balance.reservedQty) > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {Number(balance.reservedQty).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className={`p-1.5 rounded-lg ${isLowStock ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                      <div className={`text-[10px] uppercase font-semibold ${isLowStock ? 'text-rose-600' : 'text-emerald-700'}`}>Available</div>
+                      <div className={`text-xs font-bold font-mono ${isLowStock ? 'text-rose-700' : 'text-emerald-800'}`}>
+                        {available.toLocaleString()} <span className="text-[10px] font-normal">{balance.unit || 'units'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DESKTOP VIEW: Full Table with minimum width for smooth horizontal scrolling */}
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-2xs">
+            <Table className="min-w-[850px]">
+              <TableHeader sticky>
+                <tr>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Warehouse</TableHead>
+                  <TableHead>Category / Subcategory</TableHead>
+                  <TableHead align="right">Usable Qty</TableHead>
+                  <TableHead align="right">Reserved Qty</TableHead>
+                  <TableHead align="right">Available Qty</TableHead>
+                  <TableHead>Unit</TableHead>
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((balance) => {
+                  const available = Number(balance.availableQty || 0);
+                  const minThreshold = Number(balance.minThreshold || 0);
+                  const isLowStock = minThreshold > 0 && available <= minThreshold;
+
+                  return (
+                    <TableRow key={balance.id}>
+                      {/* Product & Brand */}
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-900">
+                              {balance.productName || 'Raw Material Product'}
+                            </span>
+                            <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                              {balance.productKind ? balance.productKind.replace(/_/g, ' ') : 'Product'}
+                            </span>
+                          </div>
+                          {balance.brand && (
+                            <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                              <span className="text-slate-400">Brand:</span>
+                              <span className="font-medium text-slate-700">{balance.brand}</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* Warehouse Location */}
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                          <svg
+                            className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                            />
+                          </svg>
+                          <span>{balance.locationName || 'Warehouse'}</span>
+                        </div>
+                      </TableCell>
+
+                      {/* Category & Subcategory */}
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-medium text-slate-800">
+                            {balance.categoryName || 'General'}
+                          </div>
+                          {balance.subCategoryName && (
+                            <div className="inline-block text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                              Sub: {balance.subCategoryName}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* Usable Qty */}
+                      <TableCell align="right" className="text-xs text-slate-700 font-mono">
+                        {Number(balance.usableQty).toLocaleString()}
+                      </TableCell>
+
+                      {/* Reserved Qty */}
+                      <TableCell align="right" className="text-xs text-amber-700 font-mono">
+                        {Number(balance.reservedQty) > 0 ? (
+                          Number(balance.reservedQty).toLocaleString()
+                        ) : (
+                          <span className="text-slate-300">0</span>
+                        )}
+                      </TableCell>
+
+                      {/* Available Qty */}
+                      <TableCell align="right">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <span
+                            className={`text-xs font-mono font-bold ${
+                              isLowStock
+                                ? 'text-rose-600'
+                                : available > 0
+                                ? 'text-emerald-700'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {available.toLocaleString()}
+                          </span>
+                          {isLowStock && (
+                            <Badge variant="danger" size="sm">
+                              Low
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      {/* Unit */}
+                      <TableCell className="text-xs text-slate-500 font-medium">
+                        {balance.unit || 'units'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

@@ -42,6 +42,8 @@ export interface DataTableProps<T> {
     pageSizeOptions?: number[];
     showSummary?: boolean;
   };
+  // Optional custom renderer for mobile view cards
+  renderMobileCard?: (item: T, index: number) => React.ReactNode;
 }
 
 export function DataTable<T>({
@@ -60,6 +62,7 @@ export function DataTable<T>({
   className = '',
   striped = false,
   pagination,
+  renderMobileCard,
 }: DataTableProps<T>) {
   const [pageSize, setPageSize] = useState(pagination?.pageSize || 20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -107,17 +110,20 @@ export function DataTable<T>({
 
   return (
     <div className={`w-full flex flex-col rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden ${className}`}>
-      <div className="grid gap-3 p-3 md:hidden">
+      <div className="grid gap-2.5 p-2.5 sm:p-3 md:hidden">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, index) => (
-            <div key={`mobile-skeleton-${index}`} className="animate-pulse rounded-xl border border-slate-200 p-4 space-y-3" aria-hidden="true">
-              <div className="h-4 w-2/5 rounded bg-slate-100" />
+            <div key={`mobile-skeleton-${index}`} className="animate-pulse rounded-xl border border-slate-200 p-3.5 space-y-2.5" aria-hidden="true">
+              <div className="flex justify-between">
+                <div className="h-4 w-2/5 rounded bg-slate-100" />
+                <div className="h-4 w-1/5 rounded bg-slate-100" />
+              </div>
               <div className="h-3 w-3/4 rounded bg-slate-100" />
               <div className="h-3 w-1/2 rounded bg-slate-100" />
             </div>
           ))
         ) : displayedData.length === 0 ? (
-          <div className="px-4 py-10 text-center">
+          <div className="px-4 py-8 text-center">
             <h3 className="text-sm font-semibold text-slate-800">
               {emptyState?.title || emptyTitle || 'No records found'}
             </h3>
@@ -126,6 +132,12 @@ export function DataTable<T>({
             </p>
             {emptyState?.action && <div className="pt-3">{emptyState.action}</div>}
           </div>
+        ) : renderMobileCard ? (
+          displayedData.map((item, rowIdx) => (
+            <React.Fragment key={keyExtractor ? keyExtractor(item, rowIdx) : (item as any)?.id || `row-${rowIdx}`}>
+              {renderMobileCard(item, rowIdx)}
+            </React.Fragment>
+          ))
         ) : (
           displayedData.map((item, rowIdx) => {
             const rowKey = keyExtractor
@@ -137,6 +149,21 @@ export function DataTable<T>({
               onRowClick?.(item);
             };
 
+            const renderCell = (col: ColumnDef<T>) => {
+              if (col.cell) return col.cell(item, rowIdx);
+              if (col.accessorKey) return String((item as any)[col.accessorKey] ?? '');
+              return null;
+            };
+
+            const firstCol = columns[0];
+            const statusCol = columns.find(
+              (c) => c.id.toLowerCase() === 'status' || c.id.toLowerCase() === 'state',
+            );
+            const actionsCol = columns.find((c) => c.id.toLowerCase() === 'actions');
+            const middleCols = columns.filter(
+              (c) => c !== firstCol && c !== statusCol && c !== actionsCol,
+            );
+
             return (
               <article
                 key={`mobile-${rowKey}`}
@@ -144,37 +171,58 @@ export function DataTable<T>({
                 onKeyDown={handleKeyDown}
                 role={mobileCardsClickable ? 'button' : undefined}
                 tabIndex={mobileCardsClickable ? 0 : undefined}
-                className={`min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 ${
+                className={`min-w-0 rounded-xl border border-slate-200/90 bg-white p-3 shadow-2xs space-y-2 ${
                   mobileCardsClickable ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2' : ''
                 }`}
               >
-                <div className="space-y-3">
-                  {columns.map((col, columnIndex) => {
-                    const header = typeof col.header === 'function' ? col.header({ data }) : col.header;
-                    let cellContent: React.ReactNode = null;
-                    if (col.cell) {
-                      cellContent = col.cell(item, rowIdx);
-                    } else if (col.accessorKey) {
-                      cellContent = String((item as any)[col.accessorKey] ?? '');
-                    }
+                {/* Top Row: Primary Column + Status Pill */}
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div className="min-w-0 flex-1 break-words text-xs font-semibold text-slate-900">
+                    {renderCell(firstCol)}
+                  </div>
+                  {statusCol && (
+                    <div className="shrink-0 text-right">
+                      {renderCell(statusCol)}
+                    </div>
+                  )}
+                </div>
 
-                    return (
-                      <div
-                        key={`${rowKey}-mobile-${col.id}`}
-                        className={`min-w-0 ${columnIndex === 0 ? 'border-b border-slate-100 pb-3' : ''} ${col.id === 'actions' ? 'pt-1' : ''}`}
-                      >
-                        {columnIndex !== 0 && (
-                          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {/* Middle Content in clean 2-col responsive grid */}
+                {middleCols.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+                    {middleCols.map((col) => {
+                      const header = typeof col.header === 'function' ? col.header({ data }) : col.header;
+                      const cell = renderCell(col);
+                      const isFullWidth =
+                        col.id === 'items' ||
+                        col.id === 'lines' ||
+                        col.id === 'description' ||
+                        col.id === 'notes' ||
+                        col.id === 'summary';
+
+                      return (
+                        <div
+                          key={`${rowKey}-mobile-${col.id}`}
+                          className={`min-w-0 ${isFullWidth ? 'col-span-2 p-2 bg-slate-50/80 rounded-lg' : ''}`}
+                        >
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5 truncate">
                             {header}
                           </div>
-                        )}
-                        <div className="min-w-0 break-words text-sm text-slate-800 [&_*]:max-w-full [&_*]:break-words">
-                          {cellContent}
+                          <div className="min-w-0 break-words text-xs text-slate-800">
+                            {cell}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Bottom Row: Actions */}
+                {actionsCol && (
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-1.5">
+                    {renderCell(actionsCol)}
+                  </div>
+                )}
               </article>
             );
           })
