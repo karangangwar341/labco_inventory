@@ -184,30 +184,12 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
     staleTime: 2 * 60_000,
   });
 
-  if (overviewQuery.isLoading)
-    return <LoadingState message="Loading project operations overview..." />;
-  if (overviewQuery.error || !overviewQuery.data) {
-    return (
-      <ErrorState
-        title="Project overview could not be loaded"
-        message={
-          overviewQuery.error instanceof Error
-            ? overviewQuery.error.message
-            : "Try again."
-        }
-        onRetry={() => overviewQuery.refetch()}
-      />
-    );
-  }
-
-  const {
-    project,
-    stock,
-    departmentActivity,
-    production,
-    ledger,
-    manufacturedProducts,
-  } = overviewQuery.data;
+  const project = overviewQuery.data?.project ?? { id: projectId, name: "Project", status: "ACTIVE" };
+  const stock = overviewQuery.data?.stock ?? [];
+  const departmentActivity = overviewQuery.data?.departmentActivity ?? [];
+  const production = overviewQuery.data?.production ?? [];
+  const ledger = overviewQuery.data?.ledger ?? [];
+  const manufacturedProducts = overviewQuery.data?.manufacturedProducts ?? [];
 
   // Aggregate stock
   const stockByProduct = new Map<string, ReportRow>();
@@ -370,6 +352,24 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
       ledgerCustomEnd,
     ),
   );
+
+  if (overviewQuery.isLoading) {
+    return <LoadingState message="Loading project operations overview..." />;
+  }
+
+  if (overviewQuery.error || !overviewQuery.data) {
+    return (
+      <ErrorState
+        title="Project overview could not be loaded"
+        message={
+          overviewQuery.error instanceof Error
+            ? overviewQuery.error.message
+            : "Try again."
+        }
+        onRetry={() => overviewQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
