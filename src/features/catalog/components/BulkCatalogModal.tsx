@@ -642,8 +642,8 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
                     Immediate database insertion on submit
                   </span>
                 </div>
-                <div className="max-h-56 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
+                <div className="max-h-56 overflow-auto">
+                  <table className="w-full min-w-[700px] text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0 font-medium">
                       <tr>
                         <th className="py-1.5 px-3">#</th>

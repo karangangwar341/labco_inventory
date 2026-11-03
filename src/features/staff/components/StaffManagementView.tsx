@@ -758,7 +758,7 @@ export function StaffManagementView({ projectId: propProjectId, hideHeader = fal
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
+                <table className="w-full min-w-[700px] text-left text-xs text-slate-600">
                   <thead className="bg-slate-50/80 border-b border-slate-200 font-semibold text-slate-700 uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="py-3 px-4">Date &amp; Shift</th>

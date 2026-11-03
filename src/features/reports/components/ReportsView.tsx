@@ -697,7 +697,7 @@ export function ReportsView() {
             <div className="p-5 text-center text-xs text-slate-400">No export logs recorded yet.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[500px] text-left text-xs">
                 <thead className="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80 text-[11px] uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-4">Dataset</th>
@@ -796,7 +796,7 @@ export function ReportsView() {
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[600px] text-left text-xs">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                   <tr>
                     <th className="py-2.5 px-3">#</th>

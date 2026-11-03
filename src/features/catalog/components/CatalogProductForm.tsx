@@ -693,14 +693,14 @@ export function CatalogProductForm({
         {/* Section 2: Packaging Units & Multi-Unit Conversions */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
               <div>
                 <CardTitle>2. Packaging &amp; Unit Conversions</CardTitle>
                 <CardDescription>
                   Choose from standardized measurement units or packaging multiples (e.g. Vial, Box, Pack, Carton).
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {role === 'SUPER_ADMIN' && (
                   <Link
                     href="/catalog?tab=UNITS"
@@ -714,6 +714,7 @@ export function CatalogProductForm({
                   type="button"
                   variant="secondary"
                   size="sm"
+                  className="w-full sm:w-auto text-xs"
                   onClick={() => {
                     setModalUnitName('');
                     setModalUnitCategory('PACKAGING');
@@ -728,6 +729,7 @@ export function CatalogProductForm({
                   type="button"
                   variant="secondary"
                   size="sm"
+                  className="w-full sm:w-auto text-xs"
                   onClick={() => setUnits((prev) => [...prev, blankUnit()])}
                 >
                   + Add Packaging Unit
@@ -742,8 +744,130 @@ export function CatalogProductForm({
               ))}
             </datalist>
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-xs">
+            {/* MOBILE VIEW: High-density Unit Cards */}
+            <div className="space-y-3 md:hidden">
+              {units.map((unit, index) => (
+                <div
+                  key={index}
+                  className={`p-3 rounded-xl border transition-all space-y-2.5 ${
+                    unit.isBaseUnit
+                      ? 'bg-blue-50/50 border-blue-200 shadow-2xs'
+                      : 'bg-white border-slate-200'
+                  }`}
+                >
+                  {/* Top row: Radio + Label + Delete Button */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        name="mobileBaseUnitSelector"
+                        checked={unit.isBaseUnit}
+                        onChange={() => setBaseUnit(index)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className={`text-xs font-bold ${unit.isBaseUnit ? 'text-blue-900' : 'text-slate-700'}`}>
+                        {unit.isBaseUnit ? 'Primary Base Inventory Unit' : `Packaging Multiplier #${index}`}
+                      </span>
+                    </label>
+
+                    {units.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const remaining = units.filter((_, i) => i !== index);
+                          if (unit.isBaseUnit && remaining.length > 0) {
+                            remaining[0].isBaseUnit = true;
+                            remaining[0].conversionToBase = '1';
+                          }
+                          setUnits(remaining);
+                        }}
+                        className="text-slate-400 hover:text-rose-600 text-xs font-semibold px-1 py-0.5 rounded cursor-pointer"
+                        title="Remove unit"
+                      >
+                        ✕ Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Inputs: Unit Name + Conversion Factor */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Measurement Unit
+                      </label>
+                      <Select
+                        value={unit.unitName}
+                        onChange={(e) =>
+                          setUnits((curr) =>
+                            curr.map((item, i) =>
+                              i === index ? { ...item, unitName: e.target.value } : item,
+                            ),
+                          )
+                        }
+                        required
+                        className="text-xs"
+                      >
+                        <option value="">Select standard unit</option>
+                        {unit.unitName && !allStandardUnits.includes(unit.unitName) && (
+                          <option value={unit.unitName}>{unit.unitName} (Existing)</option>
+                        )}
+                        {allStandardUnits.map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Conversion Factor {unit.isBaseUnit ? '(1.0 for Base)' : `(Multiplier to ${baseUnitObj?.unitName || 'Base'})`}
+                      </label>
+                      <Input
+                        type="number"
+                        min="0.0001"
+                        step="any"
+                        value={unit.conversionToBase}
+                        onChange={(e) =>
+                          setUnits((curr) =>
+                            curr.map((item, i) =>
+                              i === index ? { ...item, conversionToBase: e.target.value } : item,
+                            ),
+                          )
+                        }
+                        disabled={unit.isBaseUnit}
+                        required
+                        className="text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Summary Footer */}
+                  <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      Conversion Rule:
+                    </span>
+                    {unit.isBaseUnit ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        ✓ Primary Base Inventory Unit (1.0)
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-slate-700">
+                        1 {unit.unitName || 'Pack'} ={' '}
+                        <span className="font-bold text-blue-700 font-mono">
+                          {unit.conversionToBase || '—'}
+                        </span>{' '}
+                        {baseUnitObj?.unitName || 'Base Units'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* DESKTOP VIEW: Unit Table with min-w for horizontal scrolling */}
+            <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[640px] text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
                   <tr>
                     <th className="py-2.5 px-3 w-16 text-center">Base Unit</th>
@@ -971,56 +1095,72 @@ export function CatalogProductForm({
                 {attributes.map((attr, index) => (
                   <div
                     key={index}
-                    className="grid grid-cols-[1.5fr_1.5fr_1fr_auto] items-center gap-2 p-2 bg-slate-50/70 rounded-lg border border-slate-200"
+                    className="p-3 sm:p-2 bg-slate-50/70 rounded-lg border border-slate-200 space-y-2 sm:space-y-0 sm:grid sm:grid-cols-[1.5fr_1.5fr_1fr_auto] sm:items-center gap-2"
                   >
-                    <Input
-                      label={index === 0 ? 'Attribute Name' : undefined}
-                      list="known-spec-names"
-                      value={attr.attributeName}
-                      onChange={(e) =>
-                        setAttributes((curr) =>
-                          curr.map((item, i) =>
-                            i === index ? { ...item, attributeName: e.target.value } : item,
-                          ),
-                        )
-                      }
-                      placeholder="e.g. Storage Temperature"
-                      className="text-xs"
-                    />
-                    <Input
-                      label={index === 0 ? 'Value' : undefined}
-                      value={attr.value}
-                      onChange={(e) =>
-                        setAttributes((curr) =>
-                          curr.map((item, i) =>
-                            i === index ? { ...item, value: e.target.value } : item,
-                          ),
-                        )
-                      }
-                      placeholder="e.g. 2 - 8"
-                      className="text-xs"
-                    />
-                    <Input
-                      label={index === 0 ? 'Unit (Optional)' : undefined}
-                      value={attr.unit}
-                      onChange={(e) =>
-                        setAttributes((curr) =>
-                          curr.map((item, i) =>
-                            i === index ? { ...item, unit: e.target.value } : item,
-                          ),
-                        )
-                      }
-                      placeholder="e.g. °C, %, ml"
-                      className="text-xs"
-                    />
-                    <div className={index === 0 ? 'pt-5' : ''}>
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-600 sm:hidden mb-1">
+                        Attribute Name
+                      </span>
+                      <Input
+                        label={index === 0 ? 'Attribute Name' : undefined}
+                        list="known-spec-names"
+                        value={attr.attributeName}
+                        onChange={(e) =>
+                          setAttributes((curr) =>
+                            curr.map((item, i) =>
+                              i === index ? { ...item, attributeName: e.target.value } : item,
+                            ),
+                          )
+                        }
+                        placeholder="e.g. Storage Temperature"
+                        className="text-xs"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-600 sm:hidden mb-1">
+                        Value
+                      </span>
+                      <Input
+                        label={index === 0 ? 'Value' : undefined}
+                        value={attr.value}
+                        onChange={(e) =>
+                          setAttributes((curr) =>
+                            curr.map((item, i) =>
+                              i === index ? { ...item, value: e.target.value } : item,
+                            ),
+                          )
+                        }
+                        placeholder="e.g. 2 - 8"
+                        className="text-xs"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[11px] font-semibold text-slate-600 sm:hidden mb-1">
+                        Unit (Optional)
+                      </span>
+                      <Input
+                        label={index === 0 ? 'Unit (Optional)' : undefined}
+                        value={attr.unit}
+                        onChange={(e) =>
+                          setAttributes((curr) =>
+                            curr.map((item, i) =>
+                              i === index ? { ...item, unit: e.target.value } : item,
+                            ),
+                          )
+                        }
+                        placeholder="e.g. °C, %, ml"
+                        className="text-xs"
+                      />
+                    </div>
+                    <div className={`flex justify-end ${index === 0 ? 'sm:pt-5' : ''}`}>
                       <button
                         type="button"
                         onClick={() => setAttributes((curr) => curr.filter((_, i) => i !== index))}
-                        className="text-slate-400 hover:text-rose-600 font-bold p-2 text-sm rounded transition-colors"
+                        className="text-slate-400 hover:text-rose-600 font-bold p-1.5 sm:p-2 text-xs sm:text-sm rounded transition-colors flex items-center gap-1 cursor-pointer"
                         title="Remove specification"
                       >
-                        ✕
+                        <span className="sm:hidden font-semibold text-rose-600 text-xs">✕ Remove Spec</span>
+                        <span className="hidden sm:inline">✕</span>
                       </button>
                     </div>
                   </div>

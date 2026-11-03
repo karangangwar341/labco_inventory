@@ -609,7 +609,7 @@ export function ImportsReview() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[700px] text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#f8fafc] text-[#5b6678] border-b border-[#dbe3ee]">
                   <th className="py-2.5 px-3.5 font-semibold w-10 text-center">#</th>

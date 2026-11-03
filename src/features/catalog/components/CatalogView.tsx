@@ -1335,7 +1335,7 @@ export function CatalogView() {
               /* HIERARCHY TREE TABLE VIEW */
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full min-w-[640px] text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
                         <th className="py-2.5 px-3">Category Name</th>
