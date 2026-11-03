@@ -324,7 +324,7 @@ export function RequestsList() {
                 )}
                 {projectName && (
                   <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-                    🏢 {projectName}
+                    {projectName}
                   </span>
                 )}
               </div>
@@ -517,81 +517,81 @@ export function RequestsList() {
       />
 
       {/* Operational Executive Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
               Total Requests
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             </div>
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+          <div className="mt-1 sm:mt-2.5 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900 font-mono">
               {counts.all}
             </span>
-            <span className="text-xs text-slate-500">all movements</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">all</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-amber-200/90 shadow-2xs hover:border-amber-300 transition-colors">
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-amber-200/90 shadow-2xs hover:border-amber-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
-              Pending Approval
+            <span className="text-[10px] sm:text-[11px] font-semibold text-amber-700 uppercase tracking-wider truncate">
+              Pending
             </span>
             {counts.pending > 0 && (
-              <span className="relative flex h-2.5 w-2.5">
+              <span className="relative flex h-2 w-2 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
               </span>
             )}
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-amber-900 font-mono">
+          <div className="mt-1 sm:mt-2.5 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold tracking-tight text-amber-900 font-mono">
               {counts.pending}
             </span>
-            <span className="text-xs text-amber-700 font-medium">requires action</span>
+            <span className="text-[10px] sm:text-xs text-amber-700 font-medium truncate">action</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Approved &amp; Completed
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
+              Completed
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+          <div className="mt-1 sm:mt-2.5 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900 font-mono">
               {counts.approved}
             </span>
-            <span className="text-xs text-emerald-600 font-medium">finalized</span>
+            <span className="text-[10px] sm:text-xs text-emerald-600 font-medium truncate">finalized</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Total Units Tracked
+            <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
+              Total Units
             </span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-5 h-5 sm:w-7 sm:h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
           </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-slate-900 font-mono">
+          <div className="mt-1 sm:mt-2.5 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-900 font-mono">
               {counts.totalUnits.toLocaleString()}
             </span>
-            <span className="text-xs text-slate-500">items moved</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">moved</span>
           </div>
         </div>
       </div>
@@ -719,7 +719,7 @@ export function RequestsList() {
             </div>
 
             {/* Scope Dropdowns (Project & Warehouse) */}
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5 w-full sm:w-auto">
               {/* Project Filter */}
               {(isSuperAdmin || isStoreAdmin) && projects.length > 0 && (
                 <div className="relative flex-1 sm:flex-initial">
@@ -729,7 +729,7 @@ export function RequestsList() {
                     aria-label="Filter by project"
                     className="w-full sm:w-48 appearance-none pl-3 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs cursor-pointer hover:border-slate-300 transition-colors"
                   >
-                    <option value="">🏢 All Projects</option>
+                    <option value="">All Projects</option>
                     {projects.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -751,7 +751,7 @@ export function RequestsList() {
                     aria-label="Filter by warehouse"
                     className="w-full sm:w-48 appearance-none pl-3 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs cursor-pointer hover:border-slate-300 transition-colors"
                   >
-                    <option value="">🏬 All Warehouses</option>
+                    <option value="">All Warehouses</option>
                     {warehouses.map((w) => (
                       <option key={w.id} value={w.id}>
                         {w.name}

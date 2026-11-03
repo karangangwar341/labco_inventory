@@ -67,6 +67,7 @@ export function ApprovalsQueue() {
     priorityParam === 'URGENT' || priorityParam === 'NORMAL' ? priorityParam : 'ALL',
   );
   const [requesterSearch, setRequesterSearch] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const [rejectingItem, setRejectingItem] = useState<QueueItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -605,12 +606,47 @@ export function ApprovalsQueue() {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-3 text-xs shadow-xs">
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3">
+      <div className="p-2.5 sm:p-3.5 bg-white border border-slate-200/80 rounded-xl space-y-2.5 sm:space-y-3 text-xs shadow-xs">
+        {/* Search Input + Mobile Filter Toggle */}
+        <div className="flex items-center gap-2">
+          <div className="w-full relative flex-1">
+            <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search requester or reference..."
+              value={requesterSearch}
+              onChange={(e) => setRequesterSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-1 focus:ring-blue-600 transition-all text-xs"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 shrink-0 transition-colors ${
+              priorityFilter !== 'ALL' || selectedProjectId || dateFilter !== 'TODAY' || showMobileFilters
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span>Filters</span>
+            {(priorityFilter !== 'ALL' || Boolean(selectedProjectId) || dateFilter !== 'TODAY') && (
+              <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+            )}
+          </button>
+        </div>
+
+        {/* Collapsible on mobile, visible on sm+ */}
+        <div className={`${showMobileFilters ? 'space-y-2.5' : 'hidden'} sm:block sm:space-y-3`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1 sm:pt-0">
             {/* Priority Filter */}
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-500 font-medium shrink-0">Priority:</span>
+              <span className="text-slate-500 font-medium shrink-0 text-xs">Priority:</span>
               <div className="flex items-center gap-1">
                 {(['ALL', 'URGENT', 'NORMAL'] as const).map((p) => (
                   <button
@@ -631,7 +667,7 @@ export function ApprovalsQueue() {
             {/* Project Filter (Super Admin / Authorized) */}
             {isAuthorized && (
               <div className="flex items-center gap-1.5 w-full sm:w-auto">
-                <span className="text-slate-500 font-medium shrink-0">Project:</span>
+                <span className="text-slate-500 font-medium shrink-0 text-xs">Project:</span>
                 <select
                   value={selectedProjectId}
                   onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -648,33 +684,19 @@ export function ApprovalsQueue() {
             )}
           </div>
 
-          {/* Search Input */}
-          <div className="w-full md:w-auto relative">
-            <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search requester or reference..."
-              value={requesterSearch}
-              onChange={(e) => setRequesterSearch(e.target.value)}
-              className="w-full md:w-64 pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-1 focus:ring-blue-600 transition-all text-xs"
+          {/* Date Filter Bar */}
+          <div className="pt-2 border-t border-slate-100 overflow-x-auto whitespace-nowrap scrollbar-none">
+            <DateQuickFilterBar
+              value={dateFilter}
+              onChange={setDateFilter}
+              customStart={customStart}
+              customEnd={customEnd}
+              onCustomStartChange={setCustomStart}
+              onCustomEndChange={setCustomEnd}
+              totalOlderCount={olderItemsCount}
+              onViewOlder={() => setDateFilter('ALL')}
             />
           </div>
-        </div>
-
-        {/* Date Filter Bar */}
-        <div className="pt-2 border-t border-slate-100">
-          <DateQuickFilterBar
-            value={dateFilter}
-            onChange={setDateFilter}
-            customStart={customStart}
-            customEnd={customEnd}
-            onCustomStartChange={setCustomStart}
-            onCustomEndChange={setCustomEnd}
-            totalOlderCount={olderItemsCount}
-            onViewOlder={() => setDateFilter('ALL')}
-          />
         </div>
       </div>
 

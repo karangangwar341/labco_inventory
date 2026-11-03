@@ -37,6 +37,17 @@ export function InventoryTable() {
   const [selectedSubCategory, setSelectedSubCategory] = useState('ALL');
   const [selectedBrand, setSelectedBrand] = useState('ALL');
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedWarehouse !== 'ALL') count++;
+    if (selectedCategory !== 'ALL') count++;
+    if (selectedSubCategory !== 'ALL') count++;
+    if (selectedBrand !== 'ALL') count++;
+    if (showLowStockOnly) count++;
+    return count;
+  }, [selectedWarehouse, selectedCategory, selectedSubCategory, selectedBrand, showLowStockOnly]);
 
   // Fetch balances specifically for raw materials in warehouses
   const {
@@ -252,62 +263,84 @@ export function InventoryTable() {
       />
 
       {/* KPI Summary Cards */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-2xs">
-          <p className="text-xs font-medium text-slate-500">Raw Material Products</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{summary.products}</p>
-          <p className="mt-0.5 text-[11px] text-slate-400">In company warehouses</p>
+      <div className="grid gap-2 sm:gap-3 grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs">
+          <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">Raw Material Products</p>
+          <p className="mt-1 text-lg sm:text-2xl font-bold text-slate-900">{summary.products}</p>
+          <p className="hidden sm:block mt-0.5 text-[11px] text-slate-400">In company warehouses</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-2xs">
-          <p className="text-xs font-medium text-slate-500">Available Quantity</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-600">
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs">
+          <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">Available Quantity</p>
+          <p className="mt-1 text-lg sm:text-2xl font-bold text-emerald-600">
             {summary.available.toLocaleString()}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Ready for dispatch & formulation</p>
+          <p className="hidden sm:block mt-0.5 text-[11px] text-slate-400">Ready for dispatch & formulation</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-2xs">
-          <p className="text-xs font-medium text-slate-500">Reserved for Requests</p>
-          <p className="mt-1 text-2xl font-bold text-amber-600">
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs">
+          <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">Reserved for Requests</p>
+          <p className="mt-1 text-lg sm:text-2xl font-bold text-amber-600">
             {summary.reserved.toLocaleString()}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Locked in approved orders</p>
+          <p className="hidden sm:block mt-0.5 text-[11px] text-slate-400">Locked in approved orders</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-2xs">
-          <p className="text-xs font-medium text-slate-500">Low Stock Warnings</p>
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs">
+          <p className="text-[10px] sm:text-xs font-medium text-slate-500 truncate">Low Stock Warnings</p>
           <p
-            className={`mt-1 text-2xl font-bold ${
+            className={`mt-1 text-lg sm:text-2xl font-bold ${
               summary.lowStock > 0 ? 'text-rose-600' : 'text-slate-900'
             }`}
           >
             {summary.lowStock}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Below minimum threshold</p>
+          <p className="hidden sm:block mt-0.5 text-[11px] text-slate-400">Below minimum threshold</p>
         </div>
       </div>
 
       {/* Multi-Filter Bar */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-        {/* Row 1: Search & Dropdowns */}
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
-          {/* 1. Search */}
-          <div className="relative">
+      <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs space-y-2.5 sm:space-y-3">
+        {/* Row 1: Search & Mobile Filter Toggle */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
             <input
               aria-label="Search warehouse inventory"
               type="search"
               placeholder="Search product, brand, SKU..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full min-h-9 sm:min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             />
           </div>
 
-          {/* 2. Warehouse Filter (Only warehouses, no projects) */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`sm:hidden min-h-9 px-2.5 py-1.5 rounded-md text-xs font-semibold border flex items-center gap-1.5 shrink-0 transition-colors ${
+              activeFilterCount > 0 || showMobileFilters
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-blue-600 text-[10px] text-white flex items-center justify-center font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Dropdown Filters: Collapsible on mobile, 4-col on desktop */}
+        <div className={`${showMobileFilters ? 'grid' : 'hidden'} sm:grid gap-2 sm:gap-2.5 grid-cols-2 lg:grid-cols-4`}>
+          {/* Warehouse Filter (Only warehouses, no projects) */}
           <div>
             <select
               aria-label="Filter by warehouse"
               value={selectedWarehouse}
               onChange={(e) => setSelectedWarehouse(e.target.value)}
-              className="w-full min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full min-h-8 sm:min-h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
               <option value="ALL">All Warehouses ({warehouseLocations.length})</option>
               {warehouseLocations.map((loc) => (
@@ -318,13 +351,13 @@ export function InventoryTable() {
             </select>
           </div>
 
-          {/* 3. Category Filter */}
+          {/* Category Filter */}
           <div>
             <select
               aria-label="Filter by category"
               value={selectedCategory}
               onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full min-h-8 sm:min-h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
               <option value="ALL">All Categories ({availableCategories.length})</option>
               {availableCategories.map((cat) => (
@@ -335,14 +368,14 @@ export function InventoryTable() {
             </select>
           </div>
 
-          {/* 4. Sub-category Filter */}
+          {/* Sub-category Filter */}
           <div>
             <select
               aria-label="Filter by sub-category"
               value={selectedSubCategory}
               onChange={(e) => setSelectedSubCategory(e.target.value)}
               disabled={availableSubCategories.length === 0}
-              className="w-full min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 disabled:bg-slate-50 disabled:text-slate-400"
+              className="w-full min-h-8 sm:min-h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 disabled:bg-slate-50 disabled:text-slate-400"
             >
               <option value="ALL">
                 {availableSubCategories.length === 0
@@ -357,13 +390,13 @@ export function InventoryTable() {
             </select>
           </div>
 
-          {/* 5. Brand Filter */}
+          {/* Brand Filter */}
           <div>
             <select
               aria-label="Filter by brand"
               value={selectedBrand}
               onChange={(e) => setSelectedBrand(e.target.value)}
-              className="w-full min-h-10 rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              className="w-full min-h-8 sm:min-h-9 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
             >
               <option value="ALL">All Brands ({availableBrands.length})</option>
               {availableBrands.map((brand) => (

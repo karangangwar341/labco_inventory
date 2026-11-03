@@ -59,6 +59,15 @@ export function ShipmentsList() {
   const [selectedOrigin, setSelectedOrigin] = useState('ALL');
   const [selectedDestination, setSelectedDestination] = useState('ALL');
   const [pageSize, setPageSize] = useState(10);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== 'ALL') count++;
+    if (selectedOrigin !== 'ALL') count++;
+    if (selectedDestination !== 'ALL') count++;
+    return count;
+  }, [statusFilter, selectedOrigin, selectedDestination]);
 
 
   // Time filter states (filters query from backend)
@@ -443,70 +452,70 @@ export function ShipmentsList() {
 
 
       {/* 1. KPI Metric Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
         <Card className="bg-gradient-to-br from-blue-50/70 to-white border-blue-200/80">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between text-blue-900 text-xs font-semibold">
-              <span>All Shipments</span>
-              <span className="text-blue-600 font-mono text-[11px]">📦 Total</span>
+          <CardContent className="p-2.5 sm:p-4">
+            <div className="flex items-center justify-between text-blue-900 text-[10px] sm:text-xs font-semibold">
+              <span className="truncate">All Shipments</span>
+              <span className="text-blue-600 font-mono text-[10px] sm:text-[11px] hidden sm:inline">Total</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight font-mono">
+            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-bold text-slate-900 tracking-tight font-mono">
               {counts.all}{' '}
-              <span className="text-xs font-normal text-slate-500 font-sans">recorded</span>
+              <span className="text-[10px] sm:text-xs font-normal text-slate-500 font-sans">recorded</span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">
-              {counts.totalItems.toLocaleString()} units tracked in transit / delivered
+            <p className="hidden sm:block mt-1 text-[11px] text-slate-500 truncate">
+              {counts.totalItems.toLocaleString()} units tracked
             </p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-amber-50/70 to-white border-amber-200/80">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between text-amber-900 text-xs font-semibold">
-              <span>In Transit</span>
+          <CardContent className="p-2.5 sm:p-4">
+            <div className="flex items-center justify-between text-amber-900 text-[10px] sm:text-xs font-semibold">
+              <span className="truncate">In Transit</span>
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
               </span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-amber-900 tracking-tight font-mono">
+            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-bold text-amber-900 tracking-tight font-mono">
               {counts.inTransit}{' '}
-              <span className="text-xs font-normal text-amber-700 font-sans">active</span>
+              <span className="text-[10px] sm:text-xs font-normal text-amber-700 font-sans">active</span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">En route to receiving facility docks</p>
+            <p className="hidden sm:block mt-1 text-[11px] text-slate-500 truncate">En route to receiving docks</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-amber-50/70 to-white border-amber-200/80">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between text-amber-900 text-xs font-semibold">
-              <span>Awaiting Receipt</span>
-              <span className="text-amber-700 font-mono text-[11px]">Action</span>
+          <CardContent className="p-2.5 sm:p-4">
+            <div className="flex items-center justify-between text-amber-900 text-[10px] sm:text-xs font-semibold">
+              <span className="truncate">Awaiting Receipt</span>
+              <span className="text-amber-700 font-mono text-[10px] sm:text-[11px] hidden sm:inline">Action</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-amber-900 tracking-tight font-mono">
+            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-bold text-amber-900 tracking-tight font-mono">
               {counts.awaitingApproval}{' '}
-              <span className="text-xs font-normal text-amber-800 font-sans">pending</span>
+              <span className="text-[10px] sm:text-xs font-normal text-amber-800 font-sans">pending</span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">Dock verification awaiting Super Admin</p>
+            <p className="hidden sm:block mt-1 text-[11px] text-slate-500 truncate">Dock verification awaiting</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-emerald-50/70 to-white border-emerald-200/80">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between text-emerald-900 text-xs font-semibold">
-              <span>Completed Deliveries</span>
-              <span className="text-emerald-600 font-mono text-[11px]">✓ Settled</span>
+          <CardContent className="p-2.5 sm:p-4">
+            <div className="flex items-center justify-between text-emerald-900 text-[10px] sm:text-xs font-semibold">
+              <span className="truncate">Completed</span>
+              <span className="text-emerald-600 font-mono text-[10px] sm:text-[11px] hidden sm:inline">Settled</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-emerald-900 tracking-tight font-mono">
+            <div className="mt-1 sm:mt-2 text-lg sm:text-2xl font-bold text-emerald-900 tracking-tight font-mono">
               {counts.completed}{' '}
-              <span className="text-xs font-normal text-emerald-700 font-sans">received</span>
+              <span className="text-[10px] sm:text-xs font-normal text-emerald-700 font-sans">received</span>
               {counts.discrepancyHold > 0 && (
-                <span className="text-xs font-bold text-rose-600 font-sans ml-1">
-                  · {counts.discrepancyHold} held
+                <span className="text-[10px] sm:text-xs font-bold text-rose-600 font-sans ml-1">
+                  | {counts.discrepancyHold} held
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">Fully posted to destination stock ledger</p>
+            <p className="hidden sm:block mt-1 text-[11px] text-slate-500 truncate">Posted to stock ledger</p>
           </CardContent>
         </Card>
       </div>
@@ -565,71 +574,96 @@ export function ShipmentsList() {
           </div>
 
           {/* Bottom row: Text Search and Select Dropdowns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search tracking #, product..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
-              />
-              <svg
-                className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search tracking #, product..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                />
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className={`sm:hidden px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 shrink-0 transition-colors ${
+                  activeFilterCount > 0 || showMobileFilters
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span>Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-blue-600 text-[10px] text-white flex items-center justify-center font-bold">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* Status Select */}
-            <div>
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="ALL">All Delivery Statuses</option>
-                <option value="ACTIVE">Active Deliveries</option>
-                <option value="IN_TRANSIT">In Transit Only</option>
-                <option value="AWAITING_RECEIPT_APPROVAL">Awaiting Receipt Approval</option>
-                <option value="COMPLETED">Completed Only</option>
-                <option value="DISCREPANCY_HOLD">Discrepancy Hold Only</option>
-              </Select>
-            </div>
-
-            {/* Origin Warehouse (if authorized to see sources) */}
-            {canSeeSource && (
+            {/* Dropdown Filters: Collapsible on mobile, grid on desktop */}
+            <div className={`${showMobileFilters ? 'grid' : 'hidden'} sm:grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5`}>
+              {/* Status Select */}
               <div>
                 <Select
-                  value={selectedOrigin}
-                  onChange={(e) => setSelectedOrigin(e.target.value)}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
                 >
-                  <option value="ALL">All Origin Facilities ({uniqueOrigins.length})</option>
-                  {uniqueOrigins.map((org) => (
-                    <option key={org} value={org}>
-                      {org}
+                  <option value="ALL">All Delivery Statuses</option>
+                  <option value="ACTIVE">Active Deliveries</option>
+                  <option value="IN_TRANSIT">In Transit Only</option>
+                  <option value="AWAITING_RECEIPT_APPROVAL">Awaiting Receipt Approval</option>
+                  <option value="COMPLETED">Completed Only</option>
+                  <option value="DISCREPANCY_HOLD">Discrepancy Hold Only</option>
+                </Select>
+              </div>
+
+              {/* Origin Warehouse (if authorized to see sources) */}
+              {canSeeSource && (
+                <div>
+                  <Select
+                    value={selectedOrigin}
+                    onChange={(e) => setSelectedOrigin(e.target.value)}
+                  >
+                    <option value="ALL">All Origin Facilities ({uniqueOrigins.length})</option>
+                    {uniqueOrigins.map((org) => (
+                      <option key={org} value={org}>
+                        {org}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+
+              {/* Destination Facility */}
+              <div className={!canSeeSource ? 'col-span-2 sm:col-span-1' : ''}>
+                <Select
+                  value={selectedDestination}
+                  onChange={(e) => setSelectedDestination(e.target.value)}
+                >
+                  <option value="ALL">All Destinations ({uniqueDestinations.length})</option>
+                  {uniqueDestinations.map((dest) => (
+                    <option key={dest} value={dest}>
+                      {dest}
                     </option>
                   ))}
                 </Select>
               </div>
-            )}
-
-            {/* Destination Facility */}
-            <div className={!canSeeSource ? 'lg:col-span-2' : ''}>
-              <Select
-                value={selectedDestination}
-                onChange={(e) => setSelectedDestination(e.target.value)}
-              >
-                <option value="ALL">All Destinations ({uniqueDestinations.length})</option>
-                {uniqueDestinations.map((dest) => (
-                  <option key={dest} value={dest}>
-                    {dest}
-                  </option>
-                ))}
-              </Select>
             </div>
           </div>
 

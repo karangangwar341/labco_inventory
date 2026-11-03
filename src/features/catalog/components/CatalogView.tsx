@@ -50,6 +50,16 @@ export function CatalogView() {
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
   const [selectedKind, setSelectedKind] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategory !== 'ALL') count++;
+    if (selectedBrand !== 'ALL') count++;
+    if (selectedKind !== 'ALL') count++;
+    if (selectedStatus !== 'ALL') count++;
+    return count;
+  }, [selectedCategory, selectedBrand, selectedKind, selectedStatus]);
 
   // Category creation modal/form state
   const [showCategoryForm, setShowCategoryForm] = useState(false);
@@ -585,19 +595,23 @@ export function CatalogView() {
         title="Product Catalog"
         actions={
           canCreate ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
               <Button
                 variant="secondary"
+                size="sm"
+                className="text-xs px-2.5 py-1.5"
                 onClick={() => {
                   setCategoryParentId('');
                   setShowCategoryForm((open) => !open);
                 }}
               >
-                {showCategoryForm ? 'Close Category Form' : '+ Add Category'}
+                {showCategoryForm ? 'Close Form' : '+ Add Category'}
               </Button>
               {role !== 'PROJECT_ADMIN' && (
                 <Button
                   variant="secondary"
+                  size="sm"
+                  className="text-xs px-2.5 py-1.5"
                   onClick={() => {
                     setBrandName('');
                     setBrandParentId(roots[0]?.id || '');
@@ -610,19 +624,20 @@ export function CatalogView() {
               )}
               <Button
                 variant="secondary"
+                size="sm"
                 onClick={() => setShowBulkModal(true)}
-                className="font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                className="text-xs px-2.5 py-1.5 font-semibold text-emerald-700 border-emerald-300 hover:bg-emerald-50"
               >
-                Bulk Add / Import
+                Bulk Import
               </Button>
               {role !== 'PROJECT_ADMIN' && (
-                <Link href="/catalog/new?kind=RAW_MATERIAL">
-                  <Button variant="primary">+ Add Raw Material</Button>
+                <Link href="/catalog/new?kind=RAW_MATERIAL" className="block">
+                  <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Raw Material</Button>
                 </Link>
               )}
               {role === 'PROJECT_ADMIN' && (
-                <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT">
-                  <Button variant="primary">+ Add Manufactured Product</Button>
+                <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT" className="block">
+                  <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Product</Button>
                 </Link>
               )}
             </div>
@@ -643,8 +658,8 @@ export function CatalogView() {
       )}
 
       {/* View Mode Navigation Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-200">
-        <div className="flex gap-4">
+      <div className="flex items-center justify-between border-b border-slate-200 overflow-x-auto whitespace-nowrap scrollbar-none">
+        <div className="flex gap-2 sm:gap-4 shrink-0">
           <button
             onClick={() => setActiveTab('PRODUCTS')}
             className={`pb-3 text-xs font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
@@ -779,10 +794,10 @@ export function CatalogView() {
         <div className="space-y-4">
           {/* Comprehensive Filter Controls */}
           <Card className="border-slate-200/90 shadow-2xs">
-            <CardContent className="p-4 space-y-3">
-              <div className={`grid grid-cols-2 sm:grid-cols-2 ${role === 'PROJECT_ADMIN' ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-2.5 sm:gap-3`}>
-                {/* Search Input */}
-                <div className="relative col-span-2 sm:col-span-2 lg:col-span-1">
+            <CardContent className="p-2.5 sm:p-4 space-y-2.5 sm:space-y-3">
+              {/* Row 1: Search Input & Mobile Filters Toggle */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
                   <input
                     type="search"
                     value={searchTerm}
@@ -800,6 +815,29 @@ export function CatalogView() {
                   </svg>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => setShowMobileFilters(!showMobileFilters)}
+                  className={`sm:hidden px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 shrink-0 transition-colors ${
+                    activeFilterCount > 0 || showMobileFilters
+                      ? 'bg-blue-50 border-blue-300 text-blue-700'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-blue-600 text-[10px] text-white flex items-center justify-center font-bold">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Collapsible Dropdown Filters on Mobile, grid on desktop */}
+              <div className={`${showMobileFilters ? 'grid' : 'hidden'} sm:grid grid-cols-2 ${role === 'PROJECT_ADMIN' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-2 sm:gap-2.5`}>
                 {/* Category Filter */}
                 <select
                   value={selectedCategory}
