@@ -12,6 +12,11 @@ export class InventoryService {
   private locationsCache = new Map<string, { data: any[]; expiresAt: number }>();
   private lowStockCountCache = new Map<string, { count: number; expiresAt: number }>();
 
+  clearLocationsCache(): void {
+    this.locationsCache.clear();
+    this.lowStockCountCache.clear();
+  }
+
   async getAccessibleLocations(user: AuthenticatedUser) {
     const cacheKey = `${user.role}_${user.id}_${user.warehouseId || ''}_${user.projectId || ''}`;
     const cached = this.locationsCache.get(cacheKey);
@@ -72,7 +77,7 @@ export class InventoryService {
             status: OrganizationStatus.ACTIVE,
             OR: [
               { storeAdminId: user.id },
-              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+              ...(user.warehouseId ? [{ id: user.warehouseId, storeAdminId: null }] : []),
             ],
           },
           select: { id: true },
@@ -80,7 +85,18 @@ export class InventoryService {
         warehouseIds = managed.map((w) => w.id);
       }
       if (warehouseIds.length === 0 && user.warehouseId) {
-        warehouseIds = [user.warehouseId];
+        if (this.prisma.warehouse?.findFirst) {
+          const wh = await this.prisma.warehouse.findFirst({
+            where: {
+              id: user.warehouseId,
+              status: OrganizationStatus.ACTIVE,
+              OR: [{ storeAdminId: null }, { storeAdminId: user.id }],
+            },
+          });
+          if (wh) warehouseIds.push(wh.id);
+        } else {
+          warehouseIds.push(user.warehouseId);
+        }
       }
       if (warehouseIds.length === 0) return [];
 
@@ -232,16 +248,73 @@ export class InventoryService {
         where.locationId = filters.locationId;
       }
     } else if (user.role === UserRole.STORE_ADMIN) {
-      const warehouseId = user.warehouseId !== undefined
-        ? user.warehouseId
-        : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
-      if (!warehouseId) {
+      let warehouseIds: string[] = [];
+      if (this.prisma.warehouse?.findMany) {
+        const managed = await this.prisma.warehouse.findMany({
+          where: {
+            status: OrganizationStatus.ACTIVE,
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId, storeAdminId: null }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        warehouseIds = managed.map((w) => w.id);
+      }
+      if (warehouseIds.length === 0) {
+        const fallbackId = user.warehouseId !== undefined
+          ? user.warehouseId
+          : (await this.prisma.user.findUnique({ where: { id: user.id } }))?.warehouseId;
+        if (fallbackId) {
+          if (this.prisma.warehouse?.findFirst) {
+            const wh = await this.prisma.warehouse.findFirst({
+              where: {
+                id: fallbackId,
+                status: OrganizationStatus.ACTIVE,
+                OR: [{ storeAdminId: null }, { storeAdminId: user.id }],
+              },
+            });
+            if (wh) warehouseIds.push(wh.id);
+          } else {
+            warehouseIds.push(fallbackId);
+          }
+        }
+      }
+      if (warehouseIds.length === 0) {
         return [];
       }
-      const loc = await this.prisma.stockLocation.findUnique({ where: { warehouseId } });
-      if (!loc) return [];
-      where.locationId = loc.id;
-      where.product = { ...((where.product as object) || {}), kind: ProductKind.RAW_MATERIAL };
+
+      let assignedLocationIds: string[] = [];
+      if (this.prisma.stockLocation.findMany) {
+        const locations = await this.prisma.stockLocation.findMany({
+          where: { warehouseId: { in: warehouseIds } },
+          select: { id: true, warehouseId: true },
+        });
+        assignedLocationIds = locations.map((l) => l.id);
+      }
+      if (assignedLocationIds.length === 0 && this.prisma.stockLocation.findUnique) {
+        for (const wid of warehouseIds) {
+          const loc = await this.prisma.stockLocation.findUnique({ where: { warehouseId: wid } });
+          if (loc?.id) assignedLocationIds.push(loc.id);
+        }
+      }
+      if (assignedLocationIds.length === 0) return [];
+
+      if (filters?.locationId) {
+        if (!assignedLocationIds.includes(filters.locationId)) {
+          throw new ForbiddenException('Cannot view stock balances for unassigned warehouse location');
+        }
+        where.locationId = filters.locationId;
+      } else if (assignedLocationIds.length === 1) {
+        where.locationId = assignedLocationIds[0];
+      } else {
+        where.locationId = { in: assignedLocationIds };
+      }
+
+      if (!filters?.kind) {
+        where.product = { ...((where.product as object) || {}), kind: ProductKind.RAW_MATERIAL };
+      }
     } else if (user.role === UserRole.PROJECT_ADMIN) {
       const projectId = user.projectId !== undefined
         ? user.projectId

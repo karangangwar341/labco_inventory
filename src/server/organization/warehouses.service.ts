@@ -9,11 +9,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateWarehouseDto } from './dto/create-warehouse.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 import { UserRole, OrganizationStatus, UserStatus, LocationType } from '@prisma/client';
+import { InventoryService } from '../inventory/inventory.service';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 
 @Injectable()
 export class WarehousesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventoryService?: InventoryService,
+  ) {}
 
   private async validateStoreAdmin(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -85,9 +89,10 @@ export class WarehousesService {
       const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
       return this.prisma.warehouse.findMany({
         where: {
+          status: OrganizationStatus.ACTIVE,
           OR: [
             { storeAdminId: currentUser.id },
-            ...(user?.warehouseId ? [{ id: user.warehouseId }] : []),
+            ...(user?.warehouseId ? [{ id: user.warehouseId, storeAdminId: null }] : []),
           ],
         },
         include: {
@@ -132,7 +137,7 @@ export class WarehousesService {
       const user = await this.prisma.user.findUnique({ where: { id: currentUser.id } });
       const isAssigned =
         warehouse.storeAdminId === currentUser.id ||
-        (user?.warehouseId && user.warehouseId === id);
+        (user?.warehouseId === id && (warehouse.storeAdminId === null || warehouse.storeAdminId === currentUser.id));
       if (!isAssigned) {
         throw new ForbiddenException('Store Admin cannot view other warehouses');
       }
@@ -159,7 +164,9 @@ export class WarehousesService {
       await this.validateStoreAdmin(dto.storeAdminId);
     }
 
-    return this.prisma.warehouse.update({
+    const previousStoreAdminId = warehouse.storeAdminId;
+
+    const updated = await this.prisma.warehouse.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
@@ -175,5 +182,42 @@ export class WarehousesService {
         },
       },
     });
+
+    if (dto.storeAdminId !== undefined) {
+      if (previousStoreAdminId && previousStoreAdminId !== dto.storeAdminId && this.prisma.user?.update) {
+        const remainingWarehouse = this.prisma.warehouse?.findFirst ? await this.prisma.warehouse.findFirst({
+          where: {
+            storeAdminId: previousStoreAdminId,
+            id: { not: id },
+            status: OrganizationStatus.ACTIVE,
+          },
+        }) : null;
+        await this.prisma.user.update({
+          where: { id: previousStoreAdminId },
+          data: { warehouseId: remainingWarehouse ? remainingWarehouse.id : null },
+        });
+      }
+
+      if (this.prisma.user?.updateMany) {
+        await this.prisma.user.updateMany({
+          where: {
+            warehouseId: id,
+            id: { not: dto.storeAdminId ?? '' },
+          },
+          data: { warehouseId: null },
+        });
+      }
+
+      if (dto.storeAdminId && this.prisma.user?.update) {
+        await this.prisma.user.update({
+          where: { id: dto.storeAdminId },
+          data: { warehouseId: id },
+        });
+      }
+    }
+
+    this.inventoryService?.clearLocationsCache();
+
+    return updated;
   }
 }

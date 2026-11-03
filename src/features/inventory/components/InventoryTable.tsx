@@ -77,28 +77,18 @@ export function InventoryTable() {
 
   // Extract only physical warehouses (exclude all project facilities / client clinics)
   const warehouseLocations = useMemo(() => {
-    const all = (locationsQuery.data || []).filter(
+    return (locationsQuery.data || []).filter(
       (loc) => loc.locationType === 'WAREHOUSE' || (!loc.projectId && loc.warehouseId),
     );
-    if (user?.role === 'STORE_ADMIN' && user.warehouseId) {
-      return all.filter((loc) => loc.warehouseId === user.warehouseId);
-    }
-    return all;
-  }, [locationsQuery.data, user?.role, user?.warehouseId]);
+  }, [locationsQuery.data]);
 
-  // Strict invariant: Filter to only RAW MATERIALS located in WAREHOUSES
-  // (strictly removes project sites and manufactured assemblies)
+  // Filter to stock located in physical warehouses (strictly removes project sites and client clinics)
   const rawWarehouseBalances = useMemo(() => {
     return allBalances.filter((balance) => {
-      const isRawMaterial =
-        balance.productKind === 'RAW_MATERIAL' ||
-        (!balance.productKind &&
-          !balance.productName?.startsWith('Labco Multi-Analyte') &&
-          !balance.productName?.startsWith('Labco Complete'));
       const isWarehouse =
         balance.locationType === 'WAREHOUSE' ||
         (!balance.projectId && Boolean(balance.warehouseId));
-      return isRawMaterial && isWarehouse;
+      return isWarehouse;
     });
   }, [allBalances]);
 
@@ -296,6 +286,40 @@ export function InventoryTable() {
         </div>
       </div>
 
+      {/* Warehouse-wise Quick Filter Tabs (when user manages or has access to multiple warehouses) */}
+      {warehouseLocations.length > 1 && (
+        <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200/80 overflow-x-auto text-xs">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 shrink-0">
+            Warehouse:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedWarehouse('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+              selectedWarehouse === 'ALL'
+                ? 'bg-white text-blue-700 shadow-2xs border border-blue-200/60'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            All Assigned ({warehouseLocations.length})
+          </button>
+          {warehouseLocations.map((loc) => (
+            <button
+              key={loc.id}
+              type="button"
+              onClick={() => setSelectedWarehouse(loc.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
+                selectedWarehouse === loc.id
+                  ? 'bg-white text-blue-700 shadow-2xs border border-blue-200/60'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              {loc.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Multi-Filter Bar */}
       <div className="rounded-lg border border-slate-200 bg-white p-2.5 sm:p-4 shadow-2xs space-y-2.5 sm:space-y-3">
         {/* Row 1: Search & Mobile Filter Toggle */}
@@ -453,7 +477,7 @@ export function InventoryTable() {
           <Table>
             <TableHeader sticky>
               <tr>
-                <TableHead>Raw Material Product</TableHead>
+                <TableHead>Product</TableHead>
                 <TableHead>Warehouse</TableHead>
                 <TableHead>Category / Subcategory</TableHead>
                 <TableHead align="right">Usable Qty</TableHead>
@@ -478,7 +502,7 @@ export function InventoryTable() {
                             {balance.productName || 'Raw Material Product'}
                           </span>
                           <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                            Raw Material
+                            {balance.productKind ? balance.productKind.replace(/_/g, ' ') : 'Product'}
                           </span>
                         </div>
                         {balance.brand && (

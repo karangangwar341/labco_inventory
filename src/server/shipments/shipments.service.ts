@@ -15,6 +15,7 @@ import {
   Prisma,
   LocationType,
   ShipmentDiscrepancyResolution,
+  OrganizationStatus,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { ReceiveShipmentDto } from './dto/receive-shipment.dto';
@@ -199,9 +200,10 @@ export class ShipmentsService {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
       const managedWarehouses = await this.prisma.warehouse.findMany({
         where: {
+          status: OrganizationStatus.ACTIVE,
           OR: [
             { storeAdminId: user.id },
-            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId }] : []),
+            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId, storeAdminId: null }] : []),
           ],
         },
         select: { id: true },
@@ -601,9 +603,10 @@ export class ShipmentsService {
       const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });
       const managedWarehouses = await this.prisma.warehouse.findMany({
         where: {
+          status: OrganizationStatus.ACTIVE,
           OR: [
             { storeAdminId: user.id },
-            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId }] : []),
+            ...(dbUser?.warehouseId ? [{ id: dbUser.warehouseId, storeAdminId: null }] : []),
           ],
         },
         select: { id: true },

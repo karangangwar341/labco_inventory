@@ -59,6 +59,9 @@ export function WarehousesManagement() {
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.warehouses() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.projects() }),
       queryClient.invalidateQueries({ queryKey: queryKeys.administration.users() }),
+      queryClient.invalidateQueries({ queryKey: ['inventory', 'locations'] }),
+      queryClient.invalidateQueries({ queryKey: ['inventory', 'balances'] }),
+      queryClient.invalidateQueries({ queryKey: ['session', 'bootstrap'] }),
     ]);
 
   const mutationOptions = {

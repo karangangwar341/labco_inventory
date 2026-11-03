@@ -219,7 +219,7 @@ export class AuthService {
             status: OrganizationStatus.ACTIVE,
             OR: [
               { storeAdminId: user.id },
-              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+              ...(user.warehouseId ? [{ id: user.warehouseId, storeAdminId: null }] : []),
             ],
           },
           select: { id: true },
@@ -227,7 +227,18 @@ export class AuthService {
         storeAdminWarehouseIds = managed.map((w) => w.id);
       }
       if (storeAdminWarehouseIds.length === 0 && user.warehouseId) {
-        storeAdminWarehouseIds = [user.warehouseId];
+        if (this.prisma.warehouse?.findFirst) {
+          const wh = await this.prisma.warehouse.findFirst({
+            where: {
+              id: user.warehouseId,
+              status: OrganizationStatus.ACTIVE,
+              OR: [{ storeAdminId: null }, { storeAdminId: user.id }],
+            },
+          });
+          if (wh) storeAdminWarehouseIds.push(wh.id);
+        } else {
+          storeAdminWarehouseIds = [user.warehouseId];
+        }
       }
     }
 

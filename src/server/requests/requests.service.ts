@@ -24,6 +24,7 @@ import {
   ProductKind,
   CatalogScope,
   LocationType,
+  OrganizationStatus,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import {
@@ -276,9 +277,10 @@ export class RequestsService {
       if (this.prisma.warehouse?.findMany) {
         const managedWarehouses = await this.prisma.warehouse.findMany({
           where: {
+            status: OrganizationStatus.ACTIVE,
             OR: [
               { storeAdminId: user.id },
-              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+              ...(user.warehouseId ? [{ id: user.warehouseId, storeAdminId: null }] : []),
             ],
           },
           select: { id: true },
@@ -286,7 +288,14 @@ export class RequestsService {
         warehouseIds = managedWarehouses.map((w) => w.id);
       }
       if (warehouseIds.length === 0 && user.warehouseId) {
-        warehouseIds = [user.warehouseId];
+        const wh = await this.prisma.warehouse.findFirst({
+          where: {
+            id: user.warehouseId,
+            status: OrganizationStatus.ACTIVE,
+            OR: [{ storeAdminId: null }, { storeAdminId: user.id }],
+          },
+        });
+        if (wh) warehouseIds.push(wh.id);
       }
       if (warehouseIds.length === 0 && this.prisma.user?.findUnique) {
         const dbUser = await this.prisma.user.findUnique({ where: { id: user.id } });

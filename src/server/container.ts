@@ -186,7 +186,7 @@ class AppContainer {
   }
 
   get warehousesService(): WarehousesService {
-    return (this._warehousesService ??= new WarehousesService(this.prisma));
+    return (this._warehousesService ??= new WarehousesService(this.prisma, this.inventoryService));
   }
 
   get staffService(): StaffService {

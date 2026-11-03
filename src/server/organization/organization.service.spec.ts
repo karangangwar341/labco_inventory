@@ -20,6 +20,7 @@ describe('Organization Services (Projects & Warehouses)', () => {
       warehouse: {
         findUnique: vi.fn(),
         findMany: vi.fn(),
+        findFirst: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
       },
@@ -30,6 +31,8 @@ describe('Organization Services (Projects & Warehouses)', () => {
       },
       user: {
         findUnique: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
       },
     };
 
@@ -144,9 +147,10 @@ describe('Organization Services (Projects & Warehouses)', () => {
       expect(mockPrisma.warehouse.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
+            status: OrganizationStatus.ACTIVE,
             OR: [
               { storeAdminId: 'u-store' },
-              { id: 'w-assigned-1' },
+              { id: 'w-assigned-1', storeAdminId: null },
             ],
           },
         }),
@@ -178,6 +182,31 @@ describe('Organization Services (Projects & Warehouses)', () => {
       expect(updated.storeAdminId).toBe('u-store-2');
     });
 
+    it('revokes store admin assignment and cleans up user warehouseId pointers', async () => {
+      mockPrisma.warehouse.findUnique.mockResolvedValue({ id: 'w-1', name: 'Depot 1', storeAdminId: 'u-store-1' });
+      mockPrisma.warehouse.findFirst.mockResolvedValue(null);
+      mockPrisma.warehouse.update.mockResolvedValue({ id: 'w-1', name: 'Depot 1', storeAdminId: null });
+
+      const updated = await warehousesService.update('w-1', { storeAdminId: null });
+      expect(mockPrisma.warehouse.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'w-1' },
+          data: expect.objectContaining({ storeAdminId: null }),
+        }),
+      );
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'u-store-1' },
+          data: { warehouseId: null },
+        }),
+      );
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { warehouseId: 'w-1', id: { not: '' } },
+          data: { warehouseId: null },
+        }),
+      );
+    });
     it('rejects assigning a warehouse to a non-STORE_ADMIN user', async () => {
       mockPrisma.warehouse.findUnique.mockResolvedValue({ id: 'w-1', name: 'Depot 1' });
       mockPrisma.user.findUnique.mockResolvedValue({

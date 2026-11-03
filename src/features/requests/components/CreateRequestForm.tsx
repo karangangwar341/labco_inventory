@@ -251,8 +251,10 @@ export function CreateRequestForm() {
   }, [availableLocations, locationId]);
 
   useEffect(() => {
-    if (direction !== 'STOCK_OUT' || !locationId) {
+    if (!locationId) {
       setStockedProductIds(new Set());
+      setAvailableByProduct({});
+      setBalancesByProduct({});
       setIsLoadingStock(false);
       return;
     }
@@ -260,12 +262,8 @@ export function CreateRequestForm() {
     let isCurrent = true;
     setIsLoadingStock(true);
     setStockLoadedForLocation('');
-    const isSuperAdmin = user?.role === 'SUPER_ADMIN';
-    const balanceFilters = isSuperAdmin ? { locationId, limit: 500 } : undefined;
+    const balanceFilters = { locationId, limit: 500 };
     void queryClient.fetchQuery({
-      // Store and project APIs are scoped to the signed-in user's assigned location,
-      // so share the exact cache entry used by Stock & Inventory. Super Admins
-      // choose a source warehouse and therefore need a separate location cache.
       queryKey: queryKeys.inventory.balances(userId, balanceFilters),
       queryFn: () => inventoryService.getBalances(balanceFilters),
       staleTime: 2 * 60 * 1000,
@@ -295,7 +293,7 @@ export function CreateRequestForm() {
     });
 
     return () => { isCurrent = false; };
-  }, [direction, locationId, queryClient, user?.role, userId]);
+  }, [locationId, queryClient, userId]);
 
   useEffect(() => {
     if (direction !== 'STOCK_OUT' || isLoadingStock || stockLoadedForLocation !== locationId) return;
@@ -1022,8 +1020,8 @@ export function CreateRequestForm() {
                       : availableBase / Number(selectedUnit?.conversionToBase || 1);
                     const quantityHelper = [
                       precision > 0 ? `Up to ${precision} decimal places` : '',
-                      direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
-                        ? `Available here: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
+                      availableInSelectedUnit !== undefined
+                        ? `Current stock: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
                         : '',
                     ].filter(Boolean).join(' | ') || undefined;
 
