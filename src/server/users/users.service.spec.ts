@@ -18,6 +18,7 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
       },
       warehouse: {
         findUnique: vi.fn(),
+        update: vi.fn(),
       },
       project: {
         findUnique: vi.fn(),
@@ -32,11 +33,15 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
   });
 
   describe('create', () => {
-    it('creates Super Admin account', async () => {
+    it('creates Super Admin account with optional profile details', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.create.mockResolvedValue({
         id: 'u-1',
         username: 'superadmin',
+        fullName: 'Super Admin Person',
+        phoneNumber: '+91 9876543210',
+        address: '123 Main St',
+        idImageUrl: 'data:image/png;base64,...',
         role: UserRole.SUPER_ADMIN,
         status: UserStatus.ACTIVE,
       });
@@ -45,10 +50,25 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
         username: 'SuperAdmin',
         password: 'Password123456!',
         role: UserRole.SUPER_ADMIN,
+        fullName: 'Super Admin Person',
+        phoneNumber: '+91 9876543210',
+        address: '123 Main St',
+        idImageUrl: 'data:image/png;base64,...',
       });
 
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { username: 'superadmin' } });
+      expect(mockPrisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          username: 'superadmin',
+          fullName: 'Super Admin Person',
+          phoneNumber: '+91 9876543210',
+          address: '123 Main St',
+          idImageUrl: 'data:image/png;base64,...',
+        }),
+        select: expect.any(Object),
+      });
       expect(res.username).toBe('superadmin');
+      expect(res.fullName).toBe('Super Admin Person');
     });
 
     it('requires warehouseId when creating STORE_ADMIN', async () => {
@@ -85,6 +105,72 @@ describe('UsersService (T-003: Users Provisioning & Session Revocation)', () => 
           role: UserRole.SUPER_ADMIN,
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('update', () => {
+    it('updates editable user profile details', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1', username: 'store_mgr' });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'u-1',
+        username: 'store_mgr',
+        fullName: 'John Doe',
+        phoneNumber: '+91 1234567890',
+        address: 'Plot 42, Lucknow',
+        idImageUrl: 'https://example.com/id.jpg',
+      });
+
+      const res = await usersService.update('u-1', {
+        fullName: 'John Doe',
+        phoneNumber: '+91 1234567890',
+        address: 'Plot 42, Lucknow',
+        idImageUrl: 'https://example.com/id.jpg',
+      });
+
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u-1' },
+        data: {
+          fullName: 'John Doe',
+          phoneNumber: '+91 1234567890',
+          address: 'Plot 42, Lucknow',
+          idImageUrl: 'https://example.com/id.jpg',
+        },
+        select: expect.any(Object),
+      });
+      expect(res.fullName).toBe('John Doe');
+      expect(res.phoneNumber).toBe('+91 1234567890');
+    });
+
+    it('throws NotFoundException if user to update does not exist', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(usersService.update('non-existent', { fullName: 'Test' })).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('enable', () => {
+    it('enables account and resets lockouts', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1', status: UserStatus.DISABLED });
+      mockPrisma.user.update.mockResolvedValue({ id: 'u-1', status: UserStatus.ACTIVE, disabledAt: null });
+
+      const res = await usersService.enable('u-1');
+
+      expect(res.status).toBe(UserStatus.ACTIVE);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'u-1' },
+          data: expect.objectContaining({
+            status: UserStatus.ACTIVE,
+            disabledAt: null,
+            failedLoginAttempts: 0,
+            lockoutUntil: null,
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException if user to enable does not exist', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(usersService.enable('non-existent')).rejects.toThrow(NotFoundException);
     });
   });
 

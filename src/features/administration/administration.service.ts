@@ -4,6 +4,10 @@ import { endpoints } from '../../lib/api/endpoints';
 export interface UserAccount {
   id: string;
   username: string;
+  fullName?: string | null;
+  phoneNumber?: string | null;
+  address?: string | null;
+  idImageUrl?: string | null;
   role: 'SUPER_ADMIN' | 'STORE_ADMIN' | 'PROJECT_ADMIN';
   status: 'ACTIVE' | 'LOCKED' | 'DISABLED';
   projectId?: string | null;
@@ -40,10 +44,33 @@ export const administrationService = {
     username: string;
     password?: string;
     role: string;
+    fullName?: string;
+    phoneNumber?: string;
+    address?: string;
+    idImageUrl?: string;
     projectId?: string;
     warehouseId?: string;
   }): Promise<UserAccount> => {
     return apiClient.post<UserAccount>(endpoints.users.create(), payload);
+  },
+
+  updateUser: async (
+    id: string,
+    payload: {
+      fullName?: string;
+      phoneNumber?: string;
+      address?: string;
+      idImageUrl?: string;
+      role?: string;
+      projectId?: string | null;
+      warehouseId?: string | null;
+    },
+  ): Promise<UserAccount> => {
+    return apiClient.patch<UserAccount>(endpoints.users.update(id), payload);
+  },
+
+  enableUser: async (id: string): Promise<Pick<UserAccount, 'id' | 'status'>> => {
+    return apiClient.patch(endpoints.users.enable(id));
   },
 
   disableUser: async (id: string): Promise<Pick<UserAccount, 'id' | 'status'>> => {

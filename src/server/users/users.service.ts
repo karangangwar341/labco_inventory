@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -59,12 +60,20 @@ export class UsersService {
         passwordHash,
         role: dto.role,
         status: UserStatus.ACTIVE,
+        fullName: dto.fullName?.trim() || null,
+        phoneNumber: dto.phoneNumber?.trim() || null,
+        address: dto.address?.trim() || null,
+        idImageUrl: dto.idImageUrl || null,
         warehouseId: dto.role === UserRole.STORE_ADMIN ? dto.warehouseId : null,
         projectId: dto.role === UserRole.PROJECT_ADMIN ? dto.projectId : null,
       },
       select: {
         id: true,
         username: true,
+        fullName: true,
+        phoneNumber: true,
+        address: true,
+        idImageUrl: true,
         role: true,
         status: true,
         warehouseId: true,
@@ -88,6 +97,10 @@ export class UsersService {
       select: {
         id: true,
         username: true,
+        fullName: true,
+        phoneNumber: true,
+        address: true,
+        idImageUrl: true,
         role: true,
         status: true,
         warehouseId: true,
@@ -110,6 +123,10 @@ export class UsersService {
       select: {
         id: true,
         username: true,
+        fullName: true,
+        phoneNumber: true,
+        address: true,
+        idImageUrl: true,
         role: true,
         status: true,
         warehouseId: true,
@@ -129,6 +146,95 @@ export class UsersService {
     }
 
     return user;
+  }
+
+  async update(id: string, dto: UpdateUserDto) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updateData: any = {};
+    if (dto.fullName !== undefined) updateData.fullName = dto.fullName?.trim() || null;
+    if (dto.phoneNumber !== undefined) updateData.phoneNumber = dto.phoneNumber?.trim() || null;
+    if (dto.address !== undefined) updateData.address = dto.address?.trim() || null;
+    if (dto.idImageUrl !== undefined) updateData.idImageUrl = dto.idImageUrl || null;
+    if (dto.role !== undefined) updateData.role = dto.role;
+
+    if (dto.warehouseId !== undefined) {
+      if (dto.warehouseId) {
+        const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
+        if (!warehouse) throw new NotFoundException('Assigned warehouse not found');
+        updateData.warehouseId = dto.warehouseId;
+        await this.prisma.warehouse.update({
+          where: { id: dto.warehouseId },
+          data: { storeAdminId: user.id },
+        });
+      } else {
+        updateData.warehouseId = null;
+      }
+    }
+
+    if (dto.projectId !== undefined) {
+      if (dto.projectId) {
+        const project = await this.prisma.project.findUnique({ where: { id: dto.projectId } });
+        if (!project) throw new NotFoundException('Assigned project not found');
+        updateData.projectId = dto.projectId;
+      } else {
+        updateData.projectId = null;
+      }
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        phoneNumber: true,
+        address: true,
+        idImageUrl: true,
+        role: true,
+        status: true,
+        warehouseId: true,
+        projectId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async enable(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        status: UserStatus.ACTIVE,
+        disabledAt: null,
+        failedLoginAttempts: 0,
+        lockoutUntil: null,
+      },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        phoneNumber: true,
+        address: true,
+        idImageUrl: true,
+        role: true,
+        status: true,
+        disabledAt: true,
+      },
+    });
+
+    return updated;
   }
 
   async disable(id: string) {

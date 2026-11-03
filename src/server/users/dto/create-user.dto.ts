@@ -14,6 +14,26 @@ export class CreateUserDto {
   @MinLength(12, { message: 'Password must be at least 12 characters' })
   password!: string;
 
+  @ApiPropertyOptional({ example: 'Ramesh Kumar', description: 'Full name of user (optional)' })
+  @IsOptional()
+  @IsString()
+  fullName?: string;
+
+  @ApiPropertyOptional({ example: '+91 9876543210', description: 'Phone number (optional)' })
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({ example: 'Plot 42, Kursi Road Industrial Area, Lucknow', description: 'Postal / physical address (optional)' })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ description: 'ID card or avatar image URL/base64 (optional)' })
+  @IsOptional()
+  @IsString()
+  idImageUrl?: string;
+
   @ApiProperty({ enum: UserRole, example: UserRole.STORE_ADMIN })
   @IsEnum(UserRole, { message: 'Role must be SUPER_ADMIN, STORE_ADMIN, or PROJECT_ADMIN' })
   role!: UserRole;

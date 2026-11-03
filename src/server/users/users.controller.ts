@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -43,6 +44,18 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user details by ID (Super Admin only)' })
   findById(@Param('id') id: string) {
     return this.usersService.findById(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update user profile and details (Super Admin only)' })
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.usersService.update(id, dto);
+  }
+
+  @Patch(':id/enable')
+  @ApiOperation({ summary: 'Enable account (Super Admin only)' })
+  enable(@Param('id') id: string) {
+    return this.usersService.enable(id);
   }
 
   @Patch(':id/disable')

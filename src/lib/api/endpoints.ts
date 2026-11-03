@@ -282,6 +282,8 @@ export const endpoints = {
     list: () => "/users",
     byId: (id: string) => `/users/${id}`,
     create: () => "/users",
+    update: (id: string) => `/users/${id}`,
+    enable: (id: string) => `/users/${id}/enable`,
     disable: (id: string) => `/users/${id}/disable`,
     resetPassword: (id: string) => `/users/${id}/reset-password`,
   },
