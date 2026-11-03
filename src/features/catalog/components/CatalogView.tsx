@@ -68,6 +68,16 @@ export function CatalogView() {
   const [categoryParentId, setCategoryParentId] = useState('');
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
+  // Taxonomy view filter and layout controls
+  const [taxonomySearch, setTaxonomySearch] = useState('');
+  const [taxonomyFilter, setTaxonomyFilter] = useState<'ALL' | 'WITH_PRODUCTS' | 'WITH_SUBS'>('ALL');
+  const [taxonomyViewMode, setTaxonomyViewMode] = useState<'GRID' | 'TREE'>('GRID');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+  const toggleCategoryExpand = (id: string) => {
+    setExpandedCategories((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   // Brand creation modal state
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [brandName, setBrandName] = useState('');
@@ -231,6 +241,41 @@ export function CatalogView() {
     });
     return counts;
   }, [products, categoryById]);
+
+  // Counts for taxonomy filters
+  const categoriesWithProductsCount = useMemo(() => {
+    return roots.filter((r) => {
+      const subs = subcategoriesByParent.get(r.id) || [];
+      const rootCount = productCountByCat.get(r.id) || 0;
+      const subTotal = subs.reduce((acc, s) => acc + (productCountByCat.get(s.id) || 0), 0);
+      return rootCount + subTotal > 0;
+    }).length;
+  }, [roots, subcategoriesByParent, productCountByCat]);
+
+  const categoriesWithSubsCount = useMemo(() => {
+    return roots.filter((r) => (subcategoriesByParent.get(r.id) || []).length > 0).length;
+  }, [roots, subcategoriesByParent]);
+
+  // Filtered root categories for the taxonomy directory view
+  const filteredRoots = useMemo(() => {
+    return roots.filter((root) => {
+      const subs = subcategoriesByParent.get(root.id) || [];
+      const rootCount = productCountByCat.get(root.id) || 0;
+      const totalCount = rootCount + subs.reduce((acc, s) => acc + (productCountByCat.get(s.id) || 0), 0);
+
+      if (taxonomySearch.trim()) {
+        const query = taxonomySearch.trim().toLowerCase();
+        const rootMatches = root.name.toLowerCase().includes(query);
+        const subMatches = subs.some((s) => s.name.toLowerCase().includes(query));
+        if (!rootMatches && !subMatches) return false;
+      }
+
+      if (taxonomyFilter === 'WITH_PRODUCTS' && totalCount === 0) return false;
+      if (taxonomyFilter === 'WITH_SUBS' && subs.length === 0) return false;
+
+      return true;
+    });
+  }, [roots, subcategoriesByParent, productCountByCat, taxonomySearch, taxonomyFilter]);
 
   // Brands by category
   const brandsByCategory = useMemo(() => {
@@ -1035,136 +1080,391 @@ export function CatalogView() {
           </div>
 
           {/* Categories Hierarchy Section */}
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Category Hierarchy &amp; Classifications</h3>
-                <p className="text-xs text-slate-500">Browse categories and drill down into their subcategories and products.</p>
+                <h3 className="text-sm font-bold text-slate-900">Category Directory &amp; Classifications</h3>
+                <p className="text-xs text-slate-500">Browse categories, drill down into subcategories, or view cataloged inventory.</p>
               </div>
 
               {canCreate && (
                 <Button
-                  variant="secondary"
+                  variant="primary"
                   size="sm"
-                  className="w-full sm:w-auto justify-center min-h-[38px] shrink-0"
+                  className="w-full sm:w-auto justify-center min-h-[36px] shrink-0"
                   onClick={() => {
                     setCategoryParentId('');
                     setShowCategoryForm(true);
                   }}
                 >
-                  + Add Top-Level Category
+                  + Add Top Category
                 </Button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {roots.map((root) => {
-                const subs = subcategoriesByParent.get(root.id) || [];
-                const rootProductCount = productCountByCat.get(root.id) || 0;
-                const rootBrands = Array.from(brandsByCategory.get(root.id) || []);
+            {/* Filter and View Controls Toolbar */}
+            <div className="p-2.5 sm:p-3 bg-white border border-slate-200/90 rounded-xl flex flex-wrap items-center justify-between gap-2.5">
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <input
+                  type="text"
+                  value={taxonomySearch}
+                  onChange={(e) => setTaxonomySearch(e.target.value)}
+                  placeholder="Search categories or subcategories..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-1 focus:ring-blue-600 transition-colors"
+                />
+                <svg
+                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {taxonomySearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomySearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer p-0.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
-                return (
-                  <Card key={root.id} className="border-slate-200 hover:border-slate-300 transition-all">
-                    <CardHeader className="pb-2">
-                      <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                            <CardTitle className="text-sm font-bold text-slate-900 break-words">
-                              📁 {root.name}
-                            </CardTitle>
-                            <Badge variant={root.ownerScope === 'COMPANY' ? 'primary' : 'purple'} size="sm" className="shrink-0">
-                              {root.ownerScope}
-                            </Badge>
-                          </div>
-                          <CardDescription className="mt-0.5 text-xs">
-                            {rootProductCount} {rootProductCount === 1 ? 'product' : 'products'} cataloged
-                          </CardDescription>
-                        </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Filter Pills */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                      taxonomyFilter === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All ({roots.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyFilter('WITH_PRODUCTS')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                      taxonomyFilter === 'WITH_PRODUCTS'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    With Items ({categoriesWithProductsCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyFilter('WITH_SUBS')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                      taxonomyFilter === 'WITH_SUBS'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    With Subcategories ({categoriesWithSubsCount})
+                  </button>
+                </div>
 
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="shrink-0 min-h-[34px] text-xs px-3"
-                          onClick={() => viewProductsInCategory(root.id)}
-                        >
-                          Browse →
-                        </Button>
-                      </div>
-                    </CardHeader>
+                {/* View Mode Toggle (Grid vs Tree) */}
+                <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyViewMode('GRID')}
+                    className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                      taxonomyViewMode === 'GRID'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'text-slate-500 hover:bg-slate-100 border border-transparent'
+                    }`}
+                    title="Grid Card View"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyViewMode('TREE')}
+                    className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                      taxonomyViewMode === 'TREE'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'text-slate-500 hover:bg-slate-100 border border-transparent'
+                    }`}
+                    title="Hierarchy Tree Table"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
 
-                    <CardContent className="space-y-3 pt-2 text-xs">
-                      {/* Subcategories */}
+            {filteredRoots.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-500 text-xs">
+                No categories match your search or filter.
+              </div>
+            ) : taxonomyViewMode === 'GRID' ? (
+              /* GRID CARDS VIEW */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {filteredRoots.map((root) => {
+                  const subs = subcategoriesByParent.get(root.id) || [];
+                  const rootProductCount = productCountByCat.get(root.id) || 0;
+                  const totalProductCount = rootProductCount + subs.reduce((acc, s) => acc + (productCountByCat.get(s.id) || 0), 0);
+                  const rootBrands = Array.from(brandsByCategory.get(root.id) || []);
+
+                  return (
+                    <div
+                      key={root.id}
+                      className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between p-3.5"
+                    >
                       <div>
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                            Subcategories ({subs.length})
-                          </span>
-                          {canCreate && (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCategoryParentId(root.id);
-                                  setShowCategoryForm(true);
-                                }}
-                                className="inline-flex items-center px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md text-[11px] font-semibold transition-colors min-h-[30px] cursor-pointer"
-                              >
-                                + Subcategory
-                              </button>
+                        {/* Top Row: Icon, Title, Scope, Browse */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center text-sm font-semibold shrink-0 mt-0.5">
+                              📁
                             </div>
-                          )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="text-xs font-bold text-slate-900 break-words" title={root.name}>
+                                  {root.name}
+                                </h4>
+                                <Badge
+                                  variant={root.ownerScope === 'COMPANY' ? 'primary' : 'purple'}
+                                  size="sm"
+                                  className="text-[9px] px-1.5 py-0"
+                                >
+                                  {root.ownerScope}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                <span className="font-semibold text-slate-700">{totalProductCount}</span> {totalProductCount === 1 ? 'item' : 'items'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="text-xs px-2.5 py-1 min-h-[30px] shrink-0 font-medium"
+                            onClick={() => viewProductsInCategory(root.id)}
+                          >
+                            Browse →
+                          </Button>
                         </div>
 
-                        {subs.length === 0 ? (
-                          <div className="text-slate-400 italic text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100">
-                            No subcategories defined yet.
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {subs.map((sub) => {
-                              const subCount = productCountByCat.get(sub.id) || 0;
-                              return (
+                        {/* Subcategories (Only rendered if there ARE subcategories) */}
+                        {subs.length > 0 && (
+                          <div className="mt-3 pt-2.5 border-t border-slate-100">
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold uppercase tracking-wider mb-1.5">
+                              <span>Subcategories ({subs.length})</span>
+                              {canCreate && (
                                 <button
-                                  key={sub.id}
-                                  onClick={() => viewProductsInCategory(sub.id)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200/80 hover:border-blue-200 transition-all cursor-pointer text-xs"
-                                  title={`View products in ${sub.name}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setCategoryParentId(root.id);
+                                    setShowCategoryForm(true);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 text-[11px] font-medium cursor-pointer"
                                 >
-                                  <span>↳ {sub.name}</span>
-                                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-white text-slate-500 border border-slate-200">
-                                    {subCount}
-                                  </span>
+                                  + Add
                                 </button>
-                              );
-                            })}
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {subs.map((sub) => {
+                                const subCount = productCountByCat.get(sub.id) || 0;
+                                return (
+                                  <button
+                                    key={sub.id}
+                                    onClick={() => viewProductsInCategory(sub.id)}
+                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200/80 hover:border-blue-200 transition-all cursor-pointer text-[11px]"
+                                    title={`Filter by ${sub.name}`}
+                                  >
+                                    <span>↳ {sub.name}</span>
+                                    <span className="font-mono text-[9px] font-bold px-1 rounded bg-white text-slate-500 border border-slate-200">
+                                      {subCount}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Associated Brands in this category */}
-                      {role !== 'PROJECT_ADMIN' && rootBrands.length > 0 && (
-                        <div>
-                          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                            Associated Brands ({rootBrands.length})
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {rootBrands.map((b) => (
-                              <button
-                                key={b}
-                                onClick={() => viewProductsInBrand(b)}
-                                className="px-2 py-0.5 bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 rounded text-[11px] transition-colors cursor-pointer border border-slate-200/60"
-                              >
-                                {b}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                      {/* Card Footer: clean and subtle */}
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+                        {subs.length === 0 ? (
+                          canCreate ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCategoryParentId(root.id);
+                                setShowCategoryForm(true);
+                              }}
+                              className="text-slate-500 hover:text-blue-600 font-medium flex items-center gap-1 transition-colors cursor-pointer text-xs"
+                            >
+                              <span className="text-blue-500 font-bold">+</span> Add subcategory
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 text-xs">Direct category</span>
+                          )
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">
+                            {subs.length} subcategories
+                          </span>
+                        )}
+
+                        {rootBrands.length > 0 && role !== 'PROJECT_ADMIN' && (
+                          <span className="text-slate-400 text-[10px] truncate max-w-[140px]" title={rootBrands.join(', ')}>
+                            Brands: {rootBrands.slice(0, 2).join(', ')}{rootBrands.length > 2 ? ` +${rootBrands.length - 2}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* HIERARCHY TREE TABLE VIEW */
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Category Name</th>
+                        <th className="py-2.5 px-3">Scope</th>
+                        <th className="py-2.5 px-3">Subcategories</th>
+                        <th className="py-2.5 px-3">Cataloged Items</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredRoots.map((root) => {
+                        const subs = subcategoriesByParent.get(root.id) || [];
+                        const rootProductCount = productCountByCat.get(root.id) || 0;
+                        const totalProductCount = rootProductCount + subs.reduce((acc, s) => acc + (productCountByCat.get(s.id) || 0), 0);
+                        const isExpanded = expandedCategories[root.id] ?? (subs.length > 0 && subs.length <= 5);
+
+                        return (
+                          <React.Fragment key={root.id}>
+                            <tr className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-2.5 px-3 font-medium text-slate-900">
+                                <div className="flex items-center gap-2">
+                                  {subs.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleCategoryExpand(root.id)}
+                                      className="w-5 h-5 rounded hover:bg-slate-200/80 flex items-center justify-center text-slate-500 font-mono text-[10px] cursor-pointer"
+                                      title={isExpanded ? 'Collapse' : 'Expand'}
+                                    >
+                                      {isExpanded ? '▼' : '▶'}
+                                    </button>
+                                  ) : (
+                                    <span className="w-5" />
+                                  )}
+                                  <span className="text-amber-500">📁</span>
+                                  <span className="font-semibold text-slate-900">{root.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <Badge variant={root.ownerScope === 'COMPANY' ? 'primary' : 'purple'} size="sm" className="text-[10px]">
+                                  {root.ownerScope}
+                                </Badge>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-600 font-mono">
+                                {subs.length > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCategoryExpand(root.id)}
+                                    className="text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {subs.length} {subs.length === 1 ? 'sub' : 'subs'}
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-700">
+                                <span className="font-semibold">{totalProductCount}</span>
+                                <span className="text-slate-400 text-[10px] ml-1">items</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {canCreate && (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="text-[11px] px-2 py-0.5 h-7"
+                                      onClick={() => {
+                                        setCategoryParentId(root.id);
+                                        setShowCategoryForm(true);
+                                      }}
+                                    >
+                                      + Subcategory
+                                    </Button>
+                                  )}
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
+                                    className="text-[11px] px-2.5 py-0.5 h-7"
+                                    onClick={() => viewProductsInCategory(root.id)}
+                                  >
+                                    Browse Items
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* Nested Subcategory Rows */}
+                            {subs.length > 0 && isExpanded && subs.map((sub) => {
+                              const subCount = productCountByCat.get(sub.id) || 0;
+                              return (
+                                <tr key={sub.id} className="bg-slate-50/50 hover:bg-blue-50/40 transition-colors">
+                                  <td className="py-2 px-3 pl-10 text-slate-700">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-slate-400 font-mono text-xs">↳</span>
+                                      <span className="font-medium">{sub.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <Badge variant={sub.ownerScope === 'COMPANY' ? 'primary' : 'purple'} size="sm" className="text-[9px] px-1.5 py-0">
+                                      {sub.ownerScope}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-400 text-[11px]">
+                                    nested
+                                  </td>
+                                  <td className="py-2 px-3 text-slate-600 font-mono text-[11px]">
+                                    {subCount} {subCount === 1 ? 'item' : 'items'}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="text-[10px] px-2 py-0.5 h-6 text-slate-600"
+                                      onClick={() => viewProductsInCategory(sub.id)}
+                                    >
+                                      Browse Subcategory →
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Brands Directory Section */}
