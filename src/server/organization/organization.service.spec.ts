@@ -36,6 +36,8 @@ describe('Organization Services (Projects & Warehouses)', () => {
       },
       category: {
         findMany: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
       },
       product: {
         findMany: vi.fn(),
@@ -112,7 +114,9 @@ describe('Organization Services (Projects & Warehouses)', () => {
     it('clones company catalog products by category IDs to a project', async () => {
       const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
       mockPrisma.project.findUnique.mockResolvedValue({ id: 'proj-1', name: 'Apollo Project' });
-      mockPrisma.category.findMany.mockResolvedValue([{ id: 'cat-cotton' }, { id: 'sub-cotton' }]);
+      mockPrisma.category.findMany.mockResolvedValue([{ id: 'cat-cotton', name: 'Cotton' }, { id: 'sub-cotton', name: 'Cotton Sub', parentId: 'cat-cotton' }]);
+      mockPrisma.category.findFirst.mockResolvedValue(null);
+      mockPrisma.category.create.mockImplementation(({ data }: any) => Promise.resolve({ id: `cloned-${data.name}`, ...data }));
       mockPrisma.product.findMany.mockResolvedValue([
         {
           id: 'prod-co-cotton',

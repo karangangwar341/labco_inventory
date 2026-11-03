@@ -28,6 +28,7 @@ export function ProjectsManagement() {
   const [projectName, setProjectName] = useState('');
   const [seedOption, setSeedOption] = useState<'NONE' | 'ALL' | 'CUSTOM'>('NONE');
   const [customSeedProductIds, setCustomSeedProductIds] = useState<string[]>([]);
+  const [customSeedCategoryIds, setCustomSeedCategoryIds] = useState<string[]>([]);
   const [showSeedPickerModal, setShowSeedPickerModal] = useState(false);
   const [cloneProjectTarget, setCloneProjectTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -97,17 +98,19 @@ export function ProjectsManagement() {
         name: createdName,
         seedAllCompanyProducts: seedOption === 'ALL',
         initialProductIds: seedOption === 'CUSTOM' && customSeedProductIds.length > 0 ? customSeedProductIds : undefined,
+        initialCategoryIds: seedOption === 'CUSTOM' && customSeedCategoryIds.length > 0 ? customSeedCategoryIds : undefined,
       },
       {
         onSuccess: () => {
           setProjectName('');
           setSeedOption('NONE');
           setCustomSeedProductIds([]);
+          setCustomSeedCategoryIds([]);
           setNotice(`Project "${createdName}" created successfully${
             seedOption === 'ALL'
               ? ' with all company items seeded'
-              : seedOption === 'CUSTOM' && customSeedProductIds.length > 0
-              ? ` with ${customSeedProductIds.length} catalog items seeded`
+              : seedOption === 'CUSTOM' && (customSeedProductIds.length > 0 || customSeedCategoryIds.length > 0)
+              ? ` with ${customSeedCategoryIds.length} categories and ${customSeedProductIds.length} products seeded`
               : ''
           }.`);
         },
@@ -304,7 +307,7 @@ export function ProjectsManagement() {
                     checked={seedOption === 'CUSTOM'}
                     onChange={() => {
                       setSeedOption('CUSTOM');
-                      if (customSeedProductIds.length === 0) {
+                      if (customSeedProductIds.length === 0 && customSeedCategoryIds.length === 0) {
                         setShowSeedPickerModal(true);
                       }
                     }}
@@ -313,8 +316,8 @@ export function ProjectsManagement() {
                   <div>
                     <div className="font-semibold text-slate-800">Select Categories / Products</div>
                     <div className="text-[11px] text-slate-500">
-                      {customSeedProductIds.length > 0
-                        ? `${customSeedProductIds.length} items selected to seed`
+                      {customSeedProductIds.length > 0 || customSeedCategoryIds.length > 0
+                        ? `${customSeedCategoryIds.length} categories, ${customSeedProductIds.length} products to seed`
                         : 'Choose specific categories and products.'}
                     </div>
                   </div>
@@ -330,14 +333,17 @@ export function ProjectsManagement() {
                     onClick={() => setShowSeedPickerModal(true)}
                     className="text-xs"
                   >
-                    {customSeedProductIds.length > 0
-                      ? `Edit Selection (${customSeedProductIds.length} selected)`
+                    {customSeedProductIds.length > 0 || customSeedCategoryIds.length > 0
+                      ? `Edit Selection (${customSeedCategoryIds.length} cat, ${customSeedProductIds.length} prod)`
                       : '+ Choose Categories & Products'}
                   </Button>
-                  {customSeedProductIds.length > 0 && (
+                  {(customSeedProductIds.length > 0 || customSeedCategoryIds.length > 0) && (
                     <button
                       type="button"
-                      onClick={() => setCustomSeedProductIds([])}
+                      onClick={() => {
+                        setCustomSeedProductIds([]);
+                        setCustomSeedCategoryIds([]);
+                      }}
                       className="text-slate-400 hover:text-rose-600 text-xs cursor-pointer underline"
                     >
                       Clear Selection
@@ -451,8 +457,10 @@ export function ProjectsManagement() {
           onClose={() => setShowSeedPickerModal(false)}
           projectName={projectName.trim() || 'New Project'}
           initialSelectedProductIds={customSeedProductIds}
-          onSelect={(ids) => {
+          initialSelectedCategoryIds={customSeedCategoryIds}
+          onSelect={(ids, catIds) => {
             setCustomSeedProductIds(ids);
+            setCustomSeedCategoryIds(catIds || []);
             setShowSeedPickerModal(false);
           }}
         />

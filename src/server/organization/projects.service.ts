@@ -307,6 +307,76 @@ export class ProjectsService {
       targetCategoryIds = matchingCats.map((c: { id: string }) => c.id);
     }
 
+    // 1. Clone categories into project scope if categoryIds provided
+    const clonedCatMap = new Map<string, string>();
+    let clonedCategoriesCount = 0;
+
+    if (categoryIds && categoryIds.length > 0 && this.prisma.category?.findFirst && this.prisma.category?.create) {
+      const catsToClone = await this.prisma.category.findMany({
+        where: {
+          OR: [
+            { id: { in: categoryIds } },
+            { parentId: { in: categoryIds } },
+          ],
+        },
+        orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+      });
+
+      const roots = catsToClone.filter((c: { parentId: string | null }) => !c.parentId);
+      const children = catsToClone.filter((c: { parentId: string | null }) => Boolean(c.parentId));
+
+      for (const cat of roots) {
+        let existing = await this.prisma.category.findFirst({
+          where: {
+            name: { equals: cat.name, mode: 'insensitive' },
+            parentId: null,
+            ownerScope: CatalogScope.PROJECT,
+            projectId,
+          },
+        });
+        if (!existing) {
+          existing = await this.prisma.category.create({
+            data: {
+              name: cat.name,
+              parentId: null,
+              ownerScope: CatalogScope.PROJECT,
+              projectId,
+            },
+          });
+          clonedCategoriesCount++;
+        }
+        if (existing?.id) {
+          clonedCatMap.set(cat.id, existing.id);
+        }
+      }
+
+      for (const cat of children) {
+        const parentProjectCatId = cat.parentId ? (clonedCatMap.get(cat.parentId) || null) : null;
+        let existing = await this.prisma.category.findFirst({
+          where: {
+            name: { equals: cat.name, mode: 'insensitive' },
+            parentId: parentProjectCatId,
+            ownerScope: CatalogScope.PROJECT,
+            projectId,
+          },
+        });
+        if (!existing) {
+          existing = await this.prisma.category.create({
+            data: {
+              name: cat.name,
+              parentId: parentProjectCatId,
+              ownerScope: CatalogScope.PROJECT,
+              projectId,
+            },
+          });
+          clonedCategoriesCount++;
+        }
+        if (existing?.id) {
+          clonedCatMap.set(cat.id, existing.id);
+        }
+      }
+    }
+
     const sourceWhere: any = {
       ownerScope: CatalogScope.COMPANY,
       status: ProductStatus.APPROVED,
@@ -336,11 +406,13 @@ export class ProjectsService {
     let skippedCount = 0;
 
     for (const src of sourceProducts) {
+      const targetCategoryId = src.categoryId ? (clonedCatMap.get(src.categoryId) || src.categoryId) : src.categoryId;
+
       const duplicateKey = computeDuplicateKey({
         ownerScope: CatalogScope.PROJECT,
         projectId,
         name: src.name,
-        categoryId: src.categoryId,
+        categoryId: targetCategoryId,
         brand: src.brand,
         attributes: src.attributes,
       });
@@ -360,7 +432,7 @@ export class ProjectsService {
           name: src.name,
           brand: src.brand,
           description: src.description,
-          categoryId: src.categoryId,
+          categoryId: targetCategoryId,
           kind: ProductKind.MANUFACTURED_PRODUCT,
           ownerScope: CatalogScope.PROJECT,
           projectId,
@@ -389,6 +461,12 @@ export class ProjectsService {
       clonedCount++;
     }
 
-    return { success: true, clonedCount, skippedCount, totalProcessed: sourceProducts.length };
+    return {
+      success: true,
+      clonedCount,
+      clonedCategoriesCount,
+      skippedCount,
+      totalProcessed: sourceProducts.length + clonedCategoriesCount,
+    };
   }
 }

@@ -249,8 +249,8 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
     production.flatMap((row) =>
       Array.isArray(row.outputs)
         ? row.outputs.map((output) =>
-            String((output as ReportRow).product ?? ""),
-          )
+          String((output as ReportRow).product ?? ""),
+        )
         : [],
     ),
   );
@@ -386,33 +386,17 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
       />
 
       {/* Project Meta Banner */}
-      <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-slate-800">Status:</span>
-          <Badge
-            variant={project.status === "ACTIVE" ? "success" : "neutral"}
-            size="sm"
-          >
-            {project.status ?? "ACTIVE"}
-          </Badge>
-          <span className="text-slate-300">|</span>
-          <span className="text-emerald-700 bg-emerald-50 border border-emerald-200/60 rounded px-2 py-0.5 text-[11px] font-medium flex items-center gap-1.5">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            Universal Fulfillment (Transferable from any warehouse)
-          </span>
-        </div>
-      </div>
+
 
       {/* Sub-Tabs Navigation Bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         <button
           type="button"
           onClick={() => handleTabChange("OVERVIEW")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
-            activeTab === "OVERVIEW"
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "OVERVIEW"
               ? "bg-blue-600 text-white shadow-2xs"
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
-          }`}
+            }`}
         >
           <span>Overview &amp; Balances</span>
         </button>
@@ -420,20 +404,18 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         <button
           type="button"
           onClick={() => handleTabChange("MANUFACTURING")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
-            activeTab === "MANUFACTURING"
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "MANUFACTURING"
               ? "bg-blue-600 text-white shadow-2xs"
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
-          }`}
+            }`}
         >
           <span>⚙️  Manufacturing Runs</span>
           {production.length > 0 && (
             <span
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "MANUFACTURING"
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeTab === "MANUFACTURING"
                   ? "bg-blue-500 text-white"
                   : "bg-slate-200 text-slate-700"
-              }`}
+                }`}
             >
               {production.length}
             </span>
@@ -443,11 +425,10 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         <button
           type="button"
           onClick={() => handleTabChange("STAFF")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
-            activeTab === "STAFF"
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "STAFF"
               ? "bg-blue-600 text-white shadow-2xs"
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
-          }`}
+            }`}
         >
           <span>Staff &amp; Workforce</span>
         </button>
@@ -455,20 +436,18 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         <button
           type="button"
           onClick={() => handleTabChange("DEPARTMENTS")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
-            activeTab === "DEPARTMENTS"
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "DEPARTMENTS"
               ? "bg-blue-600 text-white shadow-2xs"
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
-          }`}
+            }`}
         >
           <span>Clinical Departments</span>
           {departments.size > 0 && (
             <span
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "DEPARTMENTS"
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeTab === "DEPARTMENTS"
                   ? "bg-blue-500 text-white"
                   : "bg-slate-200 text-slate-700"
-              }`}
+                }`}
             >
               {departments.size}
             </span>
@@ -478,20 +457,18 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         <button
           type="button"
           onClick={() => handleTabChange("LEDGER")}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
-            activeTab === "LEDGER"
+          className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition-all ${activeTab === "LEDGER"
               ? "bg-blue-600 text-white shadow-2xs"
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
-          }`}
+            }`}
         >
           <span>Inventory Ledger</span>
           {manufacturingMovements.length > 0 && (
             <span
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "LEDGER"
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${activeTab === "LEDGER"
                   ? "bg-blue-500 text-white"
                   : "bg-slate-200 text-slate-700"
-              }`}
+                }`}
             >
               {manufacturingMovements.length}
             </span>
@@ -810,11 +787,10 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
                     Fulfillment Rate
                   </span>
                   <p
-                    className={`text-xl font-bold font-mono mt-0.5 ${
-                      overallIndentFulfillmentRate === 100
+                    className={`text-xl font-bold font-mono mt-0.5 ${overallIndentFulfillmentRate === 100
                         ? "text-emerald-700"
                         : "text-amber-700"
-                    }`}
+                      }`}
                   >
                     {overallIndentFulfillmentRate}%
                   </p>

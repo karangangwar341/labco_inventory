@@ -403,17 +403,17 @@ export function CreateRequestForm() {
         priority: 'NORMAL',
         reason: reason.trim() || undefined,
         lines: lines.map((line) => ({
-            productId: line.productId,
-            unitId: line.unitId,
-            quantity: Number(line.quantity),
-            condition: line.condition,
-          })),
+          productId: line.productId,
+          unitId: line.unitId,
+          quantity: Number(line.quantity),
+          condition: line.condition,
+        })),
       };
       const request = editingDraftId
         ? await requestsService.updateRequest(editingDraftId, {
-            reason: payload.reason,
-            lines: payload.lines,
-          })
+          reason: payload.reason,
+          lines: payload.lines,
+        })
         : await requestsService.createRequest(payload);
 
       try {
@@ -486,13 +486,12 @@ export function CreateRequestForm() {
                 aria-pressed={isSelected}
                 disabled={Boolean(editingDraftId)}
                 onClick={() => setDirection(value)}
-                className={`flex-1 py-2.5 px-3 sm:py-3 sm:px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${
-                  isSelected
+                className={`flex-1 py-2.5 px-3 sm:py-3 sm:px-4 text-xs font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-2 ${isSelected
                     ? isStockIn
                       ? 'bg-white text-emerald-800 shadow-sm border border-emerald-300'
                       : 'bg-white text-blue-800 shadow-sm border border-blue-300'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                }`}
+                  }`}
               >
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSelected ? (isStockIn ? 'bg-emerald-500' : 'bg-blue-600') : 'bg-slate-300'}`} />
                 <span className="truncate">{isStockIn ? 'Stock In (Receive Goods)' : 'Stock Out (Dispatch / Issue)'}</span>
@@ -524,7 +523,7 @@ export function CreateRequestForm() {
       {direction === 'STOCK_OUT' && selectableProducts.length === 0 && products.length > 0 && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            
+
             <div>
               <span className="font-semibold block text-amber-950">No items are currently stocked at this facility</span>
               <span className="text-amber-800">You must receive new items into the warehouse before dispatching or stocking out.</span>
@@ -671,25 +670,23 @@ export function CreateRequestForm() {
                     <button
                       type="button"
                       onClick={() => setViewMode('GRID')}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                        viewMode === 'GRID'
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${viewMode === 'GRID'
                           ? 'bg-white text-blue-700 shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                        }`}
                     >
-                      
+
                       <span>Fast Grid</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setViewMode('CARDS')}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                        viewMode === 'CARDS'
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${viewMode === 'CARDS'
                           ? 'bg-white text-blue-700 shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                        }`}
                     >
-                      
+
                       <span>Cards</span>
                     </button>
                   </div>
@@ -1170,7 +1167,7 @@ export function CreateRequestForm() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">3</span>
-              <CardTitle>Step 3: Add a Note {direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED') ? '(Required for damaged stock)' : '(Optional)'}</CardTitle>
+                <CardTitle>Step 3: Add a Note {direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED') ? '(Required for damaged stock)' : '(Optional)'}</CardTitle>
               </div>
               <CardDescription>
                 {direction === 'STOCK_OUT' && lines.some((line) => line.condition === 'DAMAGED')
@@ -1191,25 +1188,7 @@ export function CreateRequestForm() {
           </Card>
 
           {/* Friendly Guidance Banner */}
-          <div className="p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-xl flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-sm">
-              ✓
-            </div>
-            <div className="text-xs text-slate-700 space-y-1">
-              <span className="font-semibold text-slate-900 block">
-                {direction === 'STOCK_IN' && user?.role === 'PROJECT_ADMIN'
-                  ? 'Record stock that has arrived'
-                  : 'What happens when you send this for approval?'}
-              </span>
-              <p className="leading-relaxed text-slate-600">
-                {direction === 'STOCK_OUT'
-                  ? 'Available stock is reserved while Super Admin reviews it. After approval, the items are dispatched.'
-                  : user?.role === 'PROJECT_ADMIN'
-                    ? 'This records stock already received; it does not request a warehouse delivery. Super Admin approval is required before the quantity appears in your stock.'
-                    : 'This records items arriving at your warehouse. Super Admin approval is required before they are added to available stock.'}
-              </p>
-            </div>
-          </div>
+
 
           {/* Bottom Actions */}
           <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">

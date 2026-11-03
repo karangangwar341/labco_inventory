@@ -16,7 +16,8 @@ interface CloneCatalogModalProps {
   projectId?: string;
   projectName?: string;
   initialSelectedProductIds?: string[];
-  onSelect?: (productIds: string[]) => void;
+  initialSelectedCategoryIds?: string[];
+  onSelect?: (productIds: string[], categoryIds: string[]) => void;
   onSuccess?: () => void;
 }
 
@@ -26,6 +27,7 @@ export function CloneCatalogModal({
   projectId,
   projectName,
   initialSelectedProductIds = [],
+  initialSelectedCategoryIds = [],
   onSelect,
   onSuccess,
 }: CloneCatalogModalProps) {
@@ -34,18 +36,20 @@ export function CloneCatalogModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set(initialSelectedProductIds));
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set(initialSelectedCategoryIds));
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  // Sync initial selection when modal opens or initialSelectedProductIds changes
+  // Sync initial selection when modal opens or initial selections change
   useEffect(() => {
     if (isOpen) {
       setSelectedProductIds(new Set(initialSelectedProductIds));
+      setSelectedCategoryIds(new Set(initialSelectedCategoryIds));
       setError(null);
       setSuccessNotice(null);
     }
-  }, [isOpen, initialSelectedProductIds]);
+  }, [isOpen, initialSelectedProductIds, initialSelectedCategoryIds]);
 
   // Load all company products and categories
   const { data: allProducts = [], isLoading: isLoadingProducts } = useQuery({
@@ -152,22 +156,66 @@ export function CloneCatalogModal({
     });
   };
 
-  // Toggle entire category (all products in this category and its subcategories)
+  // Toggle entire category (including subcategories and any products within)
   const toggleCategory = (catId: string) => {
+    const subs = subcategoriesByParent.get(catId) || [];
+    const subIds = subs.map((s) => s.id);
+    const allRelatedCatIds = [catId, ...subIds];
     const productsInCat = productsByCategoryId.get(catId) || [];
-    if (productsInCat.length === 0) return;
 
-    const allSelected = productsInCat.every((p) => selectedProductIds.has(p.id));
+    const isCurrentlySelected = selectedCategoryIds.has(catId);
 
-    setSelectedProductIds((prev) => {
+    setSelectedCategoryIds((prev) => {
       const next = new Set(prev);
-      if (allSelected) {
-        productsInCat.forEach((p) => next.delete(p.id));
+      if (isCurrentlySelected) {
+        allRelatedCatIds.forEach((id) => next.delete(id));
       } else {
-        productsInCat.forEach((p) => next.add(p.id));
+        allRelatedCatIds.forEach((id) => next.add(id));
       }
       return next;
     });
+
+    if (productsInCat.length > 0) {
+      setSelectedProductIds((prev) => {
+        const next = new Set(prev);
+        if (isCurrentlySelected) {
+          productsInCat.forEach((p) => next.delete(p.id));
+        } else {
+          productsInCat.forEach((p) => next.add(p.id));
+        }
+        return next;
+      });
+    }
+  };
+
+  // Toggle single subcategory
+  const toggleSubcategory = (subId: string, parentId: string) => {
+    const productsInSub = productsByCategoryId.get(subId) || [];
+    const isCurrentlySelected = selectedCategoryIds.has(subId);
+
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (isCurrentlySelected) {
+        next.delete(subId);
+      } else {
+        next.add(subId);
+        // Also ensure parent is selected for taxonomy consistency
+        next.add(parentId);
+      }
+      return next;
+    });
+
+    if (productsInSub.length > 0) {
+      setSelectedProductIds((prev) => {
+        const next = new Set(prev);
+        if (isCurrentlySelected) {
+          productsInSub.forEach((p) => next.delete(p.id));
+        } else {
+          productsInSub.forEach((p) => next.add(p.id));
+        }
+        return next;
+      });
+    }
   };
 
   const handleSelectAllVisibleProducts = () => {
@@ -178,11 +226,21 @@ export function CloneCatalogModal({
     }
   };
 
+  // Select all categories (all roots + subcategories) and all company products
   const handleSelectAllCategories = () => {
+    const allCatIds = new Set<string>();
+    rootCategories.forEach((root) => {
+      allCatIds.add(root.id);
+      const subs = subcategoriesByParent.get(root.id) || [];
+      subs.forEach((sub) => allCatIds.add(sub.id));
+    });
+    setSelectedCategoryIds(allCatIds);
     setSelectedProductIds(new Set(companyProducts.map((p) => p.id)));
   };
 
+  // Clear all category and product selections
   const handleClearSelection = () => {
+    setSelectedCategoryIds(new Set());
     setSelectedProductIds(new Set());
   };
 
@@ -196,13 +254,22 @@ export function CloneCatalogModal({
       if (!projectId) throw new Error('Project ID required for direct transfer.');
       return administrationService.cloneCatalogToProject(
         projectId,
-        Array.from(selectedProductIds),
+        {
+          productIds: Array.from(selectedProductIds),
+          categoryIds: Array.from(selectedCategoryIds),
+        },
       );
     },
     onSuccess: async (res) => {
       await invalidation.afterCatalogMutation(queryClient);
+      const parts: string[] = [];
+      if ((res as any).clonedCategoriesCount) {
+        parts.push(`${(res as any).clonedCategoriesCount} category(s)`);
+      }
+      parts.push(`${res.clonedCount} product(s)`);
+
       setSuccessNotice(
-        `Successfully transferred ${res.clonedCount} product(s) into ${projectName || 'project'} catalog.${
+        `Successfully transferred ${parts.join(' and ')} into ${projectName || 'project'} catalog.${
           res.skippedCount > 0 ? ` (${res.skippedCount} already existed)` : ''
         }`,
       );
@@ -219,7 +286,7 @@ export function CloneCatalogModal({
 
   const handleConfirm = () => {
     if (onSelect) {
-      onSelect(Array.from(selectedProductIds));
+      onSelect(Array.from(selectedProductIds), Array.from(selectedCategoryIds));
       onClose();
     } else if (projectId) {
       cloneMutation.mutate();
@@ -278,7 +345,7 @@ export function CloneCatalogModal({
           </div>
 
           <div className="flex items-center gap-2">
-            {selectedProductIds.size > 0 && (
+            {(selectedProductIds.size > 0 || selectedCategoryIds.size > 0) && (
               <button
                 type="button"
                 onClick={handleClearSelection}
@@ -288,7 +355,13 @@ export function CloneCatalogModal({
               </button>
             )}
             <Badge variant="primary" size="sm" className="font-semibold text-xs">
-              {selectedProductIds.size} Selected
+              {selectedCategoryIds.size > 0 && selectedProductIds.size > 0
+                ? `${selectedCategoryIds.size} Cat, ${selectedProductIds.size} Prod Selected`
+                : selectedCategoryIds.size > 0
+                  ? `${selectedCategoryIds.size} Selected`
+                  : selectedProductIds.size > 0
+                    ? `${selectedProductIds.size} Selected`
+                    : '0 Selected'}
             </Badge>
           </div>
         </div>
@@ -327,9 +400,11 @@ export function CloneCatalogModal({
                   const productsInRoot = productsByCategoryId.get(root.id) || [];
                   const subs = subcategoriesByParent.get(root.id) || [];
                   const selectedInRoot = productsInRoot.filter((p) => selectedProductIds.has(p.id)).length;
-                  const isAllSelected = productsInRoot.length > 0 && selectedInRoot === productsInRoot.length;
-                  const isPartial = selectedInRoot > 0 && selectedInRoot < productsInRoot.length;
-                  const isExpanded = expandedCategories[root.id] ?? (selectedInRoot > 0);
+                  const isCatExplicitlySelected = selectedCategoryIds.has(root.id);
+                  const isAllProductsSelected = productsInRoot.length > 0 && selectedInRoot === productsInRoot.length;
+                  const isChecked = isCatExplicitlySelected || isAllProductsSelected;
+                  const isPartial = !isChecked && (selectedInRoot > 0 || subs.some((s) => selectedCategoryIds.has(s.id)));
+                  const isExpanded = expandedCategories[root.id] ?? (selectedInRoot > 0 || subs.some((s) => selectedCategoryIds.has(s.id)));
 
                   return (
                     <div key={root.id} className="p-2.5 text-xs transition-colors hover:bg-slate-50/50">
@@ -337,12 +412,11 @@ export function CloneCatalogModal({
                         <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
                           <input
                             type="checkbox"
-                            checked={isAllSelected}
+                            checked={isChecked}
                             ref={(el) => {
                               if (el) el.indeterminate = isPartial;
                             }}
                             onChange={() => toggleCategory(root.id)}
-                            disabled={productsInRoot.length === 0}
                             className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                           />
                           <span className="text-amber-500 text-sm">📁</span>
@@ -353,9 +427,11 @@ export function CloneCatalogModal({
                         </label>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {selectedInRoot > 0 ? (
+                          {isChecked || selectedInRoot > 0 ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                              {selectedInRoot} / {productsInRoot.length} selected
+                              {productsInRoot.length > 0
+                                ? `${selectedInRoot} / ${productsInRoot.length} selected`
+                                : 'Category Selected'}
                             </span>
                           ) : (
                             <span className="text-slate-400 text-[11px]">0 selected</span>
@@ -380,20 +456,21 @@ export function CloneCatalogModal({
                           {subs.map((sub) => {
                             const productsInSub = productsByCategoryId.get(sub.id) || [];
                             const selectedInSub = productsInSub.filter((p) => selectedProductIds.has(p.id)).length;
-                            const isSubAll = productsInSub.length > 0 && selectedInSub === productsInSub.length;
-                            const isSubPartial = selectedInSub > 0 && selectedInSub < productsInSub.length;
+                            const isSubCatSelected = selectedCategoryIds.has(sub.id);
+                            const isSubAllProducts = productsInSub.length > 0 && selectedInSub === productsInSub.length;
+                            const isSubChecked = isSubCatSelected || isSubAllProducts;
+                            const isSubPartial = !isSubChecked && selectedInSub > 0;
 
                             return (
                               <div key={sub.id} className="flex items-center justify-between text-[11px]">
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                   <input
                                     type="checkbox"
-                                    checked={isSubAll}
+                                    checked={isSubChecked}
                                     ref={(el) => {
                                       if (el) el.indeterminate = isSubPartial;
                                     }}
-                                    onChange={() => toggleCategory(sub.id)}
-                                    disabled={productsInSub.length === 0}
+                                    onChange={() => toggleSubcategory(sub.id, root.id)}
                                     className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                   />
                                   <span className="text-slate-400 font-mono">↳</span>
@@ -401,7 +478,9 @@ export function CloneCatalogModal({
                                   <span className="text-slate-400">({productsInSub.length})</span>
                                 </label>
                                 <span className="text-slate-500 font-mono text-[10px]">
-                                  {selectedInSub} / {productsInSub.length}
+                                  {isSubChecked && productsInSub.length === 0
+                                    ? 'Selected'
+                                    : `${selectedInSub} / ${productsInSub.length}`}
                                 </span>
                               </div>
                             );
@@ -521,8 +600,8 @@ export function CloneCatalogModal({
         {/* Modal Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-slate-100">
           <div className="text-xs text-slate-500">
-            <span className="font-bold text-slate-800">{selectedProductIds.size}</span> product(s) across{' '}
-            <span className="font-bold text-slate-800">{selectedCategoriesCount}</span> categories selected
+            <span className="font-bold text-slate-800">{selectedCategoryIds.size}</span> category(s) and{' '}
+            <span className="font-bold text-slate-800">{selectedProductIds.size}</span> product(s) selected
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="secondary" size="sm" onClick={onClose}>
@@ -532,14 +611,20 @@ export function CloneCatalogModal({
               type="button"
               variant="primary"
               size="sm"
-              disabled={selectedProductIds.size === 0 || cloneMutation.isPending}
+              disabled={(selectedProductIds.size === 0 && selectedCategoryIds.size === 0) || cloneMutation.isPending}
               isLoading={cloneMutation.isPending}
               onClick={handleConfirm}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
             >
               {isPickerMode
-                ? `Confirm Selection (${selectedProductIds.size} items)`
-                : `Transfer ${selectedProductIds.size} Products`}
+                ? `Confirm Selection (${selectedCategoryIds.size + selectedProductIds.size} items)`
+                : `Transfer ${
+                    selectedCategoryIds.size > 0 && selectedProductIds.size > 0
+                      ? `${selectedCategoryIds.size} Categories & ${selectedProductIds.size} Products`
+                      : selectedCategoryIds.size > 0
+                        ? `${selectedCategoryIds.size} Categories`
+                        : `${selectedProductIds.size} Products`
+                  }`}
             </Button>
           </div>
         </div>

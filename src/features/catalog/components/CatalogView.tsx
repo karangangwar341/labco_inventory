@@ -138,6 +138,18 @@ export function CatalogView() {
     >();
     if (Array.isArray(rawBalances)) {
       for (const b of rawBalances) {
+        // Warehouse stock isolation: Central product catalog only counts warehouse stock
+        // Project stock is held strictly within project profiles/dashboards
+        const isWarehouse = b.locationType === 'WAREHOUSE' || (Boolean(b.warehouseId) && !b.projectId);
+        const isProjectAdmin = role === 'PROJECT_ADMIN';
+
+        if (isProjectAdmin) {
+          if (b.projectId !== user?.projectId) continue;
+        } else {
+          // Central company catalog only aggregates warehouse stock
+          if (!isWarehouse) continue;
+        }
+
         const existing = map.get(b.productId) || {
           availableQty: 0,
           usableQty: 0,
@@ -154,7 +166,7 @@ export function CatalogView() {
       }
     }
     return map;
-  }, [rawBalances]);
+  }, [rawBalances, role, user?.projectId]);
 
   useEffect(() => {
     if (!productIdFromNotification || isLoading) return;
