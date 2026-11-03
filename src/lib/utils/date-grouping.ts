@@ -48,9 +48,9 @@ export function groupItemsByDay<T>(
           year: 'numeric',
         });
         if (isToday) {
-          dayLabel = `Today · ${formatted}`;
+          dayLabel = `Today, ${formatted}`;
         } else if (isYesterday) {
-          dayLabel = `Yesterday · ${formatted}`;
+          dayLabel = `Yesterday, ${formatted}`;
         } else {
           dayLabel = formatted;
         }

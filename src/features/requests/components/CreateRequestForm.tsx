@@ -73,7 +73,7 @@ export function CreateRequestForm() {
   const [lines, setLines] = useState<RequestLineDraft[]>([blankLine()]);
   const [locationId, setLocationId] = useState('');
   const [destinationLocationId, setDestinationLocationId] = useState('');
-  const [sourceType, setSourceType] = useState('');
+  const [sourceType, setSourceType] = useState('DIRECT_PURCHASE');
   const [reason, setReason] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -139,6 +139,7 @@ export function CreateRequestForm() {
   );
   const categoriesForLine = (categoryId: string) => categories.filter((category) => category.parentId === categoryId);
   const productsForLine = (line: RequestLineDraft) => selectableProducts.filter((product) => {
+    if (line.productId && product.id === line.productId) return true;
     const productCategory = categories.find((category) => category.id === product.categoryId) ?? product.category;
     if (line.subcategoryId) return product.categoryId === line.subcategoryId;
     if (!line.categoryId) return true;
@@ -150,46 +151,23 @@ export function CreateRequestForm() {
     setIsLoading(true);
     setFormError(null);
     try {
-      const scope = projectId ? `project-${projectId}` : 'company';
-      const bootstrap = userId
-        ? await queryClient.fetchQuery({
-            queryKey: queryKeys.session.bootstrap(userId),
-            queryFn: () => authService.getBootstrap(),
-            staleTime: 5 * 60 * 1000,
-          })
-        : undefined;
-      const [productData, categoryData, locationData] = bootstrap
-        ? [
-            bootstrap.products.map((product) => ({
-              ...product,
-              kind: product.kind as CatalogProduct['kind'],
-              baseUnit: product.units.find((unit) => unit.isBaseUnit)?.unitName ?? '',
-              minThreshold: Number(product.minQuantity),
-              isActive: true,
-              categoryName: product.category.name,
-              units: product.units.map((unit) => ({ ...unit, status: 'ACTIVE' as const })),
-            })) as CatalogProduct[],
-            bootstrap.categories,
-            bootstrap.locations,
-          ]
-        : await Promise.all([
-            queryClient.fetchQuery({
-              queryKey: queryKeys.catalog.products(scope),
-              queryFn: () => catalogService.getProducts(),
-              staleTime: 5 * 60 * 1000,
-            }),
-            queryClient.fetchQuery({
-              queryKey: queryKeys.catalog.categories(scope),
-              queryFn: () => catalogService.getCategories(),
-              staleTime: 5 * 60 * 1000,
-            }),
-            queryClient.fetchQuery({
-              queryKey: queryKeys.inventory.locations(userId),
-              queryFn: () => inventoryService.getLocations(),
-              staleTime: 5 * 60 * 1000,
-            }),
-          ]);
-      const approvedProducts = productData.filter((product) => product.status === 'APPROVED');
+      let productData: CatalogProduct[] = [];
+      let categoryData: CategoryDto[] = [];
+      let locationData: StockLocationDto[] = [];
+
+      const [prods, cats, locs] = await Promise.all([
+        catalogService.getProducts().catch(() => []),
+        catalogService.getCategories().catch(() => []),
+        inventoryService.getLocations().catch(() => []),
+      ]);
+
+      productData = prods;
+      categoryData = cats as CategoryDto[];
+      locationData = locs;
+
+      const approvedProducts = productData.filter(
+        (product) => product.status === 'APPROVED' || !product.status || (product as any).isActive !== false,
+      );
       setProducts(approvedProducts);
       setCategories(categoryData as CategoryDto[]);
       setLocations(locationData);
@@ -538,7 +516,7 @@ export function CreateRequestForm() {
       {direction === 'STOCK_OUT' && selectableProducts.length === 0 && products.length > 0 && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
           <div className="flex items-center gap-2.5">
-            <span className="text-xl">📦</span>
+            
             <div>
               <span className="font-semibold block text-amber-950">No items are currently stocked at this facility</span>
               <span className="text-amber-800">You must receive new items into the warehouse before dispatching or stocking out.</span>
@@ -549,29 +527,47 @@ export function CreateRequestForm() {
             onClick={() => setDirection('STOCK_IN')}
             className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs self-start sm:self-auto shrink-0 shadow-2xs transition-colors"
           >
-            📥 Switch to Stock In
+            Switch to Stock In
           </button>
         </div>
       )}
 
       {products.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-center space-y-2">
+          <CardContent className="p-6 text-center space-y-3">
             <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto font-bold text-sm">!</div>
-            <h4 className="text-sm font-semibold text-slate-800">No approved products are available</h4>
+            <h4 className="text-sm font-semibold text-slate-800">No catalog products available</h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              No catalog products currently have approved status. Ask your administrator to review and approve catalog items.
+              No products are currently available in the catalog. Add or import products first.
             </p>
+            {user?.role === 'SUPER_ADMIN' && (
+              <div>
+                <Link href="/catalog">
+                  <Button variant="primary" size="sm">Go to Catalog</Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : availableLocations.length === 0 ? (
         <Card>
-          <CardContent className="p-6 text-center space-y-2">
+          <CardContent className="p-6 text-center space-y-3">
             <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto font-bold text-sm">!</div>
-            <h4 className="text-sm font-semibold text-slate-800">No stock location assigned</h4>
+            <h4 className="text-sm font-semibold text-slate-800">
+              {user?.role === 'SUPER_ADMIN' ? 'No facilities available' : 'No stock location assigned'}
+            </h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Your account has no active warehouse or project facility assignment. Contact Super Admin to configure your location permissions.
+              {user?.role === 'SUPER_ADMIN'
+                ? 'No warehouses or project facilities exist in the system yet. Please create a warehouse in Warehouses management first.'
+                : 'Your account has no active warehouse or project facility assignment. Contact Super Admin to configure your location permissions.'}
             </p>
+            {user?.role === 'SUPER_ADMIN' && (
+              <div>
+                <Link href="/admin/warehouses">
+                  <Button variant="primary" size="sm">Create Warehouse</Button>
+                </Link>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -673,7 +669,7 @@ export function CreateRequestForm() {
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <span>⚡</span>
+                      
                       <span>Fast Grid</span>
                     </button>
                     <button
@@ -685,7 +681,7 @@ export function CreateRequestForm() {
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
-                      <span>📋</span>
+                      
                       <span>Cards</span>
                     </button>
                   </div>
@@ -798,7 +794,7 @@ export function CreateRequestForm() {
                                   <option value="">Select a product...</option>
                                   {selectableProducts.map((p) => (
                                     <option key={p.id} value={p.id}>
-                                      {p.name} {p.brand ? `· ${p.brand}` : ''}
+                                      {p.name} {p.brand ? `| ${p.brand}` : ''}
                                     </option>
                                   ))}
                                 </select>
@@ -816,10 +812,10 @@ export function CreateRequestForm() {
                                       </span>
                                     )
                                   ) : (
-                                    <span className="text-slate-400 font-mono text-[11px]">—</span>
+                                    <span className="text-slate-400 font-mono text-[11px]">-</span>
                                   )
                                 ) : (
-                                  <span className="text-slate-300 font-mono text-[11px]">—</span>
+                                  <span className="text-slate-300 font-mono text-[11px]">-</span>
                                 )}
                               </td>
                               <td className="py-2 px-3 w-32 whitespace-nowrap">
@@ -914,7 +910,7 @@ export function CreateRequestForm() {
                       direction === 'STOCK_OUT' && availableInSelectedUnit !== undefined
                         ? `Available here: ${availableInSelectedUnit.toLocaleString(undefined, { maximumFractionDigits: precision })} ${selectedUnit?.unitName || product?.baseUnit || 'units'}`
                         : '',
-                    ].filter(Boolean).join(' · ') || undefined;
+                    ].filter(Boolean).join(' | ') || undefined;
 
                     return (
                       <div
@@ -981,7 +977,7 @@ export function CreateRequestForm() {
                           <option value="">{line.categoryId ? 'Select a product...' : 'Select a category or product...'}</option>
                           {productsForLine(line).map((option) => (
                             <option key={option.id} value={option.id}>
-                              {option.brand ? `${option.name} · ${option.brand}` : option.name}
+                              {option.brand ? `${option.name} | ${option.brand}` : option.name}
                             </option>
                           ))}
                         </Select>
@@ -1031,7 +1027,7 @@ export function CreateRequestForm() {
                         {direction === 'STOCK_OUT' && (
                           <Select label="Condition" value={line.condition} onChange={(e) => updateLine(index, { condition: e.target.value as RequestLineDraft['condition'] })}>
                             <option value="USABLE">Usable</option>
-                            <option value="DAMAGED">Damaged — remove from usable stock</option>
+                            <option value="DAMAGED">Damaged - remove from usable stock</option>
                           </Select>
                         )}
 

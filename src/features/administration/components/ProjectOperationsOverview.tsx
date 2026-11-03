@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useSearchParams, useRouter, usePathname, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/Badge";
@@ -64,7 +64,7 @@ type IndentGroupType = {
 
 type SubTab = "OVERVIEW" | "MANUFACTURING" | "STAFF" | "DEPARTMENTS" | "LEDGER";
 
-const getText = (row: ReportRow, key: string, fallback = "—") => {
+const getText = (row: ReportRow, key: string, fallback = "-") => {
   const value = row[key];
   return typeof value === "string" || typeof value === "number"
     ? String(value)
@@ -72,7 +72,9 @@ const getText = (row: ReportRow, key: string, fallback = "—") => {
 };
 const getNumber = (row: ReportRow, key: string) => Number(row[key] ?? 0) || 0;
 
-export function ProjectOperationsOverview({ projectId }: { projectId: string }) {
+export function ProjectOperationsOverview({ projectId: propProjectId }: { projectId?: string }) {
+  const routeParams = useParams<{ projectId?: string }>();
+  const projectId = propProjectId || routeParams?.projectId || "";
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -125,38 +127,54 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
     [deptDateFilter, deptCustomStart, deptCustomEnd],
   );
 
+  const toArray = (res: any): ReportRow[] => {
+    if (Array.isArray(res)) return res;
+    if (res && Array.isArray(res.data)) return res.data;
+    return [];
+  };
+
   const overviewQuery = useQuery({
     queryKey: ["administration", "project-overview", projectId, { deptStartDate, deptEndDate, ledgerStartDate, ledgerEndDate }],
+    enabled: Boolean(projectId),
     queryFn: async () => {
-      const [project, stock, departmentActivity, production, ledger, catalog] =
+      const [projectRes, stockRes, departmentActivityRes, productionRes, ledgerRes, catalogRes] =
         await Promise.all([
-          administrationService.getProject(projectId),
-          reportsService.generateReport<ReportResponse>("STOCK_BALANCE", {
+          administrationService.getProject(projectId).catch(() => ({ id: projectId, name: "Project", status: "ACTIVE" })),
+          reportsService.generateReport<any>("STOCK_BALANCE", {
             projectId,
-          }),
-          reportsService.generateReport<ReportResponse>("PROJECT_CONSUMPTION", {
+          }).catch(() => ({ data: [], rowCount: 0 })),
+          reportsService.generateReport<any>("PROJECT_CONSUMPTION", {
             projectId,
             startDate: deptStartDate,
             endDate: deptEndDate,
-          }),
-          reportsService.generateReport<ReportResponse>("PRODUCTION_RUNS", {
+          }).catch(() => ({ data: [], rowCount: 0 })),
+          reportsService.generateReport<any>("PRODUCTION_RUNS", {
             projectId,
-          }),
-          reportsService.generateReport<ReportResponse>("INVENTORY_LEDGER", {
+          }).catch(() => ({ data: [], rowCount: 0 })),
+          reportsService.generateReport<any>("INVENTORY_LEDGER", {
             projectId,
             startDate: ledgerStartDate,
             endDate: ledgerEndDate,
-          }),
-          catalogService.getProducts(),
+          }).catch(() => ({ data: [], rowCount: 0 })),
+          catalogService.getProducts().catch(() => []),
         ]);
+
+      const stock = toArray(stockRes);
+      const departmentActivity = toArray(departmentActivityRes);
+      const production = toArray(productionRes);
+      const ledger = toArray(ledgerRes);
+      const catalog = Array.isArray(catalogRes)
+        ? catalogRes
+        : (catalogRes && Array.isArray((catalogRes as any).data) ? (catalogRes as any).data : []);
+
       return {
-        project,
-        stock: stock.data,
-        departmentActivity: departmentActivity.data,
-        production: production.data,
-        ledger: ledger.data,
+        project: projectRes || { id: projectId, name: "Project", status: "ACTIVE" },
+        stock,
+        departmentActivity,
+        production,
+        ledger,
         manufacturedProducts: catalog.filter(
-          (product) =>
+          (product: any) =>
             product.kind === "MANUFACTURED_PRODUCT" &&
             product.ownerScope === "PROJECT" &&
             product.projectId === projectId,
@@ -279,12 +297,6 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
       const department = getText(row, "department", "General");
       const date = getText(row, "date", "");
       const key = `${indentNumber}__${department}__${date}`;
-      const product = getText(row, "product", "Product");
-      const requested = getNumber(row, "requestedQuantity") || getNumber(row, "quantity");
-      const provided = getNumber(row, "quantity");
-      const unit = getText(row, "unit", "");
-      const notes = row.notes ? String(row.notes) : undefined;
-      const status = row.status ? String(row.status) : undefined;
 
       let group = groups.get(key);
       if (!group) {
@@ -301,16 +313,28 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
         };
         groups.set(key, group);
       }
-      group.items.push({
-        product,
-        requestedQuantity: requested,
-        quantity: provided,
-        unit,
-        notes,
-        status,
-      });
-      group.totalRequested += requested;
-      group.totalProvided += provided;
+
+      const rawItems = Array.isArray(row.items) && row.items.length > 0 ? row.items : [row];
+      for (const it of rawItems) {
+        const itemObj = it as ReportRow;
+        const product = getText(itemObj, "productName", getText(itemObj, "product", "Product"));
+        const requested = getNumber(itemObj, "requestedQuantity") || getNumber(itemObj, "quantity");
+        const provided = getNumber(itemObj, "quantity");
+        const unit = getText(itemObj, "unit", "");
+        const notes = itemObj.notes ? String(itemObj.notes) : (row.notes ? String(row.notes) : undefined);
+        const status = itemObj.status ? String(itemObj.status) : (row.status ? String(row.status) : undefined);
+
+        group.items.push({
+          product,
+          requestedQuantity: requested,
+          quantity: provided,
+          unit,
+          notes,
+          status,
+        });
+        group.totalRequested += requested;
+        group.totalProvided += provided;
+      }
     }
 
     for (const group of groups.values()) {
@@ -388,7 +412,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>📊 Overview &amp; Balances</span>
+          <span>Overview &amp; Balances</span>
         </button>
 
         <button
@@ -423,7 +447,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>👥 Staff &amp; Workforce</span>
+          <span>Staff &amp; Workforce</span>
         </button>
 
         <button
@@ -435,7 +459,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>🏥 Clinical Departments</span>
+          <span>Clinical Departments</span>
           {departments.size > 0 && (
             <span
               className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -458,7 +482,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
               : "bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200/80"
           }`}
         >
-          <span>📜 Inventory Ledger</span>
+          <span>Inventory Ledger</span>
           {manufacturingMovements.length > 0 && (
             <span
               className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -546,7 +570,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                     onClick={() => setShowBulkCatalogModal(true)}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
-                    ⚡ Bulk Add Project Products
+                    Bulk Add Project Products
                   </Button>
                   <span className="text-xs text-slate-500">
                     {manufacturedProducts.length} products
@@ -846,7 +870,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                               </Badge>
                             ) : (
                               <Badge variant="warning" size="sm">
-                                Partial ({group.totalProvided}/{group.totalRequested} · {group.fulfillmentRate}%)
+                                Partial ({group.totalProvided}/{group.totalRequested} / {group.fulfillmentRate}%)
                               </Badge>
                             )}
 
@@ -862,7 +886,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                                 }))
                               }
                             >
-                              {isExpanded ? "Hide items ▲" : "View items ▼"}
+                              {isExpanded ? "Hide items" : "View items"}
                             </Button>
                           </div>
                         </div>
@@ -910,7 +934,7 @@ export function ProjectOperationsOverview({ projectId }: { projectId: string }) 
                                         )}
                                       </TableCell>
                                       <TableCell className="text-slate-400 text-[11px] truncate max-w-[160px]">
-                                        {item.notes || "—"}
+                                        {item.notes || "-"}
                                       </TableCell>
                                     </TableRow>
                                   );

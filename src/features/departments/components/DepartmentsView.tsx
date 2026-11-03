@@ -178,7 +178,7 @@ export function DepartmentsView() {
         if (!indentMap[key]) {
           const timeStr = line.createdAt
             ? new Date(line.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : '—';
+            : '-';
           indentMap[key] = {
             key,
             indentNumber: indentNum,
@@ -881,7 +881,7 @@ export function DepartmentsView() {
                   </Badge>
                   {draftIndentGroups.length > 0 && (
                     <span className="text-xs text-slate-500 font-medium">
-                      ({draftIndentGroups.length} {draftIndentGroups.length === 1 ? 'indent' : 'indents'} · {totalDraftLines} items)
+                      ({draftIndentGroups.length} {draftIndentGroups.length === 1 ? 'indent' : 'indents'} | {totalDraftLines} items)
                     </span>
                   )}
                 </div>
@@ -1269,7 +1269,7 @@ export function DepartmentsView() {
                                           )}
                                         </TableCell>
                                         <TableCell className="text-slate-500 text-[11px] truncate max-w-[140px]">
-                                          {line.notes || '—'}
+                                          {line.notes || '-'}
                                         </TableCell>
                                         <TableCell align="right">
                                           <div className="flex justify-end gap-1.5">
@@ -1280,7 +1280,7 @@ export function DepartmentsView() {
                                             >
                                               Edit
                                             </button>
-                                            <span className="text-slate-300">·</span>
+                                            <span className="text-slate-300">|</span>
                                             <button
                                               type="button"
                                               onClick={() => removeIssueLineMutation.mutate(line.id)}
@@ -1436,7 +1436,7 @@ export function DepartmentsView() {
                 <h3 className="text-sm font-semibold text-[#172033]">Stock Out History</h3>
                 {history.length > 0 && (
                   <span className="text-xs text-slate-500 font-medium">
-                    {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day shown' : 'days shown'} · {filteredHistory.length} of {history.length} total entries
+                    {historyDayGroups.length} {historyDayGroups.length === 1 ? 'day shown' : 'days shown'} | {filteredHistory.length} of {history.length} total entries
                   </span>
                 )}
               </div>
@@ -1488,9 +1488,9 @@ export function DepartmentsView() {
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
                         <span className="font-semibold text-slate-800">{group.indentGroups.length}</span> {group.indentGroups.length === 1 ? 'indent form' : 'indent forms'}
-                        <span>·</span>
+                        <span>|</span>
                         <span className="font-semibold text-slate-800">{group.items.length}</span> {group.items.length === 1 ? 'line' : 'lines'}
-                        <span>·</span>
+                        <span>|</span>
                         <span className="font-semibold text-slate-800 font-mono">{group.totalUnits.toLocaleString()}</span> units
                       </div>
                     </div>

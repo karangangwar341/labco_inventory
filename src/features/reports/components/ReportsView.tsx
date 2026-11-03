@@ -65,20 +65,34 @@ function formatCellValue(
   if (column === 'trackingNumber') {
     return (
       <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
-        📦 {String(value)}
+        {String(value)}
       </span>
     );
   }
 
   if (column === 'indentNumber') {
-    const num = String(value);
-    if (!num || num === 'N/A' || num === 'null') {
-      return <span className="font-mono text-xs text-slate-400">—</span>;
+    const num = String(value ?? '').trim();
+    if (!num || num === 'N/A' || num === 'null' || num === 'undefined') {
+      return <span className="font-mono text-xs text-slate-400">-</span>;
     }
+    const cleanNum = num.replace(/^IND-/, '');
+    const lineItems: any[] = row?._items || [];
     return (
-      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-        #{num.replace(/^IND-/, '')}
-      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          if (lineItems.length > 0) {
+            e.stopPropagation();
+            onViewShipment?.({ ...row, items: lineItems });
+          }
+        }}
+        className={`font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1 ${
+          lineItems.length > 0 ? 'hover:bg-blue-100 hover:border-blue-300 cursor-pointer' : ''
+        }`}
+        title={lineItems.length > 0 ? 'Click to view indent slip items' : undefined}
+      >
+        <span>#{cleanNum}</span>
+      </button>
     );
   }
 
@@ -110,7 +124,7 @@ function formatCellValue(
     );
   }
   if (value === null || value === undefined || value === '') {
-    return <span className="text-slate-300 font-mono">—</span>;
+    return <span className="text-slate-300 font-mono">-</span>;
   }
 
   // Boolean flags
@@ -141,17 +155,7 @@ function formatCellValue(
   }
 
 
-  if (column === 'indentNumber') {
-    const val = String(value ?? '').trim();
-    if (!val || val === 'N/A' || val === 'null' || val === 'undefined') {
-      return <span className="text-slate-400 font-mono text-xs italic">—</span>;
-    }
-    return (
-      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-        📋 {val}
-      </span>
-    );
-  }
+
 
   // Workflow status
   if (column === 'status') {
@@ -600,8 +604,8 @@ export function ReportsView() {
           <div className="hidden print:block pb-3 mb-3 border-b border-slate-300">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-base font-bold text-slate-900 tracking-tight">Labco Instruments — Warehouse Management System</h1>
-                <p className="text-xs text-slate-700 mt-0.5 font-semibold">{activeReportMeta?.label} — {activeReportMeta?.description}</p>
+                <h1 className="text-base font-bold text-slate-900 tracking-tight">Labco Instruments - Warehouse Management System</h1>
+                <p className="text-xs text-slate-700 mt-0.5 font-semibold">{activeReportMeta?.label} - {activeReportMeta?.description}</p>
                 {reportType === 'INVENTORY_LEDGER' && (
                   <p className="text-[11px] text-slate-600 mt-1">
                     <strong>Column Guide:</strong> Stock Delta indicates net change in base units (Positive/+ = stock added into facility, Negative/- = stock deducted from facility).
@@ -735,8 +739,8 @@ export function ReportsView() {
           }
           description={
             selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A'
-              ? `Department: ${selectedShipment.department || 'General'} • Activity: ${selectedShipment.type || 'Department Issue'} • Recorded by: ${selectedShipment.issuedBy || 'Project Admin'}`
-              : `${selectedShipment.sourceLocation || 'Origin'} → ${selectedShipment.destinationLocation || 'Destination'} • Status: ${selectedShipment.status}`
+              ? `Department: ${selectedShipment.department || 'General'} | Activity: ${selectedShipment.type || 'Department Issue'} | Recorded by: ${selectedShipment.issuedBy || 'Project Admin'}`
+              : `${selectedShipment.sourceLocation || 'Origin'} → ${selectedShipment.destinationLocation || 'Destination'} | Status: ${selectedShipment.status}`
           }
           maxWidth="2xl"
         >
@@ -819,20 +823,20 @@ export function ReportsView() {
                     <tr key={idx} className="hover:bg-slate-50/70">
                       <td className="py-2 px-3 font-mono text-slate-400">{idx + 1}</td>
                       <td className="py-2 px-3 font-medium text-slate-900">{item.productName}</td>
-                      <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{item.brand || '—'}</td>
+                      <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{item.brand || '-'}</td>
                       {selectedShipment.indentNumber ? (
                         <>
                           <td className="py-2 px-3 text-right font-mono text-slate-600">
-                            {item.requestedQuantity?.toLocaleString() ?? item.quantity?.toLocaleString() ?? '—'}
+                            {item.requestedQuantity?.toLocaleString() ?? item.quantity?.toLocaleString() ?? '-'}
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
-                            {item.quantity?.toLocaleString() ?? '—'}
+                            {item.quantity?.toLocaleString() ?? '-'}
                           </td>
                         </>
                       ) : (
                         <>
                           <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800">
-                            {item.dispatchedQuantity?.toLocaleString() ?? '—'}
+                            {item.dispatchedQuantity?.toLocaleString() ?? '-'}
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-700">
                             {item.receivedQuantity !== null && item.receivedQuantity !== undefined

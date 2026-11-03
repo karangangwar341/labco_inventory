@@ -65,20 +65,29 @@ export class InventoryService {
         name: location.warehouse?.name || location.project?.name || 'Stock location',
       }));
     } else if (user.role === UserRole.STORE_ADMIN) {
-      const warehouseId = user.warehouseId !== undefined
-        ? user.warehouseId
-        : (await this.prisma.user.findUnique({
-            where: { id: user.id },
-            select: { warehouseId: true },
-          }))?.warehouseId;
-      if (!warehouseId) return [];
+      let warehouseIds: string[] = [];
+      if (this.prisma.warehouse?.findMany) {
+        const managed = await this.prisma.warehouse.findMany({
+          where: {
+            status: OrganizationStatus.ACTIVE,
+            OR: [
+              { storeAdminId: user.id },
+              ...(user.warehouseId ? [{ id: user.warehouseId }] : []),
+            ],
+          },
+          select: { id: true },
+        });
+        warehouseIds = managed.map((w) => w.id);
+      }
+      if (warehouseIds.length === 0 && user.warehouseId) {
+        warehouseIds = [user.warehouseId];
+      }
+      if (warehouseIds.length === 0) return [];
 
-      // Any warehouse can transfer to any project; warehouse-project mapping is not required.
-      // Store Admin can see their own warehouse AND all active projects, but cannot see other warehouses.
       const locations = await this.prisma.stockLocation.findMany({
         where: {
           OR: [
-            { warehouseId, warehouse: { status: OrganizationStatus.ACTIVE } },
+            { warehouseId: { in: warehouseIds }, warehouse: { status: OrganizationStatus.ACTIVE } },
             { locationType: LocationType.PROJECT, project: { status: OrganizationStatus.ACTIVE } },
           ],
         },

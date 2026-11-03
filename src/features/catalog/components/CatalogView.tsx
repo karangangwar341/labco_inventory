@@ -558,7 +558,7 @@ export function CatalogView() {
               {product.status === 'APPROVED' && (
                 <Link href={`/requests/new?type=STOCK_IN&productId=${product.id}`}>
                   <Button variant="secondary" size="sm" className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300">
-                    📥 Stock
+                    Stock
                   </Button>
                 </Link>
               )}
@@ -1436,7 +1436,7 @@ export function CatalogView() {
                 {selectedProduct.status === 'APPROVED' && (
                   <Link href={`/requests/new?type=STOCK_IN&productId=${selectedProduct.id}`}>
                     <Button variant="secondary" size="sm" className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300">
-                      📥 Stock in Facility
+                      Stock in Facility
                     </Button>
                   </Link>
                 )}
