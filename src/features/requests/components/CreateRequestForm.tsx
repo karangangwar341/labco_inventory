@@ -81,6 +81,16 @@ export function CreateRequestForm() {
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'GRID' | 'CARDS'>('GRID');
+  const [gridDefaultCategory, setGridDefaultCategory] = useState<string>('');
+
+  const createRowWithDefaultCategory = useCallback(() => {
+    const cat = categories.find((c) => c.id === gridDefaultCategory);
+    return {
+      ...blankLine(),
+      categoryId: cat?.parentId ? cat.parentId : (gridDefaultCategory || ''),
+      subcategoryId: cat?.parentId ? cat.id : '',
+    };
+  }, [categories, gridDefaultCategory]);
 
   // On small mobile screens, default to Cards for a clean, touch-friendly vertical experience
   useEffect(() => {
@@ -709,7 +719,7 @@ export function CreateRequestForm() {
                         type="button"
                         variant="secondary"
                         size="sm"
-                        onClick={() => setLines((curr) => [...curr, blankLine()])}
+                        onClick={() => setLines((curr) => [...curr, createRowWithDefaultCategory()])}
                         className="text-xs px-2.5 py-1 gap-1"
                       >
                         <span>+</span>
@@ -719,7 +729,14 @@ export function CreateRequestForm() {
                         type="button"
                         variant="secondary"
                         size="sm"
-                        onClick={() => setLines((curr) => [...curr, blankLine(), blankLine(), blankLine(), blankLine(), blankLine()])}
+                        onClick={() => setLines((curr) => [
+                          ...curr,
+                          createRowWithDefaultCategory(),
+                          createRowWithDefaultCategory(),
+                          createRowWithDefaultCategory(),
+                          createRowWithDefaultCategory(),
+                          createRowWithDefaultCategory(),
+                        ])}
                         className="text-xs px-2.5 py-1 gap-1"
                       >
                         <span>+5</span>
@@ -730,13 +747,59 @@ export function CreateRequestForm() {
                           type="button"
                           onClick={() => setLines((curr) => {
                             const kept = curr.filter((l) => l.productId || l.quantity);
-                            return kept.length ? kept : [blankLine()];
+                            return kept.length ? kept : [createRowWithDefaultCategory()];
                           })}
                           className="text-[11px] text-slate-500 hover:text-slate-800 font-medium px-2 py-1"
                         >
                           Clear Empty Rows
                         </button>
                       )}
+
+                      {/* Optional Grid-wide Default Category */}
+                      <div className="flex items-center gap-1.5 pl-1 sm:border-l sm:border-slate-200 sm:pl-2">
+                        <span className="text-[11px] text-slate-500 font-medium hidden md:inline">Default Category:</span>
+                        <select
+                          value={gridDefaultCategory}
+                          onChange={(e) => setGridDefaultCategory(e.target.value)}
+                          className="px-2 py-1 bg-white border border-slate-200 rounded-md text-[11px] text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
+                        >
+                          <option value="">All Categories</option>
+                          {topLevelCategories.map((root) => {
+                            const subs = categories.filter((c) => c.parentId === root.id);
+                            if (subs.length === 0) return <option key={root.id} value={root.id}>{root.name}</option>;
+                            return (
+                              <optgroup key={root.id} label={root.name}>
+                                <option value={root.id}>{root.name} (All)</option>
+                                {subs.map((sub) => (
+                                  <option key={sub.id} value={sub.id}>↳ {sub.name}</option>
+                                ))}
+                              </optgroup>
+                            );
+                          })}
+                        </select>
+                        {gridDefaultCategory && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cat = categories.find((c) => c.id === gridDefaultCategory);
+                              const targetCatId = cat?.parentId ? cat.parentId : gridDefaultCategory;
+                              const targetSubCatId = cat?.parentId ? cat.id : '';
+                              setLines((curr) => curr.map((l) => ({
+                                ...l,
+                                categoryId: targetCatId,
+                                subcategoryId: targetSubCatId,
+                                productId: '',
+                                unitId: '',
+                                quantity: '',
+                              })));
+                            }}
+                            className="px-2 py-0.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[10px] font-semibold transition-colors"
+                            title="Set this category for all rows"
+                          >
+                            Set All Rows
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between sm:justify-end gap-3 text-[11px] text-slate-600 font-medium pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-200/70">
                       <span>Products: <strong className="text-slate-900 font-mono">{distinctProductsCount}</strong></span>
@@ -753,13 +816,14 @@ export function CreateRequestForm() {
 
                   {/* Fast Spreadsheet Table */}
                   <div className="overflow-x-auto border border-slate-200/90 rounded-xl bg-white shadow-2xs">
-                    <table className="w-full min-w-[880px] text-left text-xs border-collapse">
+                    <table className="w-full min-w-[1020px] text-left text-xs border-collapse">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[10px]">
                         <tr>
                           <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">#</th>
+                          <th className="py-2.5 px-3 w-48 min-w-[170px] whitespace-nowrap">Category</th>
                           <th className="py-2.5 px-3 min-w-[240px] whitespace-nowrap">Product &amp; Brand</th>
                           <th className="py-2.5 px-3 w-32 text-center whitespace-nowrap">Stock Available</th>
-                          <th className="py-2.5 px-3 w-32 whitespace-nowrap">Condition</th>
+                          <th className="py-2.5 px-3 w-28 whitespace-nowrap">Condition</th>
                           <th className="py-2.5 px-3 w-28 whitespace-nowrap">Quantity</th>
                           <th className="py-2.5 px-3 w-32 whitespace-nowrap">Packaging Unit</th>
                           <th className="py-2.5 px-2 w-10 text-center whitespace-nowrap"></th>
@@ -784,6 +848,55 @@ export function CreateRequestForm() {
                               <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-400 whitespace-nowrap">
                                 {index + 1}
                               </td>
+                              <td className="py-2 px-3 w-48 min-w-[170px]">
+                                <select
+                                  value={line.subcategoryId || line.categoryId || ''}
+                                  onChange={(e) => {
+                                    const catId = e.target.value;
+                                    const cat = categories.find((c) => c.id === catId);
+                                    if (cat?.parentId) {
+                                      updateLine(index, {
+                                        categoryId: cat.parentId,
+                                        subcategoryId: cat.id,
+                                        productId: '',
+                                        unitId: '',
+                                        quantity: '',
+                                      });
+                                    } else {
+                                      updateLine(index, {
+                                        categoryId: catId,
+                                        subcategoryId: '',
+                                        productId: '',
+                                        unitId: '',
+                                        quantity: '',
+                                      });
+                                    }
+                                  }}
+                                  className="w-full min-w-[150px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
+                                >
+                                  <option value="">All Categories</option>
+                                  {topLevelCategories.map((root) => {
+                                    const subs = categories.filter((c) => c.parentId === root.id);
+                                    if (subs.length === 0) {
+                                      return (
+                                        <option key={root.id} value={root.id}>
+                                          {root.name}
+                                        </option>
+                                      );
+                                    }
+                                    return (
+                                      <optgroup key={root.id} label={root.name}>
+                                        <option value={root.id}>{root.name} (All)</option>
+                                        {subs.map((sub) => (
+                                          <option key={sub.id} value={sub.id}>
+                                            &nbsp;&nbsp;↳ {sub.name}
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    );
+                                  })}
+                                </select>
+                              </td>
                               <td className="py-2 px-3 min-w-[240px]">
                                 <select
                                   value={line.productId}
@@ -791,8 +904,10 @@ export function CreateRequestForm() {
                                   className="w-full min-w-[220px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 shadow-2xs"
                                   required
                                 >
-                                  <option value="">Select a product...</option>
-                                  {selectableProducts.map((p) => (
+                                  <option value="">
+                                    {productsForLine(line).length === 0 ? 'No products in this category' : 'Select a product...'}
+                                  </option>
+                                  {productsForLine(line).map((p) => (
                                     <option key={p.id} value={p.id}>
                                       {p.name} {p.brand ? `| ${p.brand}` : ''}
                                     </option>
@@ -838,7 +953,7 @@ export function CreateRequestForm() {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
                                       if (index === lines.length - 1) {
-                                        setLines((curr) => [...curr, blankLine()]);
+                                        setLines((curr) => [...curr, createRowWithDefaultCategory()]);
                                       }
                                     }
                                   }}
@@ -884,7 +999,7 @@ export function CreateRequestForm() {
 
                   <button
                     type="button"
-                    onClick={() => setLines((curr) => [...curr, blankLine()])}
+                    onClick={() => setLines((curr) => [...curr, createRowWithDefaultCategory()])}
                     className="w-full py-2 border border-dashed border-slate-300 rounded-xl text-xs text-blue-600 hover:bg-blue-50/50 hover:border-blue-400 font-medium flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <span>+</span>
