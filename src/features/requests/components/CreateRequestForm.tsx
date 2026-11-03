@@ -1070,7 +1070,7 @@ export function CreateRequestForm() {
                             {topLevelCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                           </Select>
                           <Select
-                            label="Subcategory / brand"
+                            label="Subcategory"
                             value={line.subcategoryId}
                             onChange={(e) => updateLine(index, { subcategoryId: e.target.value, productId: '', unitId: '', quantity: '' })}
                             disabled={!line.categoryId || categoriesForLine(line.categoryId).length === 0}

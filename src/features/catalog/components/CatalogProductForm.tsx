@@ -134,8 +134,8 @@ export function CatalogProductForm({
   // Quick Brand Creation Modal State
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [modalBrandName, setModalBrandName] = useState('');
-  const [modalBrandParentId, setModalBrandParentId] = useState('');
   const [modalBrandError, setModalBrandError] = useState<string | null>(null);
+  const [customBrands, setCustomBrands] = useState<string[]>([]);
 
   // Queries
   const {
@@ -202,17 +202,18 @@ export function CatalogProductForm({
     [visibleCategories, categoryId],
   );
 
-  // Dynamically extract all unique brands across products & registered brand categories
+  // Dynamically extract all unique brands across products & user custom registered brands
   const availableBrands = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => {
       if (p.brand?.trim()) set.add(p.brand.trim());
     });
-    categories.forEach((c) => {
-      if (c.parentId && c.name?.trim()) set.add(c.name.trim());
+    customBrands.forEach((b) => {
+      if (b?.trim()) set.add(b.trim());
     });
+    if (brand?.trim()) set.add(brand.trim());
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [products, categories]);
+  }, [products, customBrands, brand]);
 
   // All standard units combined with product units & custom registered units
   const allStandardUnits = useMemo(() => {
@@ -340,26 +341,19 @@ export function CatalogProductForm({
     },
   });
 
-  // Save quick brand mutation
-  const saveBrand = useMutation({
-    mutationFn: () =>
-      catalogService.createCategory({
-        name: modalBrandName.trim(),
-        parentId: modalBrandParentId || categoryId || roots[0]?.id || undefined,
-      }),
-    onSuccess: async (newBrandCat) => {
-      await invalidation.afterCatalogMutation(queryClient);
-      await refetchCategories();
-      setBrand(newBrandCat.name);
-      setShowBrandModal(false);
-      setModalBrandName('');
-      setModalBrandParentId('');
-      setModalBrandError(null);
-    },
-    onError: (error) => {
-      setModalBrandError(error instanceof Error ? error.message : 'Could not create brand.');
-    },
-  });
+  // Handle quick brand registration
+  const handleSaveBrand = () => {
+    const trimmed = modalBrandName.trim();
+    if (!trimmed) {
+      setModalBrandError('Brand name is required.');
+      return;
+    }
+    setCustomBrands((prev) => Array.from(new Set([...prev, trimmed])));
+    setBrand(trimmed);
+    setShowBrandModal(false);
+    setModalBrandName('');
+    setModalBrandError(null);
+  };
 
   const setBaseUnit = (index: number) => {
     setUnits((current) =>
@@ -656,7 +650,6 @@ export function CatalogProductForm({
                       type="button"
                       onClick={() => {
                         setModalBrandName('');
-                        setModalBrandParentId(categoryId || roots[0]?.id || '');
                         setModalBrandError(null);
                         setShowBrandModal(true);
                       }}
@@ -1155,7 +1148,7 @@ export function CatalogProductForm({
         isOpen={role !== 'PROJECT_ADMIN' && showBrandModal}
         onClose={() => setShowBrandModal(false)}
         title="Register New Brand / Manufacturer"
-        description="Add a recognized laboratory manufacturer, supplier, or trade brand to your catalog taxonomy."
+        description="Add a recognized laboratory manufacturer, supplier, or trade brand to your product."
       >
         <div className="space-y-4 pt-2">
           {modalBrandError && (
@@ -1170,26 +1163,12 @@ export function CatalogProductForm({
             onChange={(e) => setModalBrandName(e.target.value)}
             required
             maxLength={100}
-            placeholder="e.g. Beckman Coulter, Bio-Rad, Roche, Labco BioAssay, Merck"
+            placeholder="e.g. Beckman Coulter, Bio-Rad, Roche, Labco, Merck"
             helperText="The trade brand or manufacturer name printed on product labels."
           />
 
-          <Select
-            label="Category for this Brand"
-            value={modalBrandParentId}
-            onChange={(e) => setModalBrandParentId(e.target.value)}
-            required
-          >
-            <option value="">Select a main category</option>
-            {roots.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </Select>
-
           <p className="text-[11px] text-slate-500">
-            Once saved, this brand will be immediately applied to this product and saved for future catalog items.
+            Once saved, this brand will be immediately applied to this product and selectable for future items.
           </p>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
@@ -1205,9 +1184,8 @@ export function CatalogProductForm({
               type="button"
               variant="primary"
               size="sm"
-              isLoading={saveBrand.isPending}
-              disabled={!modalBrandName.trim() || !modalBrandParentId || saveBrand.isPending}
-              onClick={() => saveBrand.mutate()}
+              disabled={!modalBrandName.trim()}
+              onClick={handleSaveBrand}
             >
               Save Brand
             </Button>

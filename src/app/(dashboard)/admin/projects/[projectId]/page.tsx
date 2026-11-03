@@ -1,13 +1,13 @@
-import { Suspense } from 'react';
+'use client';
+
+import { use, Suspense } from 'react';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 import { LoadingState } from '@/components/feedback/LoadingState';
 import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
 import { ProjectOperationsOverview } from '@/features/administration/components/ProjectOperationsOverview';
 
-export const metadata = { title: 'Project Operations | Labco Operations' };
-
-export default async function ProjectOperationsPage({ params }: { params: Promise<{ projectId: string }> }) {
-  const { projectId } = await params;
+export default function ProjectOperationsPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = use(params);
   return (
     <RoleGuard allowedRoles={['SUPER_ADMIN']}>
       <ErrorBoundary title="Project Operations">

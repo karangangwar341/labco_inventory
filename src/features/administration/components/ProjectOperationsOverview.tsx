@@ -660,7 +660,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
             >
               <CardTitle>Project Inventory Balances</CardTitle>
               <CardDescription>
-                Authoritative posted balances currently located at this project"™s facility.
+                Authoritative posted balances currently located at this project's facility.
               </CardDescription>
             </CardHeader>
 
@@ -1079,8 +1079,8 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
             </CardContent>
           </Card>
         </div>
-      )}
-
+      )}
+
       {/* Sub-Tab 5: LEDGER */}
       {activeTab === "LEDGER" && (
         <Card>

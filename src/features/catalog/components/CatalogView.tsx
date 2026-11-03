@@ -70,8 +70,8 @@ export function CatalogView() {
   // Brand creation modal state
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [brandName, setBrandName] = useState('');
-  const [brandParentId, setBrandParentId] = useState('');
   const [brandError, setBrandError] = useState<string | null>(null);
+  const [customBrands, setCustomBrands] = useState<string[]>([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
   const canCreate = role === 'SUPER_ADMIN' || role === 'PROJECT_ADMIN';
@@ -178,19 +178,17 @@ export function CatalogView() {
     [categories],
   );
 
-  // Extract all distinct brands (from products AND from registered brand categories)
+  // Extract all distinct brands (from products and custom registered brands)
   const brands = useMemo(() => {
     const set = new Set<string>();
     products.forEach((p) => {
       if (p.brand?.trim()) set.add(p.brand.trim());
     });
-    categories.forEach((c) => {
-      if (c.parentId && c.name?.trim()) {
-        set.add(c.name.trim());
-      }
+    customBrands.forEach((b) => {
+      if (b?.trim()) set.add(b.trim());
     });
     return Array.from(set).sort();
-  }, [products, categories]);
+  }, [products, customBrands]);
 
   // Root categories
   const roots = useMemo(
@@ -339,22 +337,17 @@ export function CatalogView() {
       setCategoryError(error instanceof Error ? error.message : 'Category could not be saved.'),
   });
 
-  const createBrand = useMutation({
-    mutationFn: () =>
-      catalogService.createCategory({
-        name: brandName.trim(),
-        parentId: brandParentId || roots[0]?.id || undefined,
-      }),
-    onSuccess: async () => {
-      await invalidation.afterCatalogMutation(queryClient);
-      setBrandName('');
-      setBrandParentId('');
-      setBrandError(null);
-      setShowBrandModal(false);
-    },
-    onError: (error) =>
-      setBrandError(error instanceof Error ? error.message : 'Brand could not be saved.'),
-  });
+  const handleSaveBrand = () => {
+    const trimmed = brandName.trim();
+    if (!trimmed) {
+      setBrandError('Brand name is required.');
+      return;
+    }
+    setCustomBrands((prev) => Array.from(new Set([...prev, trimmed])));
+    setBrandName('');
+    setBrandError(null);
+    setShowBrandModal(false);
+  };
 
   const review = useMutation({
     mutationFn: async ({
@@ -614,7 +607,6 @@ export function CatalogView() {
                   className="text-xs px-2.5 py-1.5"
                   onClick={() => {
                     setBrandName('');
-                    setBrandParentId(roots[0]?.id || '');
                     setBrandError(null);
                     setShowBrandModal(true);
                   }}
@@ -1095,7 +1087,7 @@ export function CatalogView() {
                       <div>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2">
                           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                            {role === 'PROJECT_ADMIN' ? 'Subcategories' : 'Subcategories & Brands'} ({subs.length})
+                            Subcategories ({subs.length})
                           </span>
                           {canCreate && (
                             <div className="flex items-center gap-1.5">
@@ -1109,20 +1101,6 @@ export function CatalogView() {
                               >
                                 + Subcategory
                               </button>
-                              {role !== 'PROJECT_ADMIN' && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setBrandParentId(root.id);
-                                    setBrandName('');
-                                    setBrandError(null);
-                                    setShowBrandModal(true);
-                                  }}
-                                  className="inline-flex items-center px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-md text-[11px] font-semibold transition-colors min-h-[30px] cursor-pointer"
-                                >
-                                  + Add Brand
-                                </button>
-                              )}
                             </div>
                           )}
                         </div>
@@ -1194,7 +1172,6 @@ export function CatalogView() {
                     className="w-full sm:w-auto justify-center min-h-[38px] shrink-0"
                     onClick={() => {
                       setBrandName('');
-                      setBrandParentId(roots[0]?.id || '');
                       setBrandError(null);
                       setShowBrandModal(true);
                     }}
@@ -1498,7 +1475,7 @@ export function CatalogView() {
         isOpen={role !== 'PROJECT_ADMIN' && showBrandModal}
         onClose={() => setShowBrandModal(false)}
         title="Register New Brand / Manufacturer"
-        description="Add a recognized laboratory manufacturer, supplier, or proprietary brand to your catalog taxonomy."
+        description="Add a recognized laboratory manufacturer, supplier, or trade brand to your catalog."
       >
         <div className="space-y-4 pt-2">
           {brandError && (
@@ -1513,26 +1490,12 @@ export function CatalogView() {
             onChange={(e) => setBrandName(e.target.value)}
             required
             maxLength={100}
-            placeholder="e.g. Beckman Coulter, Bio-Rad, Roche, Labco BioAssay, Merck"
+            placeholder="e.g. Beckman Coulter, Bio-Rad, Roche, Labco, Merck"
             helperText="The trade brand or manufacturer name printed on product labels."
           />
 
-          <Select
-            label="Category for this Brand"
-            value={brandParentId}
-            onChange={(e) => setBrandParentId(e.target.value)}
-            required
-          >
-            <option value="">Select a main category</option>
-            {roots.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </Select>
-
           <p className="text-[11px] text-slate-500">
-            Brands are registered under a primary category in the catalog taxonomy and become immediately selectable for products and directory browsing.
+            Brands are recognized catalog-wide and become immediately selectable for products and directory browsing.
           </p>
 
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
@@ -1548,9 +1511,8 @@ export function CatalogView() {
               type="button"
               variant="primary"
               size="sm"
-              isLoading={createBrand.isPending}
-              disabled={!brandName.trim() || !brandParentId || createBrand.isPending}
-              onClick={() => createBrand.mutate()}
+              disabled={!brandName.trim()}
+              onClick={handleSaveBrand}
             >
               Save Brand
             </Button>
