@@ -61,15 +61,6 @@ export function ShipmentsList() {
   const [pageSize, setPageSize] = useState(10);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (statusFilter !== 'ALL') count++;
-    if (selectedOrigin !== 'ALL') count++;
-    if (selectedDestination !== 'ALL') count++;
-    return count;
-  }, [statusFilter, selectedOrigin, selectedDestination]);
-
-
   // Time filter states (filters query from backend)
   const [dateFilter, setDateFilter] = useState<DateQuickFilter>(() => {
     const df = searchParams.get('dateRange') as DateQuickFilter;
@@ -77,6 +68,15 @@ export function ShipmentsList() {
   });
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== 'ALL') count++;
+    if (selectedOrigin !== 'ALL') count++;
+    if (selectedDestination !== 'ALL') count++;
+    if (dateFilter !== 'ALL') count++;
+    return count;
+  }, [statusFilter, selectedOrigin, selectedDestination, dateFilter]);
 
   const { startDate, endDate } = useMemo(
     () => getDateRangeFromFilter(dateFilter, customStart, customEnd),
@@ -616,68 +616,70 @@ export function ShipmentsList() {
               </button>
             </div>
 
-            {/* Dropdown Filters: Collapsible on mobile, grid on desktop */}
-            <div className={`${showMobileFilters ? 'grid' : 'hidden'} sm:grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5`}>
-              {/* Status Select */}
-              <div>
-                <Select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="ALL">All Delivery Statuses</option>
-                  <option value="ACTIVE">Active Deliveries</option>
-                  <option value="IN_TRANSIT">In Transit Only</option>
-                  <option value="AWAITING_RECEIPT_APPROVAL">Awaiting Receipt Approval</option>
-                  <option value="COMPLETED">Completed Only</option>
-                  <option value="DISCREPANCY_HOLD">Discrepancy Hold Only</option>
-                </Select>
-              </div>
-
-              {/* Origin Warehouse (if authorized to see sources) */}
-              {canSeeSource && (
+            {/* Dropdown Filters & Date Bar: Collapsible on mobile, block on desktop */}
+            <div className={`${showMobileFilters ? 'space-y-2.5' : 'hidden'} sm:block sm:space-y-3`}>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 pt-1 sm:pt-0">
+                {/* Status Select */}
                 <div>
                   <Select
-                    value={selectedOrigin}
-                    onChange={(e) => setSelectedOrigin(e.target.value)}
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
                   >
-                    <option value="ALL">All Origin Facilities ({uniqueOrigins.length})</option>
-                    {uniqueOrigins.map((org) => (
-                      <option key={org} value={org}>
-                        {org}
+                    <option value="ALL">All Delivery Statuses</option>
+                    <option value="ACTIVE">Active Deliveries</option>
+                    <option value="IN_TRANSIT">In Transit Only</option>
+                    <option value="AWAITING_RECEIPT_APPROVAL">Awaiting Receipt Approval</option>
+                    <option value="COMPLETED">Completed Only</option>
+                    <option value="DISCREPANCY_HOLD">Discrepancy Hold Only</option>
+                  </Select>
+                </div>
+
+                {/* Origin Warehouse (if authorized to see sources) */}
+                {canSeeSource && (
+                  <div>
+                    <Select
+                      value={selectedOrigin}
+                      onChange={(e) => setSelectedOrigin(e.target.value)}
+                    >
+                      <option value="ALL">All Origin Facilities ({uniqueOrigins.length})</option>
+                      {uniqueOrigins.map((org) => (
+                        <option key={org} value={org}>
+                          {org}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+                {/* Destination Facility */}
+                <div className={!canSeeSource ? 'col-span-2 sm:col-span-1' : ''}>
+                  <Select
+                    value={selectedDestination}
+                    onChange={(e) => setSelectedDestination(e.target.value)}
+                  >
+                    <option value="ALL">All Destinations ({uniqueDestinations.length})</option>
+                    {uniqueDestinations.map((dest) => (
+                      <option key={dest} value={dest}>
+                        {dest}
                       </option>
                     ))}
                   </Select>
                 </div>
-              )}
+              </div>
 
-              {/* Destination Facility */}
-              <div className={!canSeeSource ? 'col-span-2 sm:col-span-1' : ''}>
-                <Select
-                  value={selectedDestination}
-                  onChange={(e) => setSelectedDestination(e.target.value)}
-                >
-                  <option value="ALL">All Destinations ({uniqueDestinations.length})</option>
-                  {uniqueDestinations.map((dest) => (
-                    <option key={dest} value={dest}>
-                      {dest}
-                    </option>
-                  ))}
-                </Select>
+              {/* Time Filter Bar (Inside collapsible on mobile) */}
+              <div className="pt-2 border-t border-slate-100 overflow-x-auto whitespace-nowrap scrollbar-none">
+                <DateQuickFilterBar
+                  value={dateFilter}
+                  onChange={setDateFilter}
+                  customStart={customStart}
+                  customEnd={customEnd}
+                  onCustomStartChange={setCustomStart}
+                  onCustomEndChange={setCustomEnd}
+                  onViewAll={() => setDateFilter('ALL')}
+                />
               </div>
             </div>
-          </div>
-
-          {/* Time Filter Bar (Applied from Backend Requests) */}
-          <div className="pt-2 border-t border-slate-100">
-            <DateQuickFilterBar
-              value={dateFilter}
-              onChange={setDateFilter}
-              customStart={customStart}
-              customEnd={customEnd}
-              onCustomStartChange={setCustomStart}
-              onCustomEndChange={setCustomEnd}
-              onViewAll={() => setDateFilter('ALL')}
-            />
           </div>
         </CardContent>
       </Card>

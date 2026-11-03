@@ -97,57 +97,57 @@ export function StoreAdminDashboard() {
       />
 
       {/* KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
         {/* 1. Warehouse Stock on Shelves */}
-        <Link href="/inventory" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Warehouse Stock</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <Link href="/inventory" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Warehouse Stock</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-sm font-semibold text-blue-600">Check All Items on Shelves →</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-blue-600 truncate">Check Shelves →</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">View good, reserved, and damaged units</p>
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">View good, reserved, and damaged units</p>
         </Link>
 
         {/* 2. Outbound Dispatches to Projects */}
-        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Dispatches to Projects</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Dispatches</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">{activeDispatches.length}</span>
-            <span className="text-xs text-slate-500">in transit to projects</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight font-mono">{activeDispatches.length}</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">in transit</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">
             <span className="font-medium text-blue-600">Track Dispatched Orders →</span>
           </p>
         </Link>
 
         {/* 3. My Stock Requests Awaiting Approval */}
-        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Requests Awaiting Approval</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Pending Approvals</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">{pendingRequests.length}</span>
-            <span className="text-xs text-slate-500">waiting for Super Admin</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight font-mono">{pendingRequests.length}</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">waiting</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">
             <span className="font-medium text-amber-700">View Pending Requests →</span>
           </p>
         </Link>

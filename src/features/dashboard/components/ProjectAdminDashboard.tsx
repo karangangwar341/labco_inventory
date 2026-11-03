@@ -153,67 +153,67 @@ export function ProjectAdminDashboard() {
       )}
 
       {/* KPI Metric Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Incoming Deliveries</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <Link href="/shipments?status=ACTIVE" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Incoming</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">{inboundShipments.length}</span>
-            <span className="text-xs text-slate-500">active shipments</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight font-mono">{inboundShipments.length}</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">shipments</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">
             {inboundShipments.length > 0 ? 'Awaiting receiving confirmation' : 'No in-transit shipments'}
           </p>
         </Link>
 
-        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Pending Review</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <Link href="/requests?status=PENDING_APPROVAL" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Pending Review</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">{pendingRequestsCount}</span>
-            <span className="text-xs text-slate-500">requests submitted</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight font-mono">{pendingRequestsCount}</span>
+            <span className="text-[10px] sm:text-xs text-slate-500 truncate">submitted</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Under Super Admin governance</p>
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">Under Super Admin governance</p>
         </Link>
 
-        <Link href="/catalog" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Product Catalog</span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <Link href="/catalog" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Catalog</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-sm font-semibold text-blue-600">Inspect Product Catalog →</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-blue-600 truncate">Inspect →</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Real-time usable stock ledger</p>
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">Real-time usable stock ledger</p>
         </Link>
 
-        <Link href="/staff" className="saas-card-interactive block p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-            <span>Staff &amp; Workforce</span>
-            <div className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+        <Link href="/staff" className="saas-card-interactive block p-2.5 sm:p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2">
+          <div className="flex items-center justify-between text-slate-500 text-[10px] sm:text-xs font-medium">
+            <span className="truncate">Workforce</span>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold text-xs shrink-0">
               👥
             </div>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-sm font-semibold text-blue-600">Staff Portal &amp; Logs →</span>
+          <div className="mt-1 sm:mt-3 flex items-baseline gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-blue-600 truncate">Logs →</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Manage team &amp; record daily work</p>
+          <p className="hidden sm:block mt-1 text-[11px] text-slate-400">Manage team &amp; record daily work</p>
         </Link>
       </div>
 

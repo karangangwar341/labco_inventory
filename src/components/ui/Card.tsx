@@ -38,9 +38,10 @@ export function CardHeader({
   className?: string;
   action?: React.ReactNode;
 }) {
+  const hasPadding = /\bp[xytrbl]?-/.test(className);
   return (
     <div
-      className={`px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 ${className}`}
+      className={`${hasPadding ? '' : 'px-5 py-4'} border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 ${className}`}
     >
       <div className="space-y-0.5 min-w-0 w-full sm:w-auto">{children}</div>
       {action && (
@@ -87,7 +88,8 @@ export function CardContent({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={`p-5 ${className}`}>{children}</div>;
+  const hasPadding = /\bp[xytrbl]?-/.test(className);
+  return <div className={`${hasPadding ? '' : 'p-5'} ${className}`}>{children}</div>;
 }
 
 export function CardFooter({
