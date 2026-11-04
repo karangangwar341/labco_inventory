@@ -1,0 +1,143 @@
+{
+  "timestamp": "2026-11-04T02:48:26.335Z",
+  "targetUrl": "https://labcoims.vercel.app",
+  "summary": {
+    "total": 16,
+    "passed": 16,
+    "failed": 0,
+    "consoleErrorCount": 0,
+    "networkErrorCount": 0
+  },
+  "results": [
+    {
+      "journey": "Auth & Security",
+      "step": "Unauthenticated route access redirects to /login",
+      "status": "PASSED",
+      "details": "Successfully redirected unauthenticated request from /catalog to https://labcoims.vercel.app/login?redirect=%2Fcatalog",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\01_unauthenticated_redirect_login.png",
+      "durationMs": 1994
+    },
+    {
+      "journey": "Auth & Security",
+      "step": "Super Admin login credentials submit and session established",
+      "status": "PASSED",
+      "details": "Logged in successfully as superadmin. Active page: https://labcoims.vercel.app/inventory",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\02_superadmin_dashboard_logged_in.png",
+      "durationMs": 1795
+    },
+    {
+      "journey": "Interactive Software Guide",
+      "step": "Open /help and verify guide header, search, and jump bar",
+      "status": "PASSED",
+      "details": "Guide loaded with header: \"Labco Instruments WMS Software Guide\"",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\03_help_guide_overview.png",
+      "durationMs": 1715
+    },
+    {
+      "journey": "Interactive Software Guide",
+      "step": "Filter guide by role (Warehouse Admin role tab)",
+      "status": "PASSED",
+      "details": "Warehouse Admin role filter applied cleanly",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\04_help_guide_role_filtered.png",
+      "durationMs": 866
+    },
+    {
+      "journey": "Interactive Software Guide",
+      "step": "Interactive marker callout clicking and highlight verification",
+      "status": "PASSED",
+      "details": "Clicked marker pin #1 and callout highlighted successfully (32 markers present)",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\05_help_guide_marker_interaction.png",
+      "durationMs": 1246
+    },
+    {
+      "journey": "Catalog & Inventory",
+      "step": "Catalog table renders with category taxonomy and warehouse isolation",
+      "status": "PASSED",
+      "details": "Catalog loaded successfully. Contains items: true, Units & Stock: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\06_catalog_view.png",
+      "durationMs": 1299
+    },
+    {
+      "journey": "Administration",
+      "step": "Projects Directory opens and launches Transfer Catalog modal",
+      "status": "PASSED",
+      "details": "Transfer Catalog modal opened with category checkboxes",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\07_transfer_catalog_modal_open.png",
+      "durationMs": 2041
+    },
+    {
+      "journey": "Administration",
+      "step": "Test \"Select All Categories\" and toggle persistence in Transfer Catalog modal",
+      "status": "PASSED",
+      "details": "Category selection works reliably without reset. Selection test passed!",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\08_transfer_catalog_selection_verified.png",
+      "durationMs": 1988
+    },
+    {
+      "journey": "Stock Movements",
+      "step": "Stock requests list page loads with filter tabs",
+      "status": "PASSED",
+      "details": "Stock requests view verified: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\09_stock_requests_list.png",
+      "durationMs": 1395
+    },
+    {
+      "journey": "Stock Movements",
+      "step": "New Stock In request form renders with location & unit calculators",
+      "status": "PASSED",
+      "details": "New Stock In form rendered successfully: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\10_new_stock_in_form.png",
+      "durationMs": 1282
+    },
+    {
+      "journey": "Shipments & Transit",
+      "step": "Shipments dispatch and transit tracking interface renders",
+      "status": "PASSED",
+      "details": "Shipments view loaded successfully. Active content: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\11_shipments_tracking.png",
+      "durationMs": 1582
+    },
+    {
+      "journey": "Manufacturing & BOM",
+      "step": "Manufacturing dashboard and production runs load",
+      "status": "PASSED",
+      "details": "Manufacturing view verified: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\12_manufacturing_runs.png",
+      "durationMs": 1313
+    },
+    {
+      "journey": "Departments",
+      "step": "Department issues and returns tabs render",
+      "status": "PASSED",
+      "details": "Department issues view verified: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\13_departments_view.png",
+      "durationMs": 1140
+    },
+    {
+      "journey": "Inventory Ledger",
+      "step": "Inventory balances table and location breakdown render",
+      "status": "PASSED",
+      "details": "Inventory balances view verified: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\14_inventory_ledger.png",
+      "durationMs": 1603
+    },
+    {
+      "journey": "Reports & Audit",
+      "step": "Reports dashboard loads with audit and balance exports",
+      "status": "PASSED",
+      "details": "Reports dashboard verified: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\15_reports_dashboard.png",
+      "durationMs": 1414
+    },
+    {
+      "journey": "Mobile UX",
+      "step": "Mobile responsive layout verification on iPhone X viewport (375x812)",
+      "status": "PASSED",
+      "details": "Mobile responsive verification passed. Elements render properly on 375px width: true",
+      "screenshot": "C:\\Users\\YOGA\\Documents\\Cdoes\\LabcoInstruments\\Warehouse_AI_Agent_Handover_Package\\reports\\uat-screenshots\\16_mobile_responsive_view.png",
+      "durationMs": 4800
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": []
+}
