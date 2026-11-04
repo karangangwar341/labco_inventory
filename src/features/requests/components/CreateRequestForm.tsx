@@ -814,7 +814,7 @@ export function CreateRequestForm() {
                     <table className="w-full min-w-[1020px] text-left text-xs border-collapse">
                       <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold uppercase tracking-wider text-[10px]">
                         <tr>
-                          <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">#</th>
+                          <th className="py-2.5 px-3 w-10 text-center whitespace-nowrap">S.No</th>
                           <th className="py-2.5 px-3 w-48 min-w-[170px] whitespace-nowrap">Category</th>
                           <th className="py-2.5 px-3 min-w-[240px] whitespace-nowrap">Product &amp; Brand</th>
                           <th className="py-2.5 px-3 w-32 text-center whitespace-nowrap">Stock Available</th>

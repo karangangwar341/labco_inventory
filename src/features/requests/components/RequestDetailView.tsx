@@ -376,7 +376,7 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
         <Table>
           <TableHeader>
             <tr>
-              <TableHead className="w-10 text-center text-[11px]">#</TableHead>
+              <TableHead className="w-10 text-center text-[11px]">S.No</TableHead>
               <TableHead className="text-[11px]">Item &amp; Details</TableHead>
               <TableHead className="text-[11px]">Condition</TableHead>
               <TableHead align="right" className="text-[11px]">Quantity</TableHead>

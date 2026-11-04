@@ -320,7 +320,7 @@ export function ShipmentsList() {
   const columns = useMemo<ColumnDef<Shipment>[]>(() => [
     {
       id: 'tracking',
-      header: 'Tracking #',
+      header: 'Tracking Number',
       width: '18%',
       minWidth: '150px',
       cell: (s) => (
@@ -580,7 +580,7 @@ export function ShipmentsList() {
               <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="Search tracking #, product..."
+                  placeholder="Search tracking number, product..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"

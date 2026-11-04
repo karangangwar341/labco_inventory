@@ -91,7 +91,7 @@ function formatCellValue(
         }`}
         title={lineItems.length > 0 ? 'Click to view indent slip items' : undefined}
       >
-        <span>#{cleanNum}</span>
+        <span>{cleanNum}</span>
       </button>
     );
   }
@@ -749,8 +749,8 @@ export function ReportsView() {
               {selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A' ? (
                 <>
                   <div>
-                    <span className="text-slate-500">Indent Slip #: </span>
-                    <span className="font-mono font-bold text-slate-800">#{String(selectedShipment.indentNumber).replace(/^IND-/, '')}</span>
+                    <span className="text-slate-500">Indent Slip Number: </span>
+                    <span className="font-mono font-bold text-slate-800">{String(selectedShipment.indentNumber).replace(/^IND-/, '')}</span>
                   </div>
                   <div>
                     <span className="text-slate-500">Department: </span>
@@ -799,7 +799,7 @@ export function ReportsView() {
               <table className="w-full min-w-[600px] text-left text-xs">
                 <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3">S.No</th>
                     <th className="py-2.5 px-3">Product Name</th>
                     <th className="py-2.5 px-3">Brand</th>
                     {selectedShipment.indentNumber ? (

@@ -540,7 +540,7 @@ export function DeliveryChallanModal({ isOpen, onClose, request }: DeliveryChall
             <table className="print-document-table" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #0f172a', marginBottom: '12px', fontSize: '11px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '1px solid #0f172a', textTransform: 'uppercase', fontSize: '10px', fontWeight: 700, color: '#0f172a', letterSpacing: '0.03em' }}>
-                  <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '36px', textAlign: 'center' }}>#</th>
+                  <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '36px', textAlign: 'center' }}>S.No</th>
                   <th style={{ padding: '7px 10px', borderRight: '1px solid #0f172a', textAlign: 'left' }}>Description of Goods / Reagents</th>
                   <th style={{ padding: '7px 8px', borderRight: '1px solid #0f172a', width: '85px', textAlign: 'center' }}>Condition</th>
                   <th style={{ padding: '7px 10px', width: '100px', textAlign: 'right' }}>Dispatched Qty</th>

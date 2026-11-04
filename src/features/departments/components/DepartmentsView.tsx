@@ -1051,7 +1051,7 @@ export function DepartmentsView() {
                             ) : (
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                                  Indent #{group.indentNumber}
+                                  Indent {group.indentNumber}
                                 </span>
                                 <span className="font-bold text-slate-900 text-sm">
                                   {group.departmentName}
@@ -1126,7 +1126,7 @@ export function DepartmentsView() {
                               <Table className="min-w-[700px] border-0 shadow-none text-xs">
                                 <TableHeader>
                                   <tr>
-                                    <TableHead className="w-10 text-center">#</TableHead>
+                                    <TableHead className="w-10 text-center">S.No</TableHead>
                                     <TableHead>Manufactured Product</TableHead>
                                     <TableHead>Available Stock</TableHead>
                                     <TableHead align="right">Requested</TableHead>
@@ -1141,7 +1141,7 @@ export function DepartmentsView() {
                                   {group.items.length === 0 && (
                                     <TableRow>
                                       <TableCell colSpan={9} className="py-4 text-center text-slate-400 italic">
-                                        No items added to Indent #{group.indentNumber} yet. Use the entry row below to add items from the department slip.
+                                        No items added to Indent {group.indentNumber} yet. Use the entry row below to add items from the department slip.
                                       </TableCell>
                                     </TableRow>
                                   )}
@@ -1509,7 +1509,7 @@ export function DepartmentsView() {
                             >
                               <div className="flex items-center gap-2.5">
                                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                                  Indent #{indent.indentNumber}
+                                  Indent {indent.indentNumber}
                                 </span>
                                 <span className="font-bold text-slate-900 text-sm">
                                   {indent.departmentName}
@@ -1566,7 +1566,7 @@ export function DepartmentsView() {
                                   <Table className="min-w-[620px] text-xs">
                                     <TableHeader>
                                       <tr>
-                                        <TableHead className="w-10 text-center">#</TableHead>
+                                        <TableHead className="w-10 text-center">S.No</TableHead>
                                         <TableHead>Product Name</TableHead>
                                         <TableHead align="right">Requested Qty</TableHead>
                                         <TableHead align="right">Supplied Qty</TableHead>

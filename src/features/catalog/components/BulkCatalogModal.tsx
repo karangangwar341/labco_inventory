@@ -646,7 +646,7 @@ export function BulkCatalogModal({ isOpen, onClose, initialProjectId }: BulkCata
                   <table className="w-full min-w-[700px] text-left text-xs">
                     <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 sticky top-0 font-medium">
                       <tr>
-                        <th className="py-1.5 px-3">#</th>
+                        <th className="py-1.5 px-3">S.No</th>
                         <th className="py-1.5 px-3">Product Name</th>
                         <th className="py-1.5 px-3">Category</th>
                         <th className="py-1.5 px-3">Subcategory</th>

@@ -820,7 +820,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
                         <div className="p-3.5 bg-slate-50/90 border-b border-slate-200/70 flex flex-wrap items-center justify-between gap-2.5">
                           <div className="flex items-center gap-2.5">
                             <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                              Indent #{group.indentNumber}
+                              Indent {group.indentNumber}
                             </span>
                             <div>
                               <div className="flex items-center gap-2">
@@ -993,7 +993,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
                         <TableHeader>
                           <tr>
                             <TableHead>Activity</TableHead>
-                            <TableHead>Indent #</TableHead>
+                            <TableHead>Indent Number</TableHead>
                             <TableHead>Department</TableHead>
                             <TableHead>Product</TableHead>
                             <TableHead align="right">Req. / Supplied</TableHead>

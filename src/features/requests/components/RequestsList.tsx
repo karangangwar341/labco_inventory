@@ -302,7 +302,7 @@ export function RequestsList() {
         minWidth: '200px',
         valign: 'top',
         cell: (request) => {
-          const refNumber = request.requestNumber || '—';
+          const refNumber = request.requestNumber || (request.id ? `REQ-${request.id.slice(0, 8).toUpperCase()}` : '—');
           const projectName =
             request.project?.name ||
             request.destinationLocation?.project?.name ||
@@ -325,7 +325,7 @@ export function RequestsList() {
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-mono text-xs font-bold text-slate-900 tracking-tight">
-                  #{refNumber}
+                  {refNumber}
                 </span>
                 {isUrgent && (
                   <Badge variant="danger" size="sm" withDot>
