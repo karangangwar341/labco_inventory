@@ -51,4 +51,14 @@ export class QueryReportDto {
   @IsOptional()
   @IsString()
   endDate?: string;
+
+  @ApiPropertyOptional({ enum: ['department', 'indent'], description: 'Grouping view mode for consumption reports' })
+  @IsOptional()
+  @IsString()
+  groupBy?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by Department Name or UUID' })
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
 }

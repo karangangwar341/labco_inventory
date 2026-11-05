@@ -102,6 +102,7 @@ export const endpoints = {
     reviewProductVersion: (id: string, versionId: string) =>
       `/products/${id}/versions/${versionId}/review`,
     categories: () => "/categories",
+    category: (id: string) => `/categories/${id}`,
     categoriesBulk: () => "/categories/bulk",
     units: () => "/units",
     unitByName: (name: string) => `/units/${encodeURIComponent(name)}`,

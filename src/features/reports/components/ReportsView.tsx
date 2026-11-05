@@ -15,6 +15,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { useAuth } from '../../auth/auth.store';
 import { catalogService } from '../../catalog/catalog.service';
 import { administrationService } from '../../administration/administration.service';
+import { departmentsService } from '../../departments/departments.service';
 import { reportsService } from '../reports.service';
 import { ReportType, QueryReportDto } from '../reports.types';
 import { queryKeys } from '../../../lib/query/query-keys';
@@ -32,14 +33,14 @@ const LABELS: Record<string, string> = {
   productName: 'Product', locationName: 'Location', locationType: 'Location type',
   usableQuantity: 'Usable', reservedQuantity: 'Reserved', availableQuantity: 'Available',
   minThreshold: 'Min threshold',
-  lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source', indentNumber: 'Indent slip #',
+  lowStockAlert: 'Low stock', timestamp: 'Timestamp', transactionType: 'Movement type', sourceRefType: 'Source', indentNumber: 'Indent Slip Number',
   condition: 'Condition', originalQuantity: 'Quantity', unitName: 'Unit', baseDelta: 'Stock delta',
   direction: 'Direction', postedBy: 'Recorded by', department: 'Department', product: 'Product', quantity: 'Quantity', unit: 'Unit',
   baseQuantity: 'Base quantity', date: 'Date', type: 'Activity', productionReference: 'Reference',
   projectName: 'Project', mode: 'Mode', status: 'Status', plannedOutput: 'Planned output', actualOutput: 'Actual output',
   wastage: 'Wastage', totalInputsCount: 'Inputs', totalOutputsCount: 'Outputs', createdAt: 'Created',
   shipmentType: 'Shipment type', sourceLocation: 'Source location',
-  destinationLocation: 'Destination location', trackingNumber: 'Tracking #', productsSummary: 'Included Products', issuedBy: 'Issued by', dispatchedQuantity: 'Dispatched qty',
+  destinationLocation: 'Destination location', trackingNumber: 'Tracking Number', productsSummary: 'Included Products', issuedBy: 'Issued by', dispatchedQuantity: 'Dispatched qty',
   dispatchedAt: 'Dispatched at', shippedAt: 'Shipped at', receivedAt: 'Received at', totalItemsCount: 'Items',
   missingQuantity: 'Missing quantity', shipmentCount: 'Shipments',
 };
@@ -55,6 +56,28 @@ const NUMERIC_COLUMNS = new Set([
 const MONO_COLUMNS = new Set([
   'productionReference', 'timestamp', 'date', 'createdAt',
 ]);
+
+interface DepartmentProductUsage {
+  productName: string;
+  brand: string;
+  unit: string;
+  issuedQuantity: number;
+  returnedQuantity: number;
+  netQuantity: number;
+  indents: string[];
+}
+
+interface DepartmentSummaryItem {
+  department: string;
+  totalIndents: number;
+  indentNumbers: string[];
+  totalUniqueProducts: number;
+  totalIssuedQuantity: number;
+  totalReturnedQuantity: number;
+  netQuantity: number;
+  products: DepartmentProductUsage[];
+  lastActivityDate: string;
+}
 
 function formatCellValue(
   column: string,
@@ -154,9 +177,6 @@ function formatCellValue(
     }
   }
 
-
-
-
   // Workflow status
   if (column === 'status') {
     const s = String(value).toUpperCase();
@@ -213,6 +233,9 @@ export function ReportsView() {
   const [productId, setProductId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [departmentViewMode, setDepartmentViewMode] = useState<'SUMMARY' | 'INDENT'>('SUMMARY');
+  const [expandedDepartments, setExpandedDepartments] = useState<Record<string, boolean>>({});
   const [exportError, setExportError] = useState<string | null>(null);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
@@ -226,9 +249,10 @@ export function ReportsView() {
     ...(startDate ? { startDate } : {}),
     ...(endDate ? { endDate } : {}),
     ...(productId ? { productId } : {}),
+    ...(departmentFilter ? { departmentId: departmentFilter } : {}),
     ...(isSuperAdmin && warehouseId ? { warehouseId } : {}),
     ...(isSuperAdmin && projectId ? { projectId } : {}),
-  }), [startDate, endDate, productId, isSuperAdmin, warehouseId, projectId]);
+  }), [startDate, endDate, productId, departmentFilter, isSuperAdmin, warehouseId, projectId]);
 
   const reportQuery = useQuery({
     queryKey: queryKeys.reports.view(reportType, { ...params }),
@@ -265,14 +289,25 @@ export function ReportsView() {
     staleTime: 10 * 60_000,
   });
 
+  const departmentsQuery = useQuery({
+    queryKey: queryKeys.departments.list(projectId),
+    queryFn: () => departmentsService.getDepartments(projectId || undefined),
+    enabled: Boolean(user && reportType === 'PROJECT_CONSUMPTION'),
+    staleTime: 5 * 60_000,
+  });
+
   const csvMutation = useMutation({
-    mutationFn: () => reportsService.generateCsv(reportType, params),
+    mutationFn: () => reportsService.generateCsv(reportType, {
+      ...params,
+      ...(reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? { groupBy: 'department' } : {}),
+    }),
     onSuccess: (csv) => {
       setExportError(null);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `${reportType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
+      const suffix = reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? 'department_summary' : reportType.toLowerCase();
+      link.download = `${suffix}_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -297,6 +332,27 @@ export function ReportsView() {
   });
 
   const rawRows = reportQuery.data?.data ?? [];
+
+  // Available departments for the department filter
+  const availableDepartments = useMemo(() => {
+    const set = new Set<string>();
+    (departmentsQuery.data ?? []).forEach((d) => {
+      if (d.name) set.add(d.name);
+    });
+    rawRows.forEach((r: any) => {
+      if (r.department) set.add(String(r.department));
+    });
+    return Array.from(set).sort();
+  }, [departmentsQuery.data, rawRows]);
+
+  // Client-side department filter for instant responsiveness
+  const displayRawRows = useMemo(() => {
+    if (reportType === 'PROJECT_CONSUMPTION' && departmentFilter) {
+      return rawRows.filter((r) => String(r.department || '').toLowerCase() === departmentFilter.toLowerCase());
+    }
+    return rawRows;
+  }, [rawRows, reportType, departmentFilter]);
+
   const isIdField = (key: string) => {
     const k = key.toLowerCase();
     return (
@@ -311,7 +367,7 @@ export function ReportsView() {
   const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
 
   const rows = useMemo(() => {
-    return rawRows.map((row) => {
+    return displayRawRows.map((row) => {
       const cleaned: Record<string, any> = {};
       for (const [key, val] of Object.entries(row)) {
         if (!isIdField(key) && key !== 'items') {
@@ -323,16 +379,156 @@ export function ReportsView() {
       }
       return cleaned;
     });
-  }, [rawRows]);
+  }, [displayRawRows]);
+
+  // Grouped Department Usage Summary calculation
+  const departmentSummaries = useMemo<DepartmentSummaryItem[]>(() => {
+    if (reportType !== 'PROJECT_CONSUMPTION') return [];
+
+    const deptMap = new Map<
+      string,
+      {
+        department: string;
+        indentsSet: Set<string>;
+        productsMap: Map<string, DepartmentProductUsage>;
+        totalIssuedQuantity: number;
+        totalReturnedQuantity: number;
+        lastActivityDate: string;
+      }
+    >();
+
+    for (const itemRow of displayRawRows) {
+      const row = itemRow as Record<string, any>;
+      const deptName = row.department || 'General';
+      if (!deptMap.has(deptName)) {
+        deptMap.set(deptName, {
+          department: deptName,
+          indentsSet: new Set<string>(),
+          productsMap: new Map<string, DepartmentProductUsage>(),
+          totalIssuedQuantity: 0,
+          totalReturnedQuantity: 0,
+          lastActivityDate: '',
+        });
+      }
+
+      const deptEntry = deptMap.get(deptName)!;
+      const indentNum = row.indentNumber ? String(row.indentNumber).replace(/^IND-/, '') : '';
+      if (indentNum && indentNum !== 'N/A' && indentNum !== 'null') {
+        deptEntry.indentsSet.add(indentNum);
+      }
+
+      if (row.date && (!deptEntry.lastActivityDate || row.date > deptEntry.lastActivityDate)) {
+        deptEntry.lastActivityDate = row.date;
+      }
+
+      const isReturn = row.type === 'DEPARTMENT_RETURN';
+      const items: any[] = Array.isArray(row.items) && row.items.length > 0
+        ? row.items
+        : [{
+            productName: row.product || row.productsSummary || 'Item',
+            brand: row.brand || 'N/A',
+            quantity: row.quantity || 0,
+            unit: row.unit || 'units',
+          }];
+
+      for (const it of items) {
+        const pName = it.productName || it.name || 'Unknown Product';
+        const pBrand = it.brand || 'N/A';
+        const pUnit = it.unit || 'units';
+        const qty = Number(it.quantity) || 0;
+        const key = `${pName}___${pUnit}`;
+
+        if (!deptEntry.productsMap.has(key)) {
+          deptEntry.productsMap.set(key, {
+            productName: pName,
+            brand: pBrand,
+            unit: pUnit,
+            issuedQuantity: 0,
+            returnedQuantity: 0,
+            netQuantity: 0,
+            indents: [],
+          });
+        }
+
+        const prodEntry = deptEntry.productsMap.get(key)!;
+        if (isReturn) {
+          prodEntry.returnedQuantity += qty;
+          deptEntry.totalReturnedQuantity += qty;
+        } else {
+          prodEntry.issuedQuantity += qty;
+          deptEntry.totalIssuedQuantity += qty;
+        }
+        prodEntry.netQuantity = prodEntry.issuedQuantity - prodEntry.returnedQuantity;
+        if (indentNum && !prodEntry.indents.includes(indentNum)) {
+          prodEntry.indents.push(indentNum);
+        }
+      }
+    }
+
+    return Array.from(deptMap.values())
+      .map((dept) => {
+        const products = Array.from(dept.productsMap.values()).sort(
+          (a, b) => b.netQuantity - a.netQuantity,
+        );
+        return {
+          department: dept.department,
+          totalIndents: dept.indentsSet.size,
+          indentNumbers: Array.from(dept.indentsSet),
+          totalUniqueProducts: products.length,
+          totalIssuedQuantity: dept.totalIssuedQuantity,
+          totalReturnedQuantity: dept.totalReturnedQuantity,
+          netQuantity: dept.totalIssuedQuantity - dept.totalReturnedQuantity,
+          products,
+          lastActivityDate: dept.lastActivityDate,
+        };
+      })
+      .sort((a, b) => b.netQuantity - a.netQuantity);
+  }, [displayRawRows, reportType]);
+
+  // Aggregate metrics for Department Usage KPI ribbon
+  const departmentMetrics = useMemo(() => {
+    if (reportType !== 'PROJECT_CONSUMPTION') return null;
+    const totalDepartments = departmentSummaries.length;
+    const totalIndents = departmentSummaries.reduce((sum, d) => sum + d.totalIndents, 0);
+    const totalConsumed = departmentSummaries.reduce((sum, d) => sum + d.netQuantity, 0);
+    const uniqueProductsSet = new Set<string>();
+    for (const d of departmentSummaries) {
+      for (const p of d.products) {
+        uniqueProductsSet.add(p.productName);
+      }
+    }
+    return {
+      totalDepartments,
+      totalIndents,
+      totalConsumed,
+      totalUniqueProducts: uniqueProductsSet.size,
+    };
+  }, [departmentSummaries, reportType]);
+
+  const toggleDepartmentExpand = (deptName: string) => {
+    setExpandedDepartments((prev) => ({
+      ...prev,
+      [deptName]: !prev[deptName],
+    }));
+  };
+
+  const openIndentModalByNumber = (indentNum: string) => {
+    const cleanNum = indentNum.replace(/^IND-/, '');
+    const matched = rawRows.find((r) => String(r.indentNumber || '').replace(/^IND-/, '') === cleanNum);
+    if (matched) {
+      setSelectedShipment(matched);
+    }
+  };
 
   const columns = rows.length ? Object.keys(rows[0]).filter((col) => !col.startsWith('_')) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
-  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId);
+  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId || departmentFilter);
   const resetFilters = () => {
     setStartDate('');
     setEndDate('');
     setProductId('');
+    setDepartmentFilter('');
     setWarehouseId('');
     setProjectId('');
   };
@@ -396,7 +592,7 @@ export function ReportsView() {
               <svg className="w-4 h-4 mr-1.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              {csvMutation.isPending ? 'Preparing CSV...' : 'Export CSV'}
+              {csvMutation.isPending ? 'Preparing CSV...' : (reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? 'Export Dept Summary CSV' : 'Export CSV')}
             </Button>
             <Button
               variant="secondary"
@@ -433,7 +629,10 @@ export function ReportsView() {
                     type="button"
                     role="tab"
                     aria-selected={isSelected}
-                    onClick={() => setReportType(option.type)}
+                    onClick={() => {
+                      setReportType(option.type);
+                      setDepartmentFilter('');
+                    }}
                     className={`px-3.5 py-2 text-xs font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isSelected
                         ? 'bg-white text-blue-700 shadow-2xs font-semibold'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
@@ -444,7 +643,6 @@ export function ReportsView() {
                 );
               })}
             </div>
-
           </div>
 
           {/* Form Filter Row */}
@@ -522,6 +720,21 @@ export function ReportsView() {
                 ))}
               </Select>
 
+              {reportType === 'PROJECT_CONSUMPTION' && (
+                <Select
+                  label="Department Scope"
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                >
+                  <option value="">All departments (combined)</option>
+                  {availableDepartments.map((deptName) => (
+                    <option key={deptName} value={deptName}>
+                      {deptName}
+                    </option>
+                  ))}
+                </Select>
+              )}
+
               {isSuperAdmin && (
                 <>
                   <Select
@@ -588,9 +801,45 @@ export function ReportsView() {
           <CardHeader
             className="print:hidden"
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {reportType === 'PROJECT_CONSUMPTION' && (
+                  <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setDepartmentViewMode('SUMMARY')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                        departmentViewMode === 'SUMMARY'
+                          ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      Department Summary
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDepartmentViewMode('INDENT')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                        departmentViewMode === 'INDENT'
+                          ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Indent Slips
+                    </button>
+                  </div>
+                )}
                 <span className="text-xs text-slate-500">
-                  Showing <strong className="text-slate-800 font-mono">{reportQuery.data?.rowCount ?? rows.length}</strong> records
+                  {reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? (
+                    <>Showing <strong className="text-slate-800 font-mono">{departmentSummaries.length}</strong> departments</>
+                  ) : (
+                    <>Showing <strong className="text-slate-800 font-mono">{displayRawRows.length}</strong> records</>
+                  )}
                 </span>
                 <span className="h-4 w-px bg-slate-200" />
               </div>
@@ -600,12 +849,40 @@ export function ReportsView() {
             <CardDescription>{activeReportMeta?.description}</CardDescription>
           </CardHeader>
 
-          {/* Print-only formal document header (replaces UI CardHeader on printed pages) */}
+          {/* Department Usage KPI Summary Banner */}
+          {reportType === 'PROJECT_CONSUMPTION' && departmentMetrics && (
+            <div className="mx-6 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-100 rounded-xl print:hidden">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Active Departments</span>
+                <span className="text-lg font-bold text-slate-900 font-mono">{departmentMetrics.totalDepartments}</span>
+                <span className="text-[10px] text-slate-500">dispensed stock</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Indent Slips</span>
+                <span className="text-lg font-bold text-blue-700 font-mono">{departmentMetrics.totalIndents}</span>
+                <span className="text-[10px] text-slate-500">authorized requests</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Unique Products</span>
+                <span className="text-lg font-bold text-slate-800 font-mono">{departmentMetrics.totalUniqueProducts}</span>
+                <span className="text-[10px] text-slate-500">catalog items</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Units Consumed</span>
+                <span className="text-lg font-bold text-emerald-700 font-mono">{departmentMetrics.totalConsumed.toLocaleString()}</span>
+                <span className="text-[10px] text-slate-500">net items dispensed</span>
+              </div>
+            </div>
+          )}
+
+          {/* Print-only formal document header */}
           <div className="hidden print:block pb-3 mb-3 border-b border-slate-300">
             <div className="flex justify-between items-start">
               <div>
                 <h1 className="text-base font-bold text-slate-900 tracking-tight">Labco Instruments - Warehouse Management System</h1>
-                <p className="text-xs text-slate-700 mt-0.5 font-semibold">{activeReportMeta?.label} - {activeReportMeta?.description}</p>
+                <p className="text-xs text-slate-700 mt-0.5 font-semibold">
+                  {activeReportMeta?.label} - {reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? 'Aggregated Department Consumption' : activeReportMeta?.description}
+                </p>
                 {reportType === 'INVENTORY_LEDGER' && (
                   <p className="text-[11px] text-slate-600 mt-1">
                     <strong>Column Guide:</strong> Stock Delta indicates net change in base units (Positive/+ = stock added into facility, Negative/- = stock deducted from facility).
@@ -614,7 +891,7 @@ export function ReportsView() {
               </div>
               <div className="text-right text-[11px] text-slate-500 font-mono space-y-0.5">
                 <div>Printed: {new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                <div>Records: {reportQuery.data?.rowCount ?? rows.length}</div>
+                <div>Records: {reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? departmentSummaries.length : displayRawRows.length}</div>
               </div>
             </div>
           </div>
@@ -636,47 +913,237 @@ export function ReportsView() {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <Table className="border-0 rounded-none shadow-none">
-              <TableHeader sticky>
-                <tr>
-                  {columns.map((column) => {
-                    const isNum = NUMERIC_COLUMNS.has(column);
+          {/* DEPARTMENT USAGE: DEPARTMENT SUMMARY VIEW */}
+          {reportType === 'PROJECT_CONSUMPTION' && departmentViewMode === 'SUMMARY' ? (
+            <div className="overflow-x-auto">
+              <Table className="border-0 rounded-none shadow-none">
+                <TableHeader sticky>
+                  <tr>
+                    <TableHead className="w-12">S.No</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Indent Slips</TableHead>
+                    <TableHead>Included Products Breakdown</TableHead>
+                    <TableHead align="right">Items</TableHead>
+                    <TableHead align="right">Total Quantity</TableHead>
+                    <TableHead>Last Activity</TableHead>
+                    <TableHead align="center" className="print:hidden">Product Breakdown</TableHead>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {departmentSummaries.map((dept, deptIdx) => {
+                    const isExpanded = Boolean(expandedDepartments[dept.department]);
                     return (
-                      <TableHead
-                        key={column}
-                        align={isNum ? 'right' : 'left'}
-                        className="whitespace-nowrap"
-                      >
-                        {LABELS[column] ?? column.replace(/([A-Z])/g, ' $1').replace(/^./, (l) => l.toUpperCase())}
-                      </TableHead>
+                      <>
+                        <TableRow
+                          key={dept.department}
+                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50/40 font-medium' : 'hover:bg-slate-50/70'}`}
+                          onClick={() => toggleDepartmentExpand(dept.department)}
+                        >
+                          <TableCell mono className="text-slate-400 text-xs">
+                            {deptIdx + 1}
+                          </TableCell>
+                          <TableCell className="font-semibold text-slate-900">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+                                {dept.department.charAt(0).toUpperCase()}
+                              </span>
+                              <span className="font-bold text-slate-800">{dept.department}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {dept.indentNumbers.length === 0 ? (
+                                <span className="text-xs text-slate-400 font-mono">-</span>
+                              ) : (
+                                dept.indentNumbers.map((indentNum) => (
+                                  <button
+                                    key={indentNum}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openIndentModalByNumber(indentNum);
+                                    }}
+                                    className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                                    title="Click to view indent slip items"
+                                  >
+                                    {indentNum}
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-md">
+                            <div className="flex flex-wrap gap-1.5 py-1">
+                              {dept.products.map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]"
+                                  title={`${p.productName} (${p.brand !== 'N/A' ? p.brand : ''}) - ${p.netQuantity} ${p.unit}`}
+                                >
+                                  <span className="font-medium truncate max-w-[150px]">{p.productName}:</span>
+                                  <span className="font-mono font-bold text-blue-700">{p.netQuantity} {p.unit}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell align="right" numeric className="font-mono text-xs text-slate-600">
+                            {dept.totalUniqueProducts}
+                          </TableCell>
+                          <TableCell align="right" numeric className="font-mono font-bold text-slate-900 text-sm">
+                            {dept.netQuantity.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                            {dept.lastActivityDate ? new Date(dept.lastActivityDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                          </TableCell>
+                          <TableCell align="center" className="print:hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDepartmentExpand(dept.department);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md bg-white border border-slate-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300 transition-colors shadow-2xs"
+                            >
+                              <span>{isExpanded ? 'Hide Details' : 'View Products'}</span>
+                              <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          </TableCell>
+                        </TableRow>
+
+                        {/* Inline Itemized Product Breakdown for this Department */}
+                        {isExpanded && (
+                          <TableRow key={`${dept.department}-breakdown`} className="bg-slate-50/70 border-y border-blue-100">
+                            <TableCell colSpan={8} className="p-0">
+                              <div className="p-4 space-y-3 bg-gradient-to-b from-blue-50/30 to-slate-50/60">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                                      {dept.department} — Detailed Product Consumption
+                                    </span>
+                                    <Badge variant="neutral" size="sm">
+                                      {dept.products.length} {dept.products.length === 1 ? 'Product' : 'Products'}
+                                    </Badge>
+                                  </div>
+                                  <span className="text-[11px] text-slate-500">
+                                    Total Indents: <strong className="text-slate-800">{dept.totalIndents}</strong> | Net Units Consumed: <strong className="text-emerald-700 font-mono">{dept.netQuantity.toLocaleString()}</strong>
+                                  </span>
+                                </div>
+
+                                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-2xs">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200 text-[11px] uppercase tracking-wider">
+                                      <tr>
+                                        <th className="py-2 px-3">S.No</th>
+                                        <th className="py-2 px-3">Product Name</th>
+                                        <th className="py-2 px-3">Brand</th>
+                                        <th className="py-2 px-3 text-right">Issued Qty</th>
+                                        <th className="py-2 px-3 text-right">Returned Qty</th>
+                                        <th className="py-2 px-3 text-right">Net Consumed</th>
+                                        <th className="py-2 px-3">Unit</th>
+                                        <th className="py-2 px-3">Indent Slips</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {dept.products.map((prod, prodIdx) => (
+                                        <tr key={prodIdx} className="hover:bg-blue-50/30 transition-colors">
+                                          <td className="py-2 px-3 font-mono text-slate-400">{prodIdx + 1}</td>
+                                          <td className="py-2 px-3 font-semibold text-slate-900">{prod.productName}</td>
+                                          <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{prod.brand}</td>
+                                          <td className="py-2 px-3 text-right font-mono text-slate-700">{prod.issuedQuantity.toLocaleString()}</td>
+                                          <td className="py-2 px-3 text-right font-mono text-slate-500">
+                                            {prod.returnedQuantity > 0 ? (
+                                              <span className="text-rose-600 font-semibold">-{prod.returnedQuantity.toLocaleString()}</span>
+                                            ) : (
+                                              '0'
+                                            )}
+                                          </td>
+                                          <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                                            {prod.netQuantity.toLocaleString()}
+                                          </td>
+                                          <td className="py-2 px-3 text-slate-600 font-medium">{prod.unit}</td>
+                                          <td className="py-2 px-3">
+                                            <div className="flex flex-wrap items-center gap-1">
+                                              {prod.indents.length === 0 ? (
+                                                <span className="text-slate-400 font-mono">-</span>
+                                              ) : (
+                                                prod.indents.map((indentNum) => (
+                                                  <button
+                                                    key={indentNum}
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      openIndentModalByNumber(indentNum);
+                                                    }}
+                                                    className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                                                    title="Click to view indent slip items"
+                                                  >
+                                                    {indentNum}
+                                                  </button>
+                                                ))
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </>
                     );
                   })}
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, rowIndex) => (
-                  <TableRow key={`${reportType}-${rowIndex}`}>
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            /* STANDARD TABLE VIEW (Used for Indent Slips and all other report datasets) */
+            <div className="overflow-x-auto">
+              <Table className="border-0 rounded-none shadow-none">
+                <TableHeader sticky>
+                  <tr>
                     {columns.map((column) => {
                       const isNum = NUMERIC_COLUMNS.has(column);
-                      const isMono = MONO_COLUMNS.has(column);
                       return (
-                        <TableCell
+                        <TableHead
                           key={column}
                           align={isNum ? 'right' : 'left'}
-                          mono={isMono}
-                          numeric={isNum}
                           className="whitespace-nowrap"
                         >
-                          {formatCellValue(column, row[column], row, (shipment) => setSelectedShipment(shipment))}
-                        </TableCell>
+                          {LABELS[column] ?? column.replace(/([A-Z])/g, ' $1').replace(/^./, (l) => l.toUpperCase())}
+                        </TableHead>
                       );
                     })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row, rowIndex) => (
+                    <TableRow key={`${reportType}-${rowIndex}`}>
+                      {columns.map((column) => {
+                        const isNum = NUMERIC_COLUMNS.has(column);
+                        const isMono = MONO_COLUMNS.has(column);
+                        return (
+                          <TableCell
+                            key={column}
+                            align={isNum ? 'right' : 'left'}
+                            mono={isMono}
+                            numeric={isNum}
+                            className="whitespace-nowrap"
+                          >
+                            {formatCellValue(column, row[column], row, (shipment) => setSelectedShipment(shipment))}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </Card>
       )}
 
@@ -727,14 +1194,15 @@ export function ReportsView() {
           )}
         </CardContent>
       </Card>
-          {/* Shipment / Indent Slip Items Modal */}
+
+      {/* Shipment / Indent Slip Items Modal */}
       {selectedShipment && (
         <Modal
           isOpen={Boolean(selectedShipment)}
           onClose={() => setSelectedShipment(null)}
           title={
             selectedShipment.indentNumber && selectedShipment.indentNumber !== 'N/A'
-              ? `Indent Slip Details: Indent #${String(selectedShipment.indentNumber).replace(/^IND-/, '')}`
+              ? `Indent Slip Details: Indent ${String(selectedShipment.indentNumber).replace(/^IND-/, '')}`
               : `Shipment Details: ${selectedShipment.trackingNumber || 'Products Breakdown'}`
           }
           description={
@@ -774,7 +1242,7 @@ export function ReportsView() {
               ) : (
                 <>
                   <div>
-                    <span className="text-slate-500">Tracking #: </span>
+                    <span className="text-slate-500">Tracking Number: </span>
                     <span className="font-mono font-bold text-slate-800">{selectedShipment.trackingNumber}</span>
                   </div>
                   <div>

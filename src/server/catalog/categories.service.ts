@@ -3,9 +3,11 @@ import {
   ForbiddenException,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CreateBulkCategoriesDto } from './dto/create-bulk-categories.dto';
 import { UserRole, CatalogScope } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
@@ -241,5 +243,166 @@ export class CategoriesService {
 
     this.categoriesCache.set(cacheKey, { data: categories, expiresAt: now + 45_000 });
     return categories;
+  }
+
+  async update(id: string, dto: UpdateCategoryDto, user: AuthenticatedUser) {
+    if (user.role === UserRole.STORE_ADMIN) {
+      throw new ForbiddenException('Store Admin cannot edit product categories');
+    }
+
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+      include: { children: true },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    // Authorization check
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { projectId: true },
+      });
+      if (!dbUser?.projectId || category.ownerScope !== CatalogScope.PROJECT || category.projectId !== dbUser.projectId) {
+        throw new ForbiddenException('Project Admin can only edit categories owned by their project');
+      }
+    }
+
+    const nextName = dto.name !== undefined ? dto.name.trim() : category.name;
+    if (!nextName) {
+      throw new BadRequestException('Category name cannot be empty');
+    }
+
+    let nextParentId = category.parentId;
+    if (dto.parentId !== undefined) {
+      nextParentId = dto.parentId || null;
+    }
+
+    // Validate parent hierarchy if parentId is changed
+    if (nextParentId && nextParentId !== category.parentId) {
+      if (nextParentId === id) {
+        throw new BadRequestException('A category cannot be its own parent');
+      }
+      if (category.children.length > 0) {
+        throw new ConflictException('A category that has subcategories cannot be converted into a subcategory');
+      }
+
+      const parent = await this.prisma.category.findUnique({
+        where: { id: nextParentId },
+      });
+      if (!parent) {
+        throw new NotFoundException('Parent category not found');
+      }
+      if (parent.parentId) {
+        throw new ConflictException('Categories can only have one level of subcategories. Choose a main category as parent.');
+      }
+      if (category.ownerScope === CatalogScope.COMPANY && parent.ownerScope !== CatalogScope.COMPANY) {
+        throw new ForbiddenException('Company categories cannot be nested under project categories');
+      }
+      if (
+        category.ownerScope === CatalogScope.PROJECT &&
+        parent.ownerScope !== CatalogScope.COMPANY &&
+        (parent.ownerScope !== CatalogScope.PROJECT || parent.projectId !== category.projectId)
+      ) {
+        throw new ForbiddenException('Project categories can only be nested under a company category or a category owned by the same project');
+      }
+    }
+
+    // Check duplicate name within the same scope
+    if (nextName.toLowerCase() !== category.name.toLowerCase() || nextParentId !== category.parentId) {
+      const duplicate = await this.prisma.category.findFirst({
+        where: {
+          id: { not: id },
+          name: { equals: nextName, mode: 'insensitive' },
+          parentId: nextParentId,
+          ownerScope: category.ownerScope,
+          projectId: category.projectId,
+        },
+      });
+      if (duplicate) {
+        throw new ConflictException(`Category "${nextName}" already exists in this catalog scope`);
+      }
+    }
+
+    const updated = await this.prisma.category.update({
+      where: { id },
+      data: {
+        name: nextName,
+        parentId: nextParentId,
+      },
+      include: {
+        parent: true,
+        children: true,
+      },
+    });
+
+    this.categoriesCache.clear();
+    return updated;
+  }
+
+  async delete(id: string, user: AuthenticatedUser) {
+    if (user.role === UserRole.STORE_ADMIN) {
+      throw new ForbiddenException('Store Admin cannot delete product categories');
+    }
+
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+      include: {
+        children: { select: { id: true, name: true } },
+        products: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    // Authorization check
+    if (user.role === UserRole.PROJECT_ADMIN) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { projectId: true },
+      });
+      if (!dbUser?.projectId || category.ownerScope !== CatalogScope.PROJECT || category.projectId !== dbUser.projectId) {
+        throw new ForbiddenException('Project Admin can only delete categories owned by their project');
+      }
+    }
+
+    // Guard: Prevent deletion if products directly assigned
+    if (category.products.length > 0) {
+      throw new ConflictException(
+        `Cannot delete category "${category.name}" because it is currently assigned to ${category.products.length} product(s). Please reassign or delete those products first.`
+      );
+    }
+
+    // Guard: Prevent deletion if child subcategories have products
+    if (category.children.length > 0) {
+      const childIds = category.children.map((c) => c.id);
+      const childProductsCount = await this.prisma.product.count({
+        where: { categoryId: { in: childIds } },
+      });
+      if (childProductsCount > 0) {
+        throw new ConflictException(
+          `Cannot delete category "${category.name}" because its subcategories contain ${childProductsCount} product(s). Please reassign or delete those products first.`
+        );
+      }
+    }
+
+    // Delete subcategories and category in transaction
+    await this.prisma.$transaction(async (tx) => {
+      if (category.children.length > 0) {
+        await tx.category.deleteMany({
+          where: { parentId: id },
+        });
+      }
+      await tx.category.delete({
+        where: { id },
+      });
+    });
+
+    this.categoriesCache.clear();
+    return { success: true, message: `Category "${category.name}" deleted successfully` };
   }
 }

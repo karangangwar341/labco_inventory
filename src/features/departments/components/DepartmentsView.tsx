@@ -388,7 +388,7 @@ export function DepartmentsView() {
       // Ensure this indent is open
       const groupKey = `${indentNumber.trim()}:::${departmentId}`;
       setOpenDraftIndents((prev) => ({ ...prev, [groupKey]: true }));
-      setActionSuccess(`Product added to Indent #${indentNumber}`);
+      setActionSuccess(`Product added to Indent ${indentNumber}`);
       setTimeout(() => setActionSuccess(null), 3000);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not add line to indent');
@@ -1012,7 +1012,7 @@ export function DepartmentsView() {
                           <div className="p-3 bg-slate-50/90 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
                             {isEditingHeader ? (
                               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                <span className="font-bold text-slate-600">Indent #:</span>
+                                <span className="font-bold text-slate-600">Indent Number:</span>
                                 <input
                                   type="text"
                                   value={headerEditIndentNumber}

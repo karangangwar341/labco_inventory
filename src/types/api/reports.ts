@@ -16,6 +16,8 @@ export interface QueryReportDto {
   productId?: string;
   projectId?: string;
   warehouseId?: string;
+  groupBy?: string;
+  departmentId?: string;
 }
 
 export interface ReportAuditDto {

@@ -138,7 +138,7 @@ export class ReportsService {
     // 2. Format transformation
     const format = query.format || ReportFormat.JSON;
     if (format === ReportFormat.CSV) {
-      const csvData = this.transformToCsv(rows, reportType);
+      const csvData = this.transformToCsv(rows, reportType, query);
       return {
         reportType,
         format: 'csv',
@@ -355,6 +355,16 @@ export class ReportsService {
     if (query.productId) {
       issueWhere.productId = query.productId;
       returnWhere.productId = query.productId;
+    }
+    if (query.departmentId) {
+      issueWhere.OR = [
+        { departmentId: query.departmentId },
+        { department: { name: { equals: query.departmentId, mode: 'insensitive' } } },
+      ];
+      returnWhere.OR = [
+        { departmentId: query.departmentId },
+        { department: { name: { equals: query.departmentId, mode: 'insensitive' } } },
+      ];
     }
     if (query.startDate || query.endDate) {
       const dateFilter = buildDateFilter(query.startDate, query.endDate);
@@ -825,41 +835,105 @@ export class ReportsService {
       }
       exportRows = flattened;
     } else if (reportType === ReportType.PROJECT_CONSUMPTION) {
-      const flattened: Record<string, any>[] = [];
-      for (const row of rows) {
-        if (Array.isArray(row.items) && row.items.length > 0) {
-          for (const item of row.items) {
+      if (query?.groupBy === 'department') {
+        const deptMap = new Map<string, {
+          department: string;
+          productName: string;
+          brand: string;
+          issuedQuantity: number;
+          returnedQuantity: number;
+          netQuantity: number;
+          unit: string;
+          indents: Set<string>;
+        }>();
+
+        for (const row of rows) {
+          const items = Array.isArray(row.items) && row.items.length > 0 ? row.items : [{
+            productName: row.productName || 'N/A',
+            brand: row.brand || 'N/A',
+            quantity: row.quantity || 0,
+            unit: row.unit || 'units',
+          }];
+
+          for (const it of items) {
+            const dept = row.department || 'General';
+            const prod = it.productName || 'N/A';
+            const unit = it.unit || 'units';
+            const key = `${dept}___${prod}___${unit}`;
+            if (!deptMap.has(key)) {
+              deptMap.set(key, {
+                department: dept,
+                productName: prod,
+                brand: it.brand || 'N/A',
+                issuedQuantity: 0,
+                returnedQuantity: 0,
+                netQuantity: 0,
+                unit,
+                indents: new Set<string>(),
+              });
+            }
+            const entry = deptMap.get(key)!;
+            const q = Number(it.quantity) || 0;
+            if (row.type === 'DEPARTMENT_RETURN') {
+              entry.returnedQuantity += q;
+            } else {
+              entry.issuedQuantity += q;
+            }
+            entry.netQuantity = entry.issuedQuantity - entry.returnedQuantity;
+            if (row.indentNumber && row.indentNumber !== 'N/A') {
+              entry.indents.add(String(row.indentNumber).replace(/^IND-/, ''));
+            }
+          }
+        }
+
+        exportRows = Array.from(deptMap.values()).map((e) => ({
+          department: e.department,
+          productName: e.productName,
+          brand: e.brand,
+          totalIssuedQuantity: e.issuedQuantity,
+          totalReturnedQuantity: e.returnedQuantity,
+          netQuantity: e.netQuantity,
+          unit: e.unit,
+          totalIndentsCount: e.indents.size,
+          indentNumbers: Array.from(e.indents).join('; ') || 'N/A',
+        }));
+      } else {
+        const flattened: Record<string, any>[] = [];
+        for (const row of rows) {
+          if (Array.isArray(row.items) && row.items.length > 0) {
+            for (const item of row.items) {
+              flattened.push({
+                indentNumber: row.indentNumber || 'N/A',
+                activity: row.type,
+                department: row.department,
+                productName: item.productName,
+                brand: item.brand || 'N/A',
+                requestedQuantity: item.requestedQuantity ?? item.quantity,
+                issuedQuantity: item.quantity,
+                unit: item.unit,
+                status: row.status,
+                issuedBy: row.issuedBy,
+                date: row.date,
+              });
+            }
+          } else {
             flattened.push({
               indentNumber: row.indentNumber || 'N/A',
               activity: row.type,
               department: row.department,
-              productName: item.productName,
-              brand: item.brand || 'N/A',
-              requestedQuantity: item.requestedQuantity ?? item.quantity,
-              issuedQuantity: item.quantity,
-              unit: item.unit,
+              productName: row.productsSummary || 'N/A',
+              brand: 'N/A',
+              requestedQuantity: row.quantity || 0,
+              issuedQuantity: row.quantity || 0,
+              unit: 'N/A',
               status: row.status,
               issuedBy: row.issuedBy,
               date: row.date,
             });
           }
-        } else {
-          flattened.push({
-            indentNumber: row.indentNumber || 'N/A',
-            activity: row.type,
-            department: row.department,
-            productName: row.productsSummary || 'N/A',
-            brand: 'N/A',
-            requestedQuantity: row.quantity || 0,
-            issuedQuantity: row.quantity || 0,
-            unit: 'N/A',
-            status: row.status,
-            issuedBy: row.issuedBy,
-            date: row.date,
-          });
         }
+        exportRows = flattened;
       }
-      exportRows = flattened;
     }
 
     const wb = XLSX.utils.book_new();
@@ -957,6 +1031,79 @@ export class ReportsService {
 
     XLSX.utils.book_append_sheet(wb, ws, 'Report Data');
 
+    if (reportType === ReportType.PROJECT_CONSUMPTION && exportRows.length > 0) {
+      const deptMap = new Map<string, {
+        department: string;
+        productName: string;
+        brand: string;
+        issuedQuantity: number;
+        returnedQuantity: number;
+        netQuantity: number;
+        unit: string;
+        indents: Set<string>;
+      }>();
+
+      for (const row of exportRows) {
+        const dept = row.department || 'General';
+        const prod = row.productName || 'N/A';
+        const brand = row.brand || 'N/A';
+        const unit = row.unit || 'units';
+        const key = `${dept}___${prod}___${unit}`;
+
+        if (!deptMap.has(key)) {
+          deptMap.set(key, {
+            department: dept,
+            productName: prod,
+            brand,
+            issuedQuantity: 0,
+            returnedQuantity: 0,
+            netQuantity: 0,
+            unit,
+            indents: new Set<string>(),
+          });
+        }
+
+        const entry = deptMap.get(key)!;
+        const issued = Number(row.issuedQuantity) || 0;
+        if (row.activity === 'DEPARTMENT_RETURN') {
+          entry.returnedQuantity += issued;
+        } else {
+          entry.issuedQuantity += issued;
+        }
+        entry.netQuantity = entry.issuedQuantity - entry.returnedQuantity;
+        if (row.indentNumber && row.indentNumber !== 'N/A') {
+          entry.indents.add(String(row.indentNumber));
+        }
+      }
+
+      const summaryRows = Array.from(deptMap.values()).map((e) => ({
+        'Department': e.department,
+        'Product Name': e.productName,
+        'Brand': e.brand,
+        'Total Issued Quantity': e.issuedQuantity,
+        'Total Returned Quantity': e.returnedQuantity,
+        'Net Consumed Quantity': e.netQuantity,
+        'Unit': e.unit,
+        'Total Indents Count': e.indents.size,
+        'Associated Indent Numbers': Array.from(e.indents).join(', ') || 'N/A',
+      }));
+
+      const summaryHeaders = Object.keys(summaryRows[0] || {});
+      const summaryPreInfo: any[][] = [
+        ['LABCO INSTRUMENTS — DEPARTMENT CONSUMPTION SUMMARY'],
+        ['Report Name:', 'Clinical Department Usage — Aggregated by Department'],
+        ['Generated At:', new Date().toISOString()],
+        ['Generated By:', user ? `${user.username} (${user.role})` : 'System'],
+        ['Total Department Lines:', summaryRows.length],
+        [],
+        summaryHeaders,
+      ];
+      const summaryData = summaryRows.map((r) => summaryHeaders.map((h) => (r as any)[h]));
+      const wsDeptSummary = XLSX.utils.aoa_to_sheet([...summaryPreInfo, ...summaryData]);
+      wsDeptSummary['!cols'] = summaryHeaders.map((h) => ({ wch: Math.max(h.length, 16) }));
+      XLSX.utils.book_append_sheet(wb, wsDeptSummary, 'Department Summary');
+    }
+
     // Add dedicated glossary sheet explaining what every column means
     this.appendGlossarySheet(wb);
 
@@ -1002,7 +1149,7 @@ export class ReportsService {
   // (Test Plan Section 5 item 61)
   // ==========================================
 
-  private transformToCsv(rows: Record<string, any>[], reportType?: ReportType): string {
+  private transformToCsv(rows: Record<string, any>[], reportType?: ReportType, query?: QueryReportDto): string {
     let exportRows = rows;
     if (reportType === ReportType.SHIPMENTS) {
       const flattened: Record<string, any>[] = [];
@@ -1049,41 +1196,105 @@ export class ReportsService {
       }
       exportRows = flattened;
     } else if (reportType === ReportType.PROJECT_CONSUMPTION) {
-      const flattened: Record<string, any>[] = [];
-      for (const row of rows) {
-        if (Array.isArray(row.items) && row.items.length > 0) {
-          for (const item of row.items) {
+      if (query?.groupBy === 'department') {
+        const deptMap = new Map<string, {
+          department: string;
+          productName: string;
+          brand: string;
+          issuedQuantity: number;
+          returnedQuantity: number;
+          netQuantity: number;
+          unit: string;
+          indents: Set<string>;
+        }>();
+
+        for (const row of rows) {
+          const items = Array.isArray(row.items) && row.items.length > 0 ? row.items : [{
+            productName: row.productName || 'N/A',
+            brand: row.brand || 'N/A',
+            quantity: row.quantity || 0,
+            unit: row.unit || 'units',
+          }];
+
+          for (const it of items) {
+            const dept = row.department || 'General';
+            const prod = it.productName || 'N/A';
+            const unit = it.unit || 'units';
+            const key = `${dept}___${prod}___${unit}`;
+            if (!deptMap.has(key)) {
+              deptMap.set(key, {
+                department: dept,
+                productName: prod,
+                brand: it.brand || 'N/A',
+                issuedQuantity: 0,
+                returnedQuantity: 0,
+                netQuantity: 0,
+                unit,
+                indents: new Set<string>(),
+              });
+            }
+            const entry = deptMap.get(key)!;
+            const q = Number(it.quantity) || 0;
+            if (row.type === 'DEPARTMENT_RETURN') {
+              entry.returnedQuantity += q;
+            } else {
+              entry.issuedQuantity += q;
+            }
+            entry.netQuantity = entry.issuedQuantity - entry.returnedQuantity;
+            if (row.indentNumber && row.indentNumber !== 'N/A') {
+              entry.indents.add(String(row.indentNumber).replace(/^IND-/, ''));
+            }
+          }
+        }
+
+        exportRows = Array.from(deptMap.values()).map((e) => ({
+          department: e.department,
+          productName: e.productName,
+          brand: e.brand,
+          totalIssuedQuantity: e.issuedQuantity,
+          totalReturnedQuantity: e.returnedQuantity,
+          netQuantity: e.netQuantity,
+          unit: e.unit,
+          totalIndentsCount: e.indents.size,
+          indentNumbers: Array.from(e.indents).join('; ') || 'N/A',
+        }));
+      } else {
+        const flattened: Record<string, any>[] = [];
+        for (const row of rows) {
+          if (Array.isArray(row.items) && row.items.length > 0) {
+            for (const item of row.items) {
+              flattened.push({
+                indentNumber: row.indentNumber || 'N/A',
+                activity: row.type,
+                department: row.department,
+                productName: item.productName,
+                brand: item.brand || 'N/A',
+                requestedQuantity: item.requestedQuantity ?? item.quantity,
+                issuedQuantity: item.quantity,
+                unit: item.unit,
+                status: row.status,
+                issuedBy: row.issuedBy,
+                date: row.date,
+              });
+            }
+          } else {
             flattened.push({
               indentNumber: row.indentNumber || 'N/A',
               activity: row.type,
               department: row.department,
-              productName: item.productName,
-              brand: item.brand || 'N/A',
-              requestedQuantity: item.requestedQuantity ?? item.quantity,
-              issuedQuantity: item.quantity,
-              unit: item.unit,
+              productName: row.productsSummary || 'N/A',
+              brand: 'N/A',
+              requestedQuantity: row.quantity || 0,
+              issuedQuantity: row.quantity || 0,
+              unit: 'N/A',
               status: row.status,
               issuedBy: row.issuedBy,
               date: row.date,
             });
           }
-        } else {
-          flattened.push({
-            indentNumber: row.indentNumber || 'N/A',
-            activity: row.type,
-            department: row.department,
-            productName: row.productsSummary || 'N/A',
-            brand: 'N/A',
-            requestedQuantity: row.quantity || 0,
-            issuedQuantity: row.quantity || 0,
-            unit: 'N/A',
-            status: row.status,
-            issuedBy: row.issuedBy,
-            date: row.date,
-          });
         }
+        exportRows = flattened;
       }
-      exportRows = flattened;
     }
     if (exportRows.length === 0) {
       return 'No data available\n';

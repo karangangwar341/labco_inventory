@@ -68,9 +68,20 @@ export function CatalogView() {
   const [categoryParentId, setCategoryParentId] = useState('');
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
+  // Category Edit and Delete state
+  const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryParentId, setEditCategoryParentId] = useState('');
+  const [editCategoryError, setEditCategoryError] = useState<string | null>(null);
+
+  const [deletingCategory, setDeletingCategory] = useState<CategoryDto | null>(null);
+  const [deleteCategoryError, setDeleteCategoryError] = useState<string | null>(null);
+  const [categorySuccessNotice, setCategorySuccessNotice] = useState<string | null>(null);
+
   // Taxonomy view filter and layout controls
   const [taxonomySearch, setTaxonomySearch] = useState('');
   const [taxonomyFilter, setTaxonomyFilter] = useState<'ALL' | 'WITH_PRODUCTS' | 'WITH_SUBS'>('ALL');
+  const [taxonomyScopeFilter, setTaxonomyScopeFilter] = useState<'ALL' | 'COMPANY' | 'PROJECT'>('ALL');
   const [taxonomyViewMode, setTaxonomyViewMode] = useState<'GRID' | 'TREE'>('GRID');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
@@ -221,10 +232,19 @@ export function CatalogView() {
         (category) =>
           !category.parentId &&
           (category.ownerScope === 'COMPANY' ||
-            (category.ownerScope === 'PROJECT' && category.projectId === user?.projectId)),
+            (category.ownerScope === 'PROJECT' && (role === 'SUPER_ADMIN' || category.projectId === user?.projectId))),
       ),
-    [categories, user?.projectId],
+    [categories, role, user?.projectId],
   );
+
+  const companyRootsCount = useMemo(() => roots.filter((r) => r.ownerScope === 'COMPANY').length, [roots]);
+  const projectRootsCount = useMemo(() => roots.filter((r) => r.ownerScope === 'PROJECT').length, [roots]);
+
+  const canEditCategory = (cat: CategoryDto) => {
+    if (role === 'SUPER_ADMIN') return true;
+    if (role === 'PROJECT_ADMIN' && cat.ownerScope === 'PROJECT' && cat.projectId === user?.projectId) return true;
+    return false;
+  };
 
   // Subcategories grouped by parent
   const subcategoriesByParent = useMemo(() => {
@@ -282,12 +302,13 @@ export function CatalogView() {
         if (!rootMatches && !subMatches) return false;
       }
 
+      if (taxonomyScopeFilter !== 'ALL' && root.ownerScope !== taxonomyScopeFilter) return false;
       if (taxonomyFilter === 'WITH_PRODUCTS' && totalCount === 0) return false;
       if (taxonomyFilter === 'WITH_SUBS' && subs.length === 0) return false;
 
       return true;
     });
-  }, [roots, subcategoriesByParent, productCountByCat, taxonomySearch, taxonomyFilter]);
+  }, [roots, subcategoriesByParent, productCountByCat, taxonomySearch, taxonomyFilter, taxonomyScopeFilter]);
 
   // Brands by category
   const brandsByCategory = useMemo(() => {
@@ -394,6 +415,40 @@ export function CatalogView() {
     },
     onError: (error) =>
       setCategoryError(error instanceof Error ? error.message : 'Category could not be saved.'),
+  });
+
+  const updateCategoryMutation = useMutation({
+    mutationFn: () => {
+      if (!editingCategory) throw new Error('No category selected');
+      return catalogService.updateCategory(editingCategory.id, {
+        name: editCategoryName.trim(),
+        parentId: editCategoryParentId || null,
+      });
+    },
+    onSuccess: async () => {
+      await invalidation.afterCatalogMutation(queryClient);
+      setEditingCategory(null);
+      setEditCategoryName('');
+      setEditCategoryParentId('');
+      setEditCategoryError(null);
+      setCategorySuccessNotice('Category updated successfully');
+      setTimeout(() => setCategorySuccessNotice(null), 4000);
+    },
+    onError: (error) =>
+      setEditCategoryError(error instanceof Error ? error.message : 'Category could not be updated.'),
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => catalogService.deleteCategory(id),
+    onSuccess: async () => {
+      await invalidation.afterCatalogMutation(queryClient);
+      setDeletingCategory(null);
+      setDeleteCategoryError(null);
+      setCategorySuccessNotice('Category deleted successfully');
+      setTimeout(() => setCategorySuccessNotice(null), 4000);
+    },
+    onError: (error) =>
+      setDeleteCategoryError(error instanceof Error ? error.message : 'Category could not be deleted.'),
   });
 
   const handleSaveBrand = () => {
@@ -776,6 +831,22 @@ export function CatalogView() {
           </button>
         </div>
       </div>
+
+      {categorySuccessNotice && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>✓</span>
+            <span>{categorySuccessNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCategorySuccessNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold text-xs cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Category Creation Card */}
       {showCategoryForm && canCreate && (
@@ -1182,6 +1253,45 @@ export function CatalogView() {
                   </button>
                 </div>
 
+                {/* Scope Filter Pills */}
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyScopeFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                      taxonomyScopeFilter === 'ALL'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    All Scopes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaxonomyScopeFilter('COMPANY')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                      taxonomyScopeFilter === 'COMPANY'
+                        ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Company ({companyRootsCount})
+                  </button>
+                  {projectRootsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTaxonomyScopeFilter('PROJECT')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                        taxonomyScopeFilter === 'PROJECT'
+                          ? 'bg-white text-purple-700 shadow-2xs font-bold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Project ({projectRootsCount})
+                    </button>
+                  )}
+                </div>
+
                 {/* View Mode Toggle (Grid vs Tree) */}
                 <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
                   <button
@@ -1260,14 +1370,44 @@ export function CatalogView() {
                             </div>
                           </div>
 
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="text-xs px-2.5 py-1 min-h-[30px] shrink-0 font-medium"
-                            onClick={() => viewProductsInCategory(root.id)}
-                          >
-                            Browse →
-                          </Button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="text-xs px-2.5 py-1 min-h-[30px] font-medium"
+                              onClick={() => viewProductsInCategory(root.id)}
+                            >
+                              Browse →
+                            </Button>
+                            {canEditCategory(root) && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCategory(root);
+                                    setEditCategoryName(root.name);
+                                    setEditCategoryParentId(root.parentId || '');
+                                    setEditCategoryError(null);
+                                  }}
+                                  className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-colors cursor-pointer text-xs"
+                                  title={`Edit category "${root.name}"`}
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeletingCategory(root);
+                                    setDeleteCategoryError(null);
+                                  }}
+                                  className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs"
+                                  title={`Delete category "${root.name}"`}
+                                >
+                                  🗑️
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
 
                         {/* Subcategories (Only rendered if there ARE subcategories) */}
@@ -1292,17 +1432,52 @@ export function CatalogView() {
                               {subs.map((sub) => {
                                 const subCount = productCountByCat.get(sub.id) || 0;
                                 return (
-                                  <button
+                                  <div
                                     key={sub.id}
-                                    onClick={() => viewProductsInCategory(sub.id)}
-                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200/80 hover:border-blue-200 transition-all cursor-pointer text-[11px]"
-                                    title={`Filter by ${sub.name}`}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 hover:bg-blue-50 text-slate-700 border border-slate-200/80 transition-all text-[11px]"
                                   >
-                                    <span>↳ {sub.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => viewProductsInCategory(sub.id)}
+                                      className="hover:text-blue-700 cursor-pointer font-medium"
+                                      title={`Filter by ${sub.name}`}
+                                    >
+                                      <span>↳ {sub.name}</span>
+                                    </button>
                                     <span className="font-mono text-[9px] font-bold px-1 rounded bg-white text-slate-500 border border-slate-200">
                                       {subCount}
                                     </span>
-                                  </button>
+                                    {canEditCategory(sub) && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingCategory(sub);
+                                          setEditCategoryName(sub.name);
+                                          setEditCategoryParentId(sub.parentId || '');
+                                          setEditCategoryError(null);
+                                        }}
+                                        className="text-slate-400 hover:text-blue-600 text-[10px] ml-0.5 cursor-pointer"
+                                        title={`Edit subcategory "${sub.name}"`}
+                                      >
+                                        ✏️
+                                      </button>
+                                    )}
+                                    {canEditCategory(sub) && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeletingCategory(sub);
+                                          setDeleteCategoryError(null);
+                                        }}
+                                        className="text-slate-400 hover:text-rose-600 text-[10px] cursor-pointer"
+                                        title={`Delete subcategory "${sub.name}"`}
+                                      >
+                                        🗑️
+                                      </button>
+                                    )}
+                                  </div>
                                 );
                               })}
                             </div>
@@ -1428,8 +1603,36 @@ export function CatalogView() {
                                     className="text-[11px] px-2.5 py-0.5 h-7"
                                     onClick={() => viewProductsInCategory(root.id)}
                                   >
-                                    Browse Items
+                                    Browse
                                   </Button>
+                                  {canEditCategory(root) && (
+                                    <>
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        className="text-[11px] px-2 py-0.5 h-7"
+                                        onClick={() => {
+                                          setEditingCategory(root);
+                                          setEditCategoryName(root.name);
+                                          setEditCategoryParentId(root.parentId || '');
+                                          setEditCategoryError(null);
+                                        }}
+                                      >
+                                        Edit
+                                      </Button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDeletingCategory(root);
+                                          setDeleteCategoryError(null);
+                                        }}
+                                        className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer text-xs"
+                                        title="Delete category"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1457,14 +1660,44 @@ export function CatalogView() {
                                     {subCount} {subCount === 1 ? 'item' : 'items'}
                                   </td>
                                   <td className="py-2 px-3 text-right">
-                                    <Button
-                                      variant="secondary"
-                                      size="sm"
-                                      className="text-[10px] px-2 py-0.5 h-6 text-slate-600"
-                                      onClick={() => viewProductsInCategory(sub.id)}
-                                    >
-                                      Browse Subcategory →
-                                    </Button>
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        className="text-[10px] px-2 py-0.5 h-6 text-slate-600"
+                                        onClick={() => viewProductsInCategory(sub.id)}
+                                      >
+                                        Browse Subcategory →
+                                      </Button>
+                                      {canEditCategory(sub) && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingCategory(sub);
+                                              setEditCategoryName(sub.name);
+                                              setEditCategoryParentId(sub.parentId || '');
+                                              setEditCategoryError(null);
+                                            }}
+                                            className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-blue-600 text-xs cursor-pointer"
+                                            title="Edit subcategory"
+                                          >
+                                            ✏️
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDeletingCategory(sub);
+                                              setDeleteCategoryError(null);
+                                            }}
+                                            className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 text-xs cursor-pointer"
+                                            title="Delete subcategory"
+                                          >
+                                            🗑️
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -1854,6 +2087,161 @@ export function CatalogView() {
           projectId={user.projectId}
           onSuccess={() => void refetch()}
         />
+      )}
+
+      {/* Edit Category Modal */}
+      {editingCategory && (
+        <Modal
+          isOpen={Boolean(editingCategory)}
+          onClose={() => {
+            setEditingCategory(null);
+            setEditCategoryError(null);
+          }}
+          title={`Edit ${editingCategory.parentId ? 'Subcategory' : 'Category'}`}
+          description={`Update details for "${editingCategory.name}" (${editingCategory.ownerScope} scope).`}
+          maxWidth="md"
+        >
+          <div className="space-y-4 pt-2">
+            {editCategoryError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
+                {editCategoryError}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Category Name
+              </label>
+              <Input
+                value={editCategoryName}
+                onChange={(e) => setEditCategoryName(e.target.value)}
+                maxLength={100}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Parent Category (Optional)
+              </label>
+              <Select
+                value={editCategoryParentId}
+                onChange={(e) => setEditCategoryParentId(e.target.value)}
+              >
+                <option value="">Top-level category (No parent)</option>
+                {roots
+                  .filter((r) => r.id !== editingCategory.id && r.ownerScope === editingCategory.ownerScope)
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setEditingCategory(null);
+                  setEditCategoryError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                isLoading={updateCategoryMutation.isPending}
+                disabled={!editCategoryName.trim()}
+                onClick={() => updateCategoryMutation.mutate()}
+              >
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete Category Modal */}
+      {deletingCategory && (
+        <Modal
+          isOpen={Boolean(deletingCategory)}
+          onClose={() => {
+            setDeletingCategory(null);
+            setDeleteCategoryError(null);
+          }}
+          title={`Delete Category "${deletingCategory.name}"`}
+          maxWidth="md"
+        >
+          {(() => {
+            const directCount = productCountByCat.get(deletingCategory.id) || 0;
+            const subs = subcategoriesByParent.get(deletingCategory.id) || [];
+            const subProductsCount = subs.reduce((acc, s) => acc + (productCountByCat.get(s.id) || 0), 0);
+            const totalProducts = directCount + subProductsCount;
+            const hasProducts = totalProducts > 0;
+
+            return (
+              <div className="space-y-4 pt-2">
+                {deleteCategoryError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
+                    {deleteCategoryError}
+                  </div>
+                )}
+
+                {hasProducts ? (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 space-y-1.5">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <span>⚠️</span> Category is in use
+                    </div>
+                    <p>
+                      This category cannot be deleted because it is currently assigned to <strong>{totalProducts} product(s)</strong>
+                      {subs.length > 0 ? ` (including products in its subcategories)` : ''}.
+                    </p>
+                    <p className="text-[11px] text-amber-700">
+                      To delete this category, please reassign or remove the products first to maintain inventory and audit consistency.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-xs text-slate-600">
+                    <p>
+                      Are you sure you want to permanently delete <strong>{deletingCategory.name}</strong>?
+                    </p>
+                    {subs.length > 0 && (
+                      <p className="text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+                        Notice: This category has <strong>{subs.length} subcategory(ies)</strong> with 0 products. They will also be deleted.
+                      </p>
+                    )}
+                    <p className="text-slate-400 text-[11px]">
+                      This action cannot be undone.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setDeletingCategory(null);
+                      setDeleteCategoryError(null);
+                    }}
+                  >
+                    {hasProducts ? 'Close' : 'Cancel'}
+                  </Button>
+                  {!hasProducts && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      isLoading={deleteCategoryMutation.isPending}
+                      onClick={() => deleteCategoryMutation.mutate(deletingCategory.id)}
+                    >
+                      Confirm Delete
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </Modal>
       )}
     </div>
   );

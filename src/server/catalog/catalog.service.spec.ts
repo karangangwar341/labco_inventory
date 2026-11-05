@@ -24,12 +24,16 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
         findFirst: vi.fn(),
         create: vi.fn(),
         findMany: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        deleteMany: vi.fn(),
       },
       product: {
         findUnique: vi.fn(),
         create: vi.fn(),
         findMany: vi.fn(),
         update: vi.fn(),
+        count: vi.fn(),
       },
       productVersion: {
         updateMany: vi.fn(),
@@ -108,6 +112,80 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
           }),
         }),
       );
+    });
+
+    it('updates category name for Super Admin', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.category.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Chemicals',
+        ownerScope: CatalogScope.COMPANY,
+        parentId: null,
+        children: [],
+      });
+      mockPrisma.category.findFirst.mockResolvedValue(null);
+      mockPrisma.category.update.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Fine Chemicals',
+        ownerScope: CatalogScope.COMPANY,
+        parentId: null,
+      });
+
+      const res = await categoriesService.update('cat-1', { name: 'Fine Chemicals' }, superAdmin);
+      expect(res.name).toBe('Fine Chemicals');
+      expect(mockPrisma.category.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'cat-1' },
+          data: expect.objectContaining({ name: 'Fine Chemicals' }),
+        }),
+      );
+    });
+
+    it('blocks Project Admin from editing company category', async () => {
+      const projectAdmin: any = { id: 'ca-1', role: UserRole.PROJECT_ADMIN };
+      mockPrisma.user.findUnique.mockResolvedValue({ projectId: 'project-apex' });
+      mockPrisma.category.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        name: 'Chemicals',
+        ownerScope: CatalogScope.COMPANY,
+        parentId: null,
+        children: [],
+      });
+
+      await expect(
+        categoriesService.update('cat-1', { name: 'New Name' }, projectAdmin),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('deletes empty category successfully', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.category.findUnique.mockResolvedValue({
+        id: 'cat-empty',
+        name: 'Unused Category',
+        ownerScope: CatalogScope.COMPANY,
+        products: [],
+        children: [],
+      });
+      mockPrisma.category.delete.mockResolvedValue({ id: 'cat-empty' });
+
+      const res = await categoriesService.delete('cat-empty', superAdmin);
+      expect(res.success).toBe(true);
+      expect(mockPrisma.category.delete).toHaveBeenCalledWith({ where: { id: 'cat-empty' } });
+    });
+
+    it('blocks deleting category when products are assigned', async () => {
+      const superAdmin: any = { id: 'su-1', role: UserRole.SUPER_ADMIN };
+      mockPrisma.category.findUnique.mockResolvedValue({
+        id: 'cat-used',
+        name: 'Active Category',
+        ownerScope: CatalogScope.COMPANY,
+        products: [{ id: 'prod-1', name: 'Product 1' }],
+        children: [],
+      });
+
+      await expect(
+        categoriesService.delete('cat-used', superAdmin),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

@@ -123,6 +123,30 @@ export function CloneCatalogModal({
     return map;
   }, [categories]);
 
+  // Set of category names already cloned into this project
+  const projectExistingCategoryNames = useMemo(() => {
+    if (!projectId) return new Set<string>();
+    const set = new Set<string>();
+    categories.forEach((c) => {
+      if (c.projectId === projectId || (c.ownerScope === 'PROJECT' && c.projectId === projectId)) {
+        set.add(c.name.trim().toLowerCase());
+      }
+    });
+    return set;
+  }, [categories, projectId]);
+
+  // Set of product names already cloned into this project
+  const projectExistingProductNames = useMemo(() => {
+    if (!projectId) return new Set<string>();
+    const set = new Set<string>();
+    allProducts.forEach((p) => {
+      if (p.projectId === projectId) {
+        set.add(p.name.trim().toLowerCase());
+      }
+    });
+    return set;
+  }, [allProducts, projectId]);
+
   // Filtered products for PRODUCTS tab
   const filteredProducts = useMemo(() => {
     return companyProducts.filter((p) => {
@@ -228,14 +252,15 @@ export function CloneCatalogModal({
   };
 
   const handleSelectAllVisibleProducts = () => {
-    if (selectedProductIds.size === filteredProducts.length && filteredProducts.length > 0) {
+    const selectable = filteredProducts.filter((p) => !projectExistingProductNames.has(p.name.trim().toLowerCase()));
+    if (selectedProductIds.size === selectable.length && selectable.length > 0) {
       setSelectedProductIds(new Set());
     } else {
-      setSelectedProductIds(new Set(filteredProducts.map((p) => p.id)));
+      setSelectedProductIds(new Set(selectable.map((p) => p.id)));
     }
   };
 
-  // Select all categories (all roots + subcategories) and all company products
+  // Select all categories (all roots + subcategories) and all company products that aren't already transferred
   const handleSelectAllCategories = () => {
     const allCatIds = new Set<string>();
     categories.forEach((c) => {
@@ -243,8 +268,9 @@ export function CloneCatalogModal({
         allCatIds.add(c.id);
       }
     });
+    const selectableProducts = companyProducts.filter((p) => !projectExistingProductNames.has(p.name.trim().toLowerCase()));
     setSelectedCategoryIds(allCatIds);
-    setSelectedProductIds(new Set(companyProducts.map((p) => p.id)));
+    setSelectedProductIds(new Set(selectableProducts.map((p) => p.id)));
   };
 
   // Clear all category and product selections
@@ -408,6 +434,11 @@ export function CloneCatalogModal({
                 rootCategories.map((root) => {
                   const productsInRoot = productsByCategoryId.get(root.id) || [];
                   const subs = subcategoriesByParent.get(root.id) || [];
+                  const isAlreadyInProject = projectExistingCategoryNames.has(root.name.trim().toLowerCase());
+                  const clonedProductsInRoot = productsInRoot.filter((p) => projectExistingProductNames.has(p.name.trim().toLowerCase())).length;
+                  const allProductsAlreadyCloned = productsInRoot.length > 0 && clonedProductsInRoot === productsInRoot.length;
+                  const isFullyTransferred = isAlreadyInProject && (productsInRoot.length === 0 || allProductsAlreadyCloned);
+
                   const selectedInRoot = productsInRoot.filter((p) => selectedProductIds.has(p.id)).length;
                   const isCatExplicitlySelected = selectedCategoryIds.has(root.id);
                   const isAllProductsSelected = productsInRoot.length > 0 && selectedInRoot === productsInRoot.length;
@@ -418,25 +449,37 @@ export function CloneCatalogModal({
                   return (
                     <div key={root.id} className="p-2.5 text-xs transition-colors hover:bg-slate-50/50">
                       <div className="flex items-center justify-between gap-2">
-                        <label className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer select-none">
+                        <label className={`flex items-center gap-2.5 flex-1 min-w-0 select-none ${isFullyTransferred ? 'cursor-default' : 'cursor-pointer'}`}>
                           <input
                             type="checkbox"
                             checked={isChecked}
+                            disabled={isFullyTransferred}
                             ref={(el) => {
                               if (el) el.indeterminate = isPartial;
                             }}
-                            onChange={() => toggleCategory(root.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            onChange={() => !isFullyTransferred && toggleCategory(root.id)}
+                            className={`w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 ${isFullyTransferred ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                            title={isFullyTransferred ? 'Category and all items already in project' : undefined}
                           />
                           <span className="text-amber-500 text-sm">📁</span>
                           <span className="font-semibold text-slate-900 truncate">{root.name}</span>
+                          {isAlreadyInProject && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                              In Project
+                            </span>
+                          )}
                           <span className="text-slate-400 text-[11px]">
-                            ({productsInRoot.length} {productsInRoot.length === 1 ? 'item' : 'items'})
+                            ({productsInRoot.length} {productsInRoot.length === 1 ? 'item' : 'items'}
+                            {clonedProductsInRoot > 0 ? ` • ${clonedProductsInRoot} in project` : ''})
                           </span>
                         </label>
 
                         <div className="flex items-center gap-2 shrink-0">
-                          {isChecked || selectedInRoot > 0 ? (
+                          {isFullyTransferred ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                              Seeded
+                            </span>
+                          ) : isChecked || selectedInRoot > 0 ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                               {productsInRoot.length > 0
                                 ? `${selectedInRoot} / ${productsInRoot.length} selected`
@@ -464,6 +507,10 @@ export function CloneCatalogModal({
                         <div className="mt-2 ml-7 pl-3 border-l-2 border-slate-200 space-y-1.5 py-1">
                           {subs.map((sub) => {
                             const productsInSub = productsByCategoryId.get(sub.id) || [];
+                            const isSubAlreadyInProject = projectExistingCategoryNames.has(sub.name.trim().toLowerCase());
+                            const clonedProductsInSub = productsInSub.filter((p) => projectExistingProductNames.has(p.name.trim().toLowerCase())).length;
+                            const isSubFullyTransferred = isSubAlreadyInProject && (productsInSub.length === 0 || clonedProductsInSub === productsInSub.length);
+
                             const selectedInSub = productsInSub.filter((p) => selectedProductIds.has(p.id)).length;
                             const isSubCatSelected = selectedCategoryIds.has(sub.id);
                             const isSubAllProducts = productsInSub.length > 0 && selectedInSub === productsInSub.length;
@@ -472,22 +519,31 @@ export function CloneCatalogModal({
 
                             return (
                               <div key={sub.id} className="flex items-center justify-between text-[11px]">
-                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <label className={`flex items-center gap-2 select-none ${isSubFullyTransferred ? 'cursor-default' : 'cursor-pointer'}`}>
                                   <input
                                     type="checkbox"
                                     checked={isSubChecked}
+                                    disabled={isSubFullyTransferred}
                                     ref={(el) => {
                                       if (el) el.indeterminate = isSubPartial;
                                     }}
-                                    onChange={() => toggleSubcategory(sub.id, root.id)}
-                                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    onChange={() => !isSubFullyTransferred && toggleSubcategory(sub.id, root.id)}
+                                    className={`w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 ${isSubFullyTransferred ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                                    title={isSubFullyTransferred ? 'Subcategory already in project' : undefined}
                                   />
                                   <span className="text-slate-400 font-mono">↳</span>
                                   <span className="font-medium text-slate-700">{sub.name}</span>
+                                  {isSubAlreadyInProject && (
+                                    <span className="px-1 py-0.2 rounded text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      In Project
+                                    </span>
+                                  )}
                                   <span className="text-slate-400">({productsInSub.length})</span>
                                 </label>
                                 <span className="text-slate-500 font-mono text-[10px]">
-                                  {isSubChecked && productsInSub.length === 0
+                                  {isSubFullyTransferred
+                                    ? 'Seeded'
+                                    : isSubChecked && productsInSub.length === 0
                                     ? 'Selected'
                                     : `${selectedInSub} / ${productsInSub.length}`}
                                 </span>
@@ -563,19 +619,28 @@ export function CloneCatalogModal({
                 </div>
               ) : (
                 filteredProducts.map((p: CatalogProduct) => {
+                  const isAlreadyCloned = projectExistingProductNames.has(p.name.trim().toLowerCase());
                   const isSelected = selectedProductIds.has(p.id);
                   return (
                     <label
                       key={p.id}
-                      className={`flex items-center gap-3 p-2.5 text-xs cursor-pointer transition-colors select-none ${
-                        isSelected ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50/70'
+                      className={`flex items-center gap-3 p-2.5 text-xs transition-colors select-none ${
+                        isAlreadyCloned
+                          ? 'opacity-65 cursor-default bg-slate-50/60'
+                          : isSelected
+                          ? 'bg-blue-50/50 hover:bg-blue-50 cursor-pointer'
+                          : 'hover:bg-slate-50/70 cursor-pointer'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => toggleProduct(p.id)}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        disabled={isAlreadyCloned}
+                        onChange={() => !isAlreadyCloned && toggleProduct(p.id)}
+                        className={`w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 ${
+                          isAlreadyCloned ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                        }`}
+                        title={isAlreadyCloned ? 'Product already transferred to project' : undefined}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -595,9 +660,15 @@ export function CloneCatalogModal({
                           )}
                         </div>
                       </div>
-                      <Badge variant="neutral" size="sm" className="text-[10px]">
-                        Company
-                      </Badge>
+                      {isAlreadyCloned ? (
+                        <Badge variant="success" size="sm" className="text-[10px]">
+                          In Project
+                        </Badge>
+                      ) : (
+                        <Badge variant="neutral" size="sm" className="text-[10px]">
+                          Company
+                        </Badge>
+                      )}
                     </label>
                   );
                 })

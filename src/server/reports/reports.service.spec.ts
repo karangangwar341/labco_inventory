@@ -518,6 +518,24 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
           }),
         }),
       );
+
+      // Verify departmentId filtering
+      await reportsService.generateReport(
+        ReportType.PROJECT_CONSUMPTION,
+        { format: ReportFormat.JSON, departmentId: 'Pathology Lab' },
+        projectAdminUser,
+      );
+      expect(mockPrisma.departmentIssue.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            projectId: 'project-1',
+            OR: expect.arrayContaining([
+              { departmentId: 'Pathology Lab' },
+              { department: { name: { equals: 'Pathology Lab', mode: 'insensitive' } } },
+            ]),
+          }),
+        }),
+      );
     });
 
     it('groups multiple product lines of the same indent slip into a single row and flattens for Excel export', async () => {
@@ -614,6 +632,27 @@ describe('Reports Service (T-014: Reports, exports and export audit)', () => {
       expect(dataRows[1]).toEqual(expect.arrayContaining(['DEPARTMENT_ISSUE', 'Molecular Rest', 'Product101']));
       expect(String(dataRows[2][0])).toBe('103');
       expect(dataRows[2]).toEqual(expect.arrayContaining(['DEPARTMENT_ISSUE', 'Molecular Rest', 'Labco Multi-Analyte Chemistry Analyzer Kit 500T']));
+
+      // Check that Department Summary sheet is also included in the Excel workbook
+      const summarySheet = workbook.Sheets['Department Summary'];
+      expect(summarySheet).toBeDefined();
+      const summarySheetRows = XLSX.utils.sheet_to_json(summarySheet, { header: 1 }) as any[][];
+      const summaryHeaderIdx = summarySheetRows.findIndex((r) => Array.isArray(r) && r.includes('Department'));
+      expect(summaryHeaderIdx).toBeGreaterThanOrEqual(0);
+      const summaryDataRows = summarySheetRows.slice(summaryHeaderIdx + 1).filter((r) => r.length > 0 && r[0]);
+      expect(summaryDataRows.length).toBe(3); // 3 distinct products for Molecular Rest
+      expect(summaryDataRows[0]).toEqual(expect.arrayContaining(['Molecular Rest']));
+
+      // 3. CSV Report with groupBy: 'department' returns aggregated department summary rows
+      const csvResult = await reportsService.generateReport(
+        ReportType.PROJECT_CONSUMPTION,
+        { format: ReportFormat.CSV, groupBy: 'department' },
+        projectAdminUser,
+      );
+      expect(csvResult.csvData).toBeDefined();
+      expect(csvResult.csvData).toContain('"department","productName","brand","totalIssuedQuantity"');
+      expect(csvResult.csvData).toContain('Molecular Rest');
+      expect(csvResult.csvData).toContain('PRODUCT102');
     });
   });
 

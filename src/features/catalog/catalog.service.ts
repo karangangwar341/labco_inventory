@@ -119,6 +119,14 @@ export const catalogService = {
     return apiClient.post<CategoryDto>(endpoints.catalog.categories(), payload);
   },
 
+  updateCategory: async (id: string, payload: { name?: string; parentId?: string | null }): Promise<CategoryDto> => {
+    return apiClient.patch<CategoryDto>(endpoints.catalog.category(id), payload);
+  },
+
+  deleteCategory: async (id: string): Promise<{ success: boolean; message: string }> => {
+    return apiClient.delete<{ success: boolean; message: string }>(endpoints.catalog.category(id));
+  },
+
   getCategories: async (): Promise<CategoryDto[]> => {
     return apiClient.get<CategoryDto[]>(endpoints.catalog.categories());
   },
