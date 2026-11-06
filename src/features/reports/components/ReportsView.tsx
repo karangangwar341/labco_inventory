@@ -23,7 +23,7 @@ import { queryKeys } from '../../../lib/query/query-keys';
 const REPORT_OPTIONS: Array<{ type: ReportType; label: string; description: string }> = [
   { type: 'STOCK_BALANCE', label: 'Current stock', description: 'Real-time usable, reserved, and available quantities' },
   { type: 'INVENTORY_LEDGER', label: 'Movement history', description: 'Immutable double-entry inventory audit trail and stock deltas' },
-  { type: 'PROJECT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department issues and returns' },
+  { type: 'PROJECT_CONSUMPTION', label: 'Department usage', description: 'Internal clinical and department consumption' },
   { type: 'PRODUCTION_RUNS', label: 'Manufacturing', description: 'Work-in-progress runs, recipe inputs, outputs, and wastage' },
   { type: 'SHIPMENTS', label: 'Shipments & Logistics', description: 'Inbound, outbound, and inter-facility movements, status, quantities, and dates' },
   { type: 'MISSING_STOCK', label: 'Missing stock', description: 'Quantities confirmed missing by Super Admin, grouped by product for any date range' },
@@ -77,6 +77,81 @@ interface DepartmentSummaryItem {
   netQuantity: number;
   products: DepartmentProductUsage[];
   lastActivityDate: string;
+}
+
+function IndentSlipBadges({
+  indentNumbers,
+  onOpenIndent,
+  badgeSize = 'md',
+}: {
+  indentNumbers: string[];
+  onOpenIndent: (indentNum: string) => void;
+  badgeSize?: 'sm' | 'md';
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!indentNumbers || indentNumbers.length === 0) {
+    return <span className="text-xs text-slate-400 font-mono">-</span>;
+  }
+
+  const isMoreThanTwo = indentNumbers.length > 2;
+  const displayedIndents = isMoreThanTwo && !expanded ? indentNumbers.slice(0, 2) : indentNumbers;
+  const remainingCount = indentNumbers.length - 2;
+
+  const btnClasses = badgeSize === 'sm'
+    ? 'font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer transition-colors'
+    : 'font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors cursor-pointer';
+
+  const moreBtnClasses = badgeSize === 'sm'
+    ? 'text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50/80 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer'
+    : 'text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-50/80 text-blue-700 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 transition-colors cursor-pointer';
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {displayedIndents.map((indentNum) => (
+        <button
+          key={indentNum}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenIndent(indentNum);
+          }}
+          className={btnClasses}
+          title="Click to view indent slip items"
+        >
+          {indentNum}
+        </button>
+      ))}
+
+      {isMoreThanTwo && !expanded && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+          className={moreBtnClasses}
+          title={`Click to view all ${indentNumbers.length} indent slips`}
+        >
+          +{remainingCount} more
+        </button>
+      )}
+
+      {isMoreThanTwo && expanded && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          className="text-[10px] font-medium text-slate-500 hover:text-blue-700 underline px-1 py-0.5 cursor-pointer"
+          title="Show fewer indents"
+        >
+          Show less
+        </button>
+      )}
+    </div>
+  );
 }
 
 function formatCellValue(
@@ -234,6 +309,7 @@ export function ReportsView() {
   const [warehouseId, setWarehouseId] = useState('');
   const [projectId, setProjectId] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [departmentViewMode, setDepartmentViewMode] = useState<'SUMMARY' | 'INDENT'>('SUMMARY');
   const [expandedDepartments, setExpandedDepartments] = useState<Record<string, boolean>>({});
   const [exportError, setExportError] = useState<string | null>(null);
@@ -345,13 +421,36 @@ export function ReportsView() {
     return Array.from(set).sort();
   }, [departmentsQuery.data, rawRows]);
 
-  // Client-side department filter for instant responsiveness
+  // Client-side search and department filter for instant responsiveness
   const displayRawRows = useMemo(() => {
+    let list = rawRows;
     if (reportType === 'PROJECT_CONSUMPTION' && departmentFilter) {
-      return rawRows.filter((r) => String(r.department || '').toLowerCase() === departmentFilter.toLowerCase());
+      list = list.filter((r) => String(r.department || '').toLowerCase() === departmentFilter.toLowerCase());
     }
-    return rawRows;
-  }, [rawRows, reportType, departmentFilter]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter((r: any) => {
+        const indentStr = String(r.indentNumber || '').toLowerCase();
+        if (indentStr.includes(q) || indentStr.replace(/^ind-/, '').includes(q)) return true;
+        if (String(r.department || '').toLowerCase().includes(q)) return true;
+        if (String(r.product || '').toLowerCase().includes(q)) return true;
+        if (String(r.productName || '').toLowerCase().includes(q)) return true;
+        if (String(r.productsSummary || '').toLowerCase().includes(q)) return true;
+        if (String(r.trackingNumber || '').toLowerCase().includes(q)) return true;
+        if (String(r.productionReference || '').toLowerCase().includes(q)) return true;
+        if (String(r.transactionType || '').toLowerCase().includes(q)) return true;
+        if (Array.isArray(r.items)) {
+          const hasMatchingItem = r.items.some((it: any) =>
+            String(it.productName || it.name || '').toLowerCase().includes(q) ||
+            String(it.brand || '').toLowerCase().includes(q)
+          );
+          if (hasMatchingItem) return true;
+        }
+        return Object.values(r).some((v) => typeof v === 'string' && v.toLowerCase().includes(q));
+      });
+    }
+    return list;
+  }, [rawRows, reportType, departmentFilter, searchQuery]);
 
   const isIdField = (key: string) => {
     const k = key.toLowerCase();
@@ -523,7 +622,7 @@ export function ReportsView() {
   const columns = rows.length ? Object.keys(rows[0]).filter((col) => !col.startsWith('_')) : [];
   const activeReportMeta = options.find((item) => item.type === reportType);
 
-  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId || departmentFilter);
+  const hasActiveFilters = Boolean(startDate || endDate || productId || warehouseId || projectId || departmentFilter || searchQuery);
   const resetFilters = () => {
     setStartDate('');
     setEndDate('');
@@ -531,6 +630,7 @@ export function ReportsView() {
     setDepartmentFilter('');
     setWarehouseId('');
     setProjectId('');
+    setSearchQuery('');
   };
 
   const setQuickRange = (preset: 'TODAY' | 'YESTERDAY' | 'LAST_WEEK' | 'LAST_MONTH' | 'ALL') => {
@@ -687,6 +787,32 @@ export function ReportsView() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-end">
               <div className="space-y-1.5 w-full">
+                <label className="text-xs font-semibold text-slate-700 block">Search records</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search indent #, product, dept..."
+                    className="w-full pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 shadow-2xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/15"
+                  />
+                  <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                      aria-label="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5 w-full">
                 <label className="text-xs font-medium text-slate-700 block">From Date</label>
                 <input
                   type="date"
@@ -789,8 +915,19 @@ export function ReportsView() {
           />
         ) : !rows.length ? (
           <EmptyState
-            title="No records found in this timeframe"
-            description="No inventory transactions or stock records match the selected date window and product criteria."
+            title={searchQuery ? 'No records match your search' : 'No records found in this timeframe'}
+            description={
+              searchQuery
+                ? `No transactions or stock records match "${searchQuery}". Try a different keyword or clear your search.`
+                : 'No inventory transactions or stock records match the selected date window and product criteria.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button variant="secondary" size="sm" onClick={resetFilters}>
+                  Clear all filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : null}
       </div>
@@ -870,7 +1007,7 @@ export function ReportsView() {
               <div className="flex flex-col">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Units Consumed</span>
                 <span className="text-lg font-bold text-emerald-700 font-mono">{departmentMetrics.totalConsumed.toLocaleString()}</span>
-                <span className="text-[10px] text-slate-500">net items dispensed</span>
+                <span className="text-[10px] text-slate-500">items dispensed to departments</span>
               </div>
             </div>
           )}
@@ -951,39 +1088,31 @@ export function ReportsView() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex flex-wrap items-center gap-1">
-                              {dept.indentNumbers.length === 0 ? (
-                                <span className="text-xs text-slate-400 font-mono">-</span>
-                              ) : (
-                                dept.indentNumbers.map((indentNum) => (
-                                  <button
-                                    key={indentNum}
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openIndentModalByNumber(indentNum);
-                                    }}
-                                    className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 hover:border-blue-300 transition-colors"
-                                    title="Click to view indent slip items"
-                                  >
-                                    {indentNum}
-                                  </button>
-                                ))
-                              )}
-                            </div>
+                            <IndentSlipBadges
+                              indentNumbers={dept.indentNumbers}
+                              onOpenIndent={openIndentModalByNumber}
+                            />
                           </TableCell>
                           <TableCell className="max-w-md">
                             <div className="flex flex-wrap gap-1.5 py-1">
-                              {dept.products.map((p, pIdx) => (
+                              {dept.products.slice(0, 2).map((p, pIdx) => (
                                 <span
                                   key={pIdx}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[11px]"
                                   title={`${p.productName} (${p.brand !== 'N/A' ? p.brand : ''}) - ${p.netQuantity} ${p.unit}`}
                                 >
-                                  <span className="font-medium truncate max-w-[150px]">{p.productName}:</span>
+                                  <span className="font-medium truncate max-w-[140px]">{p.productName}:</span>
                                   <span className="font-mono font-bold text-blue-700">{p.netQuantity} {p.unit}</span>
                                 </span>
                               ))}
+                              {dept.products.length > 2 && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-medium"
+                                  title={dept.products.slice(2).map(p => `${p.productName}: ${p.netQuantity} ${p.unit}`).join(', ')}
+                                >
+                                  +{dept.products.length - 2} more
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell align="right" numeric className="font-mono text-xs text-slate-600">
@@ -1027,7 +1156,7 @@ export function ReportsView() {
                                     </Badge>
                                   </div>
                                   <span className="text-[11px] text-slate-500">
-                                    Total Indents: <strong className="text-slate-800">{dept.totalIndents}</strong> | Net Units Consumed: <strong className="text-emerald-700 font-mono">{dept.netQuantity.toLocaleString()}</strong>
+                                    Total Indents: <strong className="text-slate-800">{dept.totalIndents}</strong> | Total Units Consumed: <strong className="text-emerald-700 font-mono">{dept.netQuantity.toLocaleString()}</strong>
                                   </span>
                                 </div>
 
@@ -1038,9 +1167,7 @@ export function ReportsView() {
                                         <th className="py-2 px-3">S.No</th>
                                         <th className="py-2 px-3">Product Name</th>
                                         <th className="py-2 px-3">Brand</th>
-                                        <th className="py-2 px-3 text-right">Issued Qty</th>
-                                        <th className="py-2 px-3 text-right">Returned Qty</th>
-                                        <th className="py-2 px-3 text-right">Net Consumed</th>
+                                        <th className="py-2 px-3 text-right">Consumed Qty</th>
                                         <th className="py-2 px-3">Unit</th>
                                         <th className="py-2 px-3">Indent Slips</th>
                                       </tr>
@@ -1051,39 +1178,16 @@ export function ReportsView() {
                                           <td className="py-2 px-3 font-mono text-slate-400">{prodIdx + 1}</td>
                                           <td className="py-2 px-3 font-semibold text-slate-900">{prod.productName}</td>
                                           <td className="py-2 px-3 font-mono text-slate-500 text-[11px]">{prod.brand}</td>
-                                          <td className="py-2 px-3 text-right font-mono text-slate-700">{prod.issuedQuantity.toLocaleString()}</td>
-                                          <td className="py-2 px-3 text-right font-mono text-slate-500">
-                                            {prod.returnedQuantity > 0 ? (
-                                              <span className="text-rose-600 font-semibold">-{prod.returnedQuantity.toLocaleString()}</span>
-                                            ) : (
-                                              '0'
-                                            )}
-                                          </td>
                                           <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
                                             {prod.netQuantity.toLocaleString()}
                                           </td>
                                           <td className="py-2 px-3 text-slate-600 font-medium">{prod.unit}</td>
                                           <td className="py-2 px-3">
-                                            <div className="flex flex-wrap items-center gap-1">
-                                              {prod.indents.length === 0 ? (
-                                                <span className="text-slate-400 font-mono">-</span>
-                                              ) : (
-                                                prod.indents.map((indentNum) => (
-                                                  <button
-                                                    key={indentNum}
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      openIndentModalByNumber(indentNum);
-                                                    }}
-                                                    className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
-                                                    title="Click to view indent slip items"
-                                                  >
-                                                    {indentNum}
-                                                  </button>
-                                                ))
-                                              )}
-                                            </div>
+                                            <IndentSlipBadges
+                                              indentNumbers={prod.indents}
+                                              onOpenIndent={openIndentModalByNumber}
+                                              badgeSize="sm"
+                                            />
                                           </td>
                                         </tr>
                                       ))}

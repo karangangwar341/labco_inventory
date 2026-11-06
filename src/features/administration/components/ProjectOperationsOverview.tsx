@@ -113,6 +113,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
   const [deptCustomStart, setDeptCustomStart] = useState("");
   const [deptCustomEnd, setDeptCustomEnd] = useState("");
   const [expandedIndents, setExpandedIndents] = useState<Record<string, boolean>>({});
+  const [indentSearchTerm, setIndentSearchTerm] = useState("");
   const [showBulkCatalogModal, setShowBulkCatalogModal] = useState(false);
   const [showCloneCatalogModal, setShowCloneCatalogModal] = useState(false);
 
@@ -332,6 +333,17 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
     return Array.from(groups.values());
   }, [visibleDeptActivity]);
 
+  const displayedIndentGroups = useMemo(() => {
+    if (!indentSearchTerm.trim()) return indentRequisitionGroups;
+    const q = indentSearchTerm.trim().toLowerCase();
+    return indentRequisitionGroups.filter(
+      (g) =>
+        g.indentNumber.toLowerCase().includes(q) ||
+        g.department.toLowerCase().includes(q) ||
+        g.items.some((i) => i.product.toLowerCase().includes(q)),
+    );
+  }, [indentRequisitionGroups, indentSearchTerm]);
+
   const totalIndentsCount = indentRequisitionGroups.length;
   const totalIndentItemsCount = indentRequisitionGroups.reduce((acc: number, g: IndentGroupType) => acc + g.items.length, 0);
   const totalUnitsRequested = indentRequisitionGroups.reduce((acc: number, g: IndentGroupType) => acc + g.totalRequested, 0);
@@ -504,7 +516,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
                   {departments.size}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Departments with approved issues or returns
+                  Departments with approved issues
                 </p>
               </CardContent>
             </Card>
@@ -739,17 +751,43 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
             </CardHeader>
 
             <CardContent className="space-y-4">
-              {/* Date Filter Bar */}
-              <DateQuickFilterBar
-                activeFilter={deptDateFilter}
-                onFilterChange={setDeptDateFilter}
-                customStart={deptCustomStart}
-                customEnd={deptCustomEnd}
-                onCustomStartChange={setDeptCustomStart}
-                onCustomEndChange={setDeptCustomEnd}
-                totalOlderCount={olderDeptCount}
-                onViewAll={() => setDeptDateFilter("ALL")}
-              />
+              {/* Date Filter Bar & Search */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex-1">
+                  <DateQuickFilterBar
+                    activeFilter={deptDateFilter}
+                    onFilterChange={setDeptDateFilter}
+                    customStart={deptCustomStart}
+                    customEnd={deptCustomEnd}
+                    onCustomStartChange={setDeptCustomStart}
+                    onCustomEndChange={setDeptCustomEnd}
+                    totalOlderCount={olderDeptCount}
+                    onViewAll={() => setDeptDateFilter("ALL")}
+                  />
+                </div>
+                <div className="relative w-full sm:w-64 shrink-0">
+                  <input
+                    type="text"
+                    value={indentSearchTerm}
+                    onChange={(e) => setIndentSearchTerm(e.target.value)}
+                    placeholder="Search indent #, dept, product..."
+                    className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                  />
+                  <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  {indentSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setIndentSearchTerm("")}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                      aria-label="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Metrics Summary Strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -803,13 +841,13 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
               </div>
 
               {/* Indents List */}
-              {indentRequisitionGroups.length === 0 ? (
+              {displayedIndentGroups.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400 bg-slate-50/50 rounded-xl border border-slate-200/70">
-                  No department indents recorded for the selected date range.
+                  {indentSearchTerm ? `No indents match "${indentSearchTerm}".` : "No department indents recorded for the selected date range."}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {indentRequisitionGroups.map((group: IndentGroupType) => {
+                  {displayedIndentGroups.map((group: IndentGroupType) => {
                     const isExpanded = !!expandedIndents[group.indentKey];
                     return (
                       <div

@@ -111,6 +111,7 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
   const [productionReference, setProductionReference] = useState("");
   const [notes, setNotes] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [runsSearchQuery, setRunsSearchQuery] = useState("");
 
   // Day-End Continuous Batch Submission State
   const [submittingAfterSave, setSubmittingAfterSave] = useState(false);
@@ -580,9 +581,19 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
       if (statusFilter !== "ALL" && run.status !== statusFilter) return false;
       if (runsProjectId && run.projectId !== runsProjectId && run.project?.id !== runsProjectId) return false;
       if (!isDateInRange(run.createdAt, dateFilter, customStart, customEnd)) return false;
+      if (runsSearchQuery.trim()) {
+        const q = runsSearchQuery.trim().toLowerCase();
+        const matchesRunNumber = run.runNumber?.toLowerCase().includes(q);
+        const matchesRef = run.productionReference?.toLowerCase().includes(q);
+        const matchesYieldProduct = run.yieldProductName?.toLowerCase().includes(q);
+        const matchesProject = run.projectName?.toLowerCase().includes(q) || run.project?.name?.toLowerCase().includes(q);
+        const matchesOutputs = Array.isArray(run.outputLines) && run.outputLines.some((o) => o.productName?.toLowerCase().includes(q));
+        const matchesInputs = Array.isArray(run.inputLines) && run.inputLines.some((i) => i.productName?.toLowerCase().includes(q));
+        if (!matchesRunNumber && !matchesRef && !matchesYieldProduct && !matchesProject && !matchesOutputs && !matchesInputs) return false;
+      }
       return true;
     });
-  }, [runs, statusFilter, runsProjectId, dateFilter, customStart, customEnd]);
+  }, [runs, statusFilter, runsProjectId, dateFilter, customStart, customEnd, runsSearchQuery]);
 
   // Trigger re-run modal for a cycle
   const handleReRunFromCycle = (cycle: ProductionCycle) => {
@@ -893,18 +904,42 @@ export function ManufacturingView({ projectId: propProjectId, hideHeader }: Manu
               )}
             </div>
 
-            {/* Date Quick Filter Bar */}
-            <div className="pt-2 border-t border-slate-100">
-              <DateQuickFilterBar
-                value={dateFilter}
-                onChange={setDateFilter}
-                customStart={customStart}
-                customEnd={customEnd}
-                onCustomStartChange={setCustomStart}
-                onCustomEndChange={setCustomEnd}
-                totalOlderCount={olderRunsCount}
-                onViewOlder={() => setDateFilter('ALL')}
-              />
+            {/* Date Quick Filter Bar & Search */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1">
+                <DateQuickFilterBar
+                  value={dateFilter}
+                  onChange={setDateFilter}
+                  customStart={customStart}
+                  customEnd={customEnd}
+                  onCustomStartChange={setCustomStart}
+                  onCustomEndChange={setCustomEnd}
+                  totalOlderCount={olderRunsCount}
+                  onViewOlder={() => setDateFilter('ALL')}
+                />
+              </div>
+              <div className="relative w-full sm:w-64 shrink-0">
+                <input
+                  type="text"
+                  value={runsSearchQuery}
+                  onChange={(e) => setRunsSearchQuery(e.target.value)}
+                  placeholder="Search runs by recipe, ref..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white"
+                />
+                <svg className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                {runsSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setRunsSearchQuery('')}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs"
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

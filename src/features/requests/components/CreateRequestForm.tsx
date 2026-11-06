@@ -653,7 +653,6 @@ export function CreateRequestForm() {
                   <option value="">Select origin...</option>
                   <option value="DIRECT_PURCHASE">Supplier Delivery (Purchase Bill / Order)</option>
                   <option value="OPENING_STOCK">Opening Initial Stock</option>
-                  <option value="DEPARTMENT_RETURN">Returned from Hospital / Department</option>
                   <option value="DONATION">Manufacturer Sample or Donation</option>
                   <option value="OTHER">Other Delivery</option>
                 </Select>
