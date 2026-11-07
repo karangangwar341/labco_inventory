@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/server/seed.ts",
+    "seed:catalog": "tsx src/server/seed-catalog.ts",
     "bootstrap:super-admin": "tsx src/server/bootstrap-super-admin.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

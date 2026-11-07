@@ -325,6 +325,7 @@ model Product {
   projectId         String?       @map("project_id")
   categoryId        String        @map("category_id")
   kind              ProductKind   @default(RAW_MATERIAL)
+  isManufactured    Boolean       @default(false) @map("is_manufactured")
   name              String
   brand             String?
   description       String?
@@ -362,6 +363,7 @@ model Product {
   @@index([projectId])
   @@index([categoryId])
   @@index([status])
+  @@index([isManufactured])
   @@map("products")
 }
 

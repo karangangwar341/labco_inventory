@@ -107,11 +107,7 @@ export class ManufacturingService {
           `Product "${product.name}" is not approved (status: ${product.status})`,
         );
       }
-      if (product.kind !== ProductKind.RAW_MATERIAL) {
-        throw new BadRequestException(
-          `Manufacturing input "${product.name}" must be a raw material`,
-        );
-      }
+      // Any approved catalog item can be used as a production input
       if (product.ownerScope === 'PROJECT' && product.projectId !== projectId) {
         throw new ForbiddenException(
           'Cannot use another project’s raw material',
@@ -186,14 +182,10 @@ export class ManufacturingService {
           `Product "${product.name}" is not approved (status: ${product.status})`,
         );
       }
-      if (product.kind !== ProductKind.MANUFACTURED_PRODUCT) {
-        throw new BadRequestException(
-          `Manufacturing output "${product.name}" must be a manufactured product`,
-        );
-      }
-      if (product.ownerScope !== 'PROJECT' || product.projectId !== projectId) {
+      // Any approved catalog item can be outputted from a production run
+      if (product.ownerScope === 'PROJECT' && product.projectId !== projectId) {
         throw new ForbiddenException(
-          'Manufacturing outputs must belong to this project’s catalog',
+          'Manufacturing outputs must belong to this project or company catalog',
         );
       }
 
@@ -745,12 +737,11 @@ export class ManufacturingService {
         const product = productsById.get(input.productId);
         if (
           !product ||
-          product.kind !== ProductKind.RAW_MATERIAL ||
           product.status !== ProductStatus.APPROVED ||
           (product.ownerScope === 'PROJECT' && product.projectId !== run.projectId)
         ) {
           throw new BadRequestException(
-            `Manufacturing input "${product?.name || 'Selected product'}" must be an approved raw material`,
+            `Manufacturing input "${product?.name || 'Selected product'}" must be an approved catalog product`,
           );
         }
       }
@@ -758,13 +749,11 @@ export class ManufacturingService {
         const product = productsById.get(output.productId);
         if (
           !product ||
-          product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
           product.status !== ProductStatus.APPROVED ||
-          product.ownerScope !== 'PROJECT' ||
-          product.projectId !== run.projectId
+          (product.ownerScope === 'PROJECT' && product.projectId !== run.projectId)
         ) {
           throw new BadRequestException(
-            `Manufacturing output "${product?.name || 'Selected product'}" must be an approved manufactured product`,
+            `Manufacturing output "${product?.name || 'Selected product'}" must be an approved catalog product`,
           );
         }
       }

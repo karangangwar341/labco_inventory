@@ -207,7 +207,7 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       ],
     };
 
-    it('limits Store Admin catalog results to approved company raw materials', async () => {
+    it('limits Store Admin catalog results to approved company products', async () => {
       const storeAdmin: any = { id: 'store-list-user', role: UserRole.STORE_ADMIN, warehouseId: 'wh-test' };
       mockPrisma.product.findMany.mockResolvedValue([]);
 
@@ -216,7 +216,6 @@ describe('Catalog Services (T-005: Categories, Products, Units & Duplicate Detec
       expect(mockPrisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({
           ownerScope: CatalogScope.COMPANY,
-          kind: ProductKind.RAW_MATERIAL,
           status: ProductStatus.APPROVED,
         }),
       }));

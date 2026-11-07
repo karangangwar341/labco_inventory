@@ -58,7 +58,12 @@ export class ProductUnitDto {
 export class CreateProductDto {
   @ApiProperty({ enum: ProductKind, description: 'Raw materials are consumed in manufacturing; manufactured products are production outputs.' })
   @IsEnum(ProductKind)
-  kind!: ProductKind;
+  kind?: ProductKind;
+
+  @ApiPropertyOptional({ example: false, description: 'True if product is manufactured internally' })
+  @IsOptional()
+  @IsBoolean()
+  isManufactured?: boolean;
 
   @ApiProperty({ example: 'Erlenmeyer Flask 500ml', description: 'Product name' })
   @IsString()

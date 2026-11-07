@@ -154,7 +154,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
   });
 
   describe('Daily department issue batches', () => {
-    it('rejects company raw materials for a department issue batch', async () => {
+    it('allows company products for a department issue batch', async () => {
       mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-1', projectId: 'project-123', status: DepartmentStatus.ACTIVE });
       mockPrisma.product.findUnique.mockResolvedValue({
         ...testProduct,
@@ -163,9 +163,10 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
         projectId: null,
       });
 
-      await expect((departmentsService as any).prepareIssueLine({
+      const line = await (departmentsService as any).prepareIssueLine({
         departmentId: 'dept-1', productId: 'prod-1', quantity: 2, unitId: 'unit-piece',
-      }, projectAdminUser, 'project-123')).rejects.toThrow(BadRequestException);
+      }, projectAdminUser, 'project-123');
+      expect(line.productId).toBe('prod-1');
     });
 
     it('rejects manufactured products owned by another project', async () => {
@@ -585,7 +586,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
       );
     });
 
-    it('Super Admin approval rejects issue if product is a raw material', async () => {
+    it('Super Admin approval rejects issue if product is not approved', async () => {
       mockPrisma.departmentIssue.findUnique.mockResolvedValue({
         id: 'issue-rm-1',
         projectId: 'project-123',
@@ -601,7 +602,7 @@ describe('Departments Service (T-011: Departments, issues, returns and condition
           ownerScope: CatalogScope.COMPANY,
           name: 'Chemical Reagent',
           kind: ProductKind.RAW_MATERIAL,
-          status: ProductStatus.APPROVED,
+          status: ProductStatus.PENDING_APPROVAL,
         },
       });
 

@@ -102,6 +102,9 @@ export function CatalogProductForm({
   // Core Form State
   const [name, setName] = useState('');
   const [kind, setKind] = useState<CreateProductDto['kind']>(initialKind);
+  const [isManufactured, setIsManufactured] = useState<boolean>(() => {
+    return initialKind === 'MANUFACTURED_PRODUCT';
+  });
   const [brand, setBrand] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -255,6 +258,7 @@ export function CatalogProductForm({
     if (!product) return;
     setName(product.name);
     setKind(product.kind || 'RAW_MATERIAL');
+    setIsManufactured(Boolean(product.isManufactured ?? (product.kind === 'MANUFACTURED_PRODUCT')));
     setBrand(product.brand || '');
     setDescription(product.description || '');
 
@@ -405,7 +409,8 @@ export function CatalogProductForm({
 
     const payload: CreateProductDto = {
       name: name.trim(),
-      kind: selectedKind,
+      kind: isManufactured ? 'MANUFACTURED_PRODUCT' : 'RAW_MATERIAL',
+      isManufactured,
       description: description.trim() || undefined,
       categoryId: finalCategoryId,
       brand: role === 'PROJECT_ADMIN' ? undefined : (brand.trim() || undefined),
@@ -533,12 +538,10 @@ export function CatalogProductForm({
                 </CardDescription>
               </div>
               <Badge
-                variant={selectedKind === 'MANUFACTURED_PRODUCT' ? 'purple' : 'neutral'}
+                variant={isManufactured ? 'purple' : 'neutral'}
                 size="sm"
               >
-                {selectedKind === 'MANUFACTURED_PRODUCT'
-                  ? 'Manufactured Output'
-                  : 'Company Raw Material'}
+                {isManufactured ? 'Manufactured Product' : 'Standard Product'}
               </Badge>
             </div>
           </CardHeader>

@@ -6,6 +6,7 @@ export interface ProductDto {
   sku?: string;
   categoryId: string;
   kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
+  isManufactured?: boolean;
   category?: CategoryDto;
   categoryName?: string;
   ownerScope?: 'COMPANY' | 'PROJECT';
@@ -66,6 +67,7 @@ export interface ProductVersionSummaryDto {
 
 export interface CreateProductDto {
   kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT';
+  isManufactured?: boolean;
   name: string;
   brand?: string;
   categoryId: string;

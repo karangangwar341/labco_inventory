@@ -178,7 +178,7 @@ export function ProjectOperationsOverview({ projectId: propProjectId }: { projec
         ledger,
         manufacturedProducts: catalog.filter(
           (product: any) =>
-            product.kind === "MANUFACTURED_PRODUCT" &&
+            Boolean(product.isManufactured ?? (product.kind === "MANUFACTURED_PRODUCT")) &&
             product.ownerScope === "PROJECT" &&
             product.projectId === projectId,
         ),

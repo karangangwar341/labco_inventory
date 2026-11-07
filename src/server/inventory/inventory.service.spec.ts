@@ -458,7 +458,7 @@ describe('Inventory & Ledger Service (T-006: Immutable Ledger & Balance Projecti
         expect.objectContaining({
           where: {
             locationId: 'loc-wh-1',
-            product: { kind: 'RAW_MATERIAL' },
+
           },
         }),
       );

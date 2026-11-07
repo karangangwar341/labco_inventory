@@ -487,10 +487,9 @@ export class DepartmentsService {
         if (
           issue.department.status !== DepartmentStatus.ACTIVE ||
           issue.product.status !== ProductStatus.APPROVED ||
-          issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
           !isBelonging
         ) {
-          throw new BadRequestException('Every batch line must still reference an active department and an approved manufactured product belonging to your organization');
+          throw new BadRequestException('Every batch line must still reference an active department and an approved product belonging to your organization');
         }
       }
       await this.reservationsService.consumeReservationsForDepartmentIssueBatch(tx, batch.id);
@@ -523,8 +522,8 @@ export class DepartmentsService {
       (product.ownerScope === CatalogScope.COMPANY && !product.projectId) ||
       product.projectId === projectId
     );
-    if (!product || product.status !== ProductStatus.APPROVED || product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
-      throw new BadRequestException('Each issue must select an approved manufactured product belonging to your organization');
+    if (!product || product.status !== ProductStatus.APPROVED || !isBelonging) {
+      throw new BadRequestException('Each issue must select an approved product belonging to your organization');
     }
     const unit = product.units.find((candidate) => candidate.status === 'ACTIVE' && (
       (dto.unitId && candidate.id === dto.unitId) ||
@@ -592,8 +591,8 @@ export class DepartmentsService {
     const isBelonging =
       (product.ownerScope === CatalogScope.COMPANY && !product.projectId) ||
       product.projectId === projectId;
-    if (product.kind !== ProductKind.MANUFACTURED_PRODUCT || !isBelonging) {
-      throw new BadRequestException(`Department issues can only use manufactured products; "${product.name}" is not an approved manufactured product belonging to your organization`);
+    if (!isBelonging) {
+      throw new BadRequestException(`Product "${product.name}" does not belong to your organization`);
     }
 
     // Resolve unit
@@ -787,11 +786,10 @@ export class DepartmentsService {
       (issue.product.ownerScope === CatalogScope.COMPANY && !issue.product.projectId) ||
       issue.product.projectId === issue.projectId;
     if (
-      issue.product.kind !== ProductKind.MANUFACTURED_PRODUCT ||
       !isBelonging ||
       issue.product.status !== ProductStatus.APPROVED
     ) {
-      throw new BadRequestException('Department issue product must remain an approved manufactured product belonging to your organization');
+      throw new BadRequestException('Department issue product must remain an approved product belonging to your organization');
     }
 
     const projectLocation = await this.inventoryService.getOrCreateLocationForProject(issue.projectId);

@@ -59,7 +59,8 @@ export class ProductsService {
   private specificationSnapshot(dto: CreateProductDto): Prisma.InputJsonObject {
     return {
       name: dto.name.trim(),
-      kind: dto.kind,
+      kind: dto.isManufactured ? ProductKind.MANUFACTURED_PRODUCT : (dto.kind || ProductKind.RAW_MATERIAL),
+      isManufactured: Boolean(dto.isManufactured ?? (dto.kind === ProductKind.MANUFACTURED_PRODUCT)),
       brand: dto.brand?.trim() || null,
       description: dto.description?.trim() || null,
       categoryId: dto.categoryId,
@@ -103,9 +104,7 @@ export class ProductsService {
     if (user.role === UserRole.STORE_ADMIN) {
       throw new ForbiddenException('Store Admin cannot create or edit products');
     }
-    if (user.role === UserRole.PROJECT_ADMIN && dto.kind !== 'MANUFACTURED_PRODUCT') {
-      throw new BadRequestException('Project Admins can create manufactured products only');
-    }
+    // Any role (Super Admin, Project Admin) can create standard or manufactured catalog items
 
     this.validateUnits(dto);
 
@@ -190,7 +189,8 @@ export class ProductsService {
         brand: dto.brand?.trim() || null,
         description: dto.description?.trim() || null,
         categoryId: dto.categoryId,
-        kind: dto.kind,
+        kind: dto.isManufactured ? ProductKind.MANUFACTURED_PRODUCT : (dto.kind || ProductKind.RAW_MATERIAL),
+        isManufactured: Boolean(dto.isManufactured ?? (dto.kind === ProductKind.MANUFACTURED_PRODUCT)),
         ownerScope,
         projectId,
         status: initialStatus,
@@ -588,9 +588,7 @@ export class ProductsService {
     if (product.status !== ProductStatus.APPROVED) {
       throw new ConflictException('Only an approved product can be edited');
     }
-    if (dto.kind !== product.kind) {
-      throw new BadRequestException('Product type cannot be changed after creation. Create a separate product for the other type.');
-    }
+    // isManufactured is freely editable by Super Admin and Project Admin
 
     if (user.role === UserRole.PROJECT_ADMIN) {
       const dbUser = await this.prisma.user.findUnique({
@@ -646,6 +644,7 @@ export class ProductsService {
       const currentSnapshot = {
         name: product.name,
         kind: product.kind,
+        isManufactured: product.isManufactured,
         brand: product.brand,
         description: product.description,
         categoryId: product.categoryId,
@@ -725,7 +724,7 @@ export class ProductsService {
     }
 
     const specification = version.specification as unknown as {
-      name: string; kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT'; brand: string | null; description: string | null; categoryId: string;
+      name: string; kind: 'RAW_MATERIAL' | 'MANUFACTURED_PRODUCT'; isManufactured?: boolean; brand: string | null; description: string | null; categoryId: string;
       quantityPrecision: number; allowFractional: boolean;
       minQuantity: string; minOrderQuantity?: string; attributes: Array<{ attributeName: string; value: string; unit: string | null; sortOrder: number }>;
       units: Array<{ unitName: string; isBaseUnit: boolean; conversionToBase: string }>;
@@ -749,7 +748,8 @@ export class ProductsService {
         where: { id: productId },
         data: {
           name: specification.name,
-          kind: specification.kind,
+          kind: specification.isManufactured ? ProductKind.MANUFACTURED_PRODUCT : (specification.kind || ProductKind.RAW_MATERIAL),
+          isManufactured: Boolean(specification.isManufactured ?? (specification.kind === ProductKind.MANUFACTURED_PRODUCT)),
           brand: specification.brand,
           description: specification.description,
           categoryId: specification.categoryId,
@@ -847,7 +847,6 @@ export class ProductsService {
 
       // Store Admins handle approved company raw materials to stock, inspect, and dispatch.
       where.ownerScope = CatalogScope.COMPANY;
-      where.kind = ProductKind.RAW_MATERIAL;
       where.status = ProductStatus.APPROVED;
 
       results = await this.prisma.product.findMany({
@@ -950,15 +949,8 @@ export class ProductsService {
       location
         ? this.prisma.product.findMany({
             where: {
-              kind: ProductKind.RAW_MATERIAL,
               status: ProductStatus.APPROVED,
               ...catalogScope,
-              AND: [{
-                OR: [
-                  { balances: { some: { locationId: location.id } } },
-                  { ledgerEntries: { some: { locationId: location.id } } },
-                ],
-              }],
             },
             include: { category: true, attributes: true, units: true },
             orderBy: { name: 'asc' },
@@ -966,10 +958,8 @@ export class ProductsService {
         : [],
       this.prisma.product.findMany({
         where: {
-          kind: ProductKind.MANUFACTURED_PRODUCT,
           status: ProductStatus.APPROVED,
-          ownerScope: CatalogScope.PROJECT,
-          projectId,
+          ...catalogScope,
         },
         include: { category: true, attributes: true, units: true },
         orderBy: { name: 'asc' },

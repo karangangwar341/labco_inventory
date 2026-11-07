@@ -545,16 +545,19 @@ export function CatalogView() {
         ),
       },
       {
-        id: 'kind',
-        header: 'Kind',
+        id: 'isManufactured',
+        header: 'Manufactured',
         width: '10%',
         minWidth: '95px',
         valign: 'top',
-        cell: (product) => (
-          <Badge variant={product.kind === 'MANUFACTURED_PRODUCT' ? 'purple' : 'neutral'} size="sm">
-            {product.kind === 'MANUFACTURED_PRODUCT' ? 'Manufactured' : 'Raw Material'}
-          </Badge>
-        ),
+        cell: (product) => {
+          const isMfg = product.isManufactured ?? (product.kind === 'MANUFACTURED_PRODUCT');
+          return (
+            <Badge variant={isMfg ? 'purple' : 'neutral'} size="sm">
+              {isMfg ? 'Yes' : 'No'}
+            </Badge>
+          );
+        },
       },
       {
         id: 'category',
@@ -736,26 +739,19 @@ export function CatalogView() {
               >
                 Bulk Import
               </Button>
-              {role !== 'PROJECT_ADMIN' && (
-                <Link href="/catalog/new?kind=RAW_MATERIAL" className="block">
-                  <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Raw Material</Button>
-                </Link>
-              )}
               {role === 'PROJECT_ADMIN' && (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="text-xs px-2.5 py-1.5 font-semibold text-blue-700 border-blue-300 hover:bg-blue-50"
-                    onClick={() => setShowCloneModal(true)}
-                  >
-                    Import from Company Catalog
-                  </Button>
-                  <Link href="/catalog/new?kind=MANUFACTURED_PRODUCT" className="block">
-                    <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Product</Button>
-                  </Link>
-                </>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="text-xs px-2.5 py-1.5 font-semibold text-blue-700 border-blue-300 hover:bg-blue-50"
+                  onClick={() => setShowCloneModal(true)}
+                >
+                  Import from Company Catalog
+                </Button>
               )}
+              <Link href="/catalog/new" className="block">
+                <Button variant="primary" size="sm" className="w-full text-xs px-2.5 py-1.5">+ Add Product</Button>
+              </Link>
             </div>
           ) : (
             <Link href="/inventory">
@@ -1008,15 +1004,15 @@ export function CatalogView() {
                   </select>
                 )}
 
-                {/* Kind Filter */}
+                {/* Manufactured Filter */}
                 <select
                   value={selectedKind}
                   onChange={(e) => setSelectedKind(e.target.value)}
                   className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
                 >
-                  <option value="ALL">All Product Kinds</option>
-                  <option value="RAW_MATERIAL">Raw Materials</option>
-                  <option value="MANUFACTURED_PRODUCT">Manufactured Products</option>
+                  <option value="ALL">All Products</option>
+                  <option value="MANUFACTURED_PRODUCT">Manufactured Only</option>
+                  <option value="RAW_MATERIAL">Standard Only</option>
                 </select>
 
                 {/* Status Filter */}
@@ -1785,8 +1781,8 @@ export function CatalogView() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Badge variant={selectedProduct.kind === 'MANUFACTURED_PRODUCT' ? 'purple' : 'neutral'}>
-                  {selectedProduct.kind === 'MANUFACTURED_PRODUCT' ? 'Manufactured Item' : 'Raw Material'}
+                <Badge variant={(selectedProduct.isManufactured ?? (selectedProduct.kind === 'MANUFACTURED_PRODUCT')) ? 'purple' : 'neutral'}>
+                  {(selectedProduct.isManufactured ?? (selectedProduct.kind === 'MANUFACTURED_PRODUCT')) ? 'Manufactured Item' : 'Standard Product'}
                 </Badge>
                 {selectedProduct.brand && role !== 'PROJECT_ADMIN' && (
                   <span className="px-2 py-0.5 rounded bg-white text-slate-700 font-medium border border-slate-200 text-xs">

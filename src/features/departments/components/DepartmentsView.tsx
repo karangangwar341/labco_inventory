@@ -248,7 +248,7 @@ export function DepartmentsView() {
     return catalogProducts.filter(
       (product) =>
         product.status === 'APPROVED' &&
-        product.kind === 'MANUFACTURED_PRODUCT' &&
+        
         stockedIds.has(product.id),
     );
   }, [catalogProducts, balances]);
@@ -339,7 +339,7 @@ export function DepartmentsView() {
     const reqQtyNum = Number(indentRowRequestedQuantity) || supQtyNum;
 
     if (!effectiveIndentRowProductId) {
-      setErrorMsg('Please select a manufactured product.');
+      setErrorMsg('Please select a product.');
       return;
     }
     if (!supQtyNum || supQtyNum <= 0) {
@@ -739,7 +739,7 @@ export function DepartmentsView() {
       )}
 
       {role === 'PROJECT_ADMIN' && activeDepartments.length === 0 && (
-        <p className="text-xs text-[#5b6678]">Add a department and wait for Super Admin approval before issuing manufactured stock to it.</p>
+        <p className="text-xs text-[#5b6678]">Add a department and wait for Super Admin approval before issuing stock to it.</p>
       )}
 
       {/* Tabs */}
@@ -1127,7 +1127,7 @@ export function DepartmentsView() {
                                 <TableHeader>
                                   <tr>
                                     <TableHead className="w-10 text-center">S.No</TableHead>
-                                    <TableHead>Manufactured Product</TableHead>
+                                    <TableHead>Product</TableHead>
                                     <TableHead>Available Stock</TableHead>
                                     <TableHead align="right">Requested</TableHead>
                                     <TableHead align="right">Supplied</TableHead>

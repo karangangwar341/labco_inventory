@@ -313,7 +313,7 @@ export class InventoryService {
       }
 
       if (!filters?.kind) {
-        where.product = { ...((where.product as object) || {}), kind: ProductKind.RAW_MATERIAL };
+        // Any product in warehouse can be viewed by store admin
       }
     } else if (user.role === UserRole.PROJECT_ADMIN) {
       const projectId = user.projectId !== undefined
@@ -431,14 +431,14 @@ export class InventoryService {
         where: {
           ...dateWhere,
           entries: {
-            some: { locationId: loc.id, product: { kind: ProductKind.RAW_MATERIAL } },
+            some: { locationId: loc.id },
           },
         },
         take: limit,
         orderBy: { postedAt: 'desc' },
         include: {
           entries: {
-            where: { locationId: loc.id, product: { kind: ProductKind.RAW_MATERIAL } },
+            where: { locationId: loc.id },
             include: { product: { select: { id: true, name: true, kind: true } } },
           },
         },
